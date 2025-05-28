@@ -2,7 +2,7 @@
 -- Place this in ServerScriptService to ensure pets respawn automatically
 -- This runs independently of the main collection system
 
-wait(5) -- Wait for GameCore to load
+wait(10) -- Wait for GameCore to load
 
 local GameCore = _G.GameCore
 if not GameCore then

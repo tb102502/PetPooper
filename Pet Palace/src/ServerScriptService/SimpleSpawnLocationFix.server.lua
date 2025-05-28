@@ -3,7 +3,7 @@
 -- Place in ServerScriptService and run AFTER GameCore is loaded
 
 -- Wait a bit for systems to load
-wait(5)
+wait(10)
 
 local GameCore = _G.GameCore
 if not GameCore then

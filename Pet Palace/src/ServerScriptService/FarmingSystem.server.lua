@@ -2,7 +2,7 @@ print("Hello world!")
 -- FarmingSystem.server.lua
 -- Complete farming/crop growing system
 
-wait(5) -- Wait for GameCore to load
+wait(10) -- Wait for GameCore to load
 
 local GameCore = _G.GameCore
 if not GameCore then
