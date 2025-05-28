@@ -1,0 +1,287 @@
+--[[
+    ClientLoader.client.lua - SINGLE CLIENT LOADER
+    Place in: StarterPlayerScripts/ClientLoader.client.lua
+    
+    This replaces ALL individual client loaders:
+    - PetSystemClientLoader
+    - ShopSystemClientLoader
+    - UIControllerLoader
+    - Various other client scripts
+    
+    Single point of initialization for all client systems
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+
+print("=== Pet Palace Client Loader Starting ===")
+
+-- Wait for character to load
+if not LocalPlayer.Character then
+	LocalPlayer.CharacterAdded:Wait()
+end
+
+print("ClientLoader: Character loaded, waiting for server systems...")
+
+-- Wait for server to be ready
+local function WaitForServerReady()
+	local maxWaitTime = 30
+	local startTime = tick()
+
+	while tick() - startTime < maxWaitTime do
+		-- Check for ready signal
+		local readyEvent = ReplicatedStorage:FindFirstChild("GameCoreReady")
+		if readyEvent then
+			print("ClientLoader: Server ready signal found")
+			return true
+		end
+
+		-- Check for GameRemotes folder
+		local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+		if gameRemotes and #gameRemotes:GetChildren() > 0 then
+			print("ClientLoader: GameRemotes found with " .. #gameRemotes:GetChildren() .. " remotes")
+			return true
+		end
+
+		wait(0.5)
+	end
+
+	warn("ClientLoader: Server systems not ready after " .. maxWaitTime .. " seconds")
+	return false
+end
+
+-- Load and initialize GameClient
+local function LoadGameClient()
+	print("ClientLoader: Loading GameClient module...")
+
+	local gameClientModule = ReplicatedStorage:WaitForChild("GameClient", 10)
+	if not gameClientModule then
+		error("ClientLoader: GameClient module not found in ReplicatedStorage")
+	end
+
+	if not gameClientModule:IsA("ModuleScript") then
+		error("ClientLoader: GameClient is not a ModuleScript")
+	end
+
+	local success, GameClient = pcall(function()
+		return require(gameClientModule)
+	end)
+
+	if not success then
+		error("ClientLoader: Failed to require GameClient: " .. tostring(GameClient))
+	end
+
+	if not GameClient or typeof(GameClient.Initialize) ~= "function" then
+		error("ClientLoader: GameClient is missing or malformed")
+	end
+
+	return GameClient
+end
+
+-- Initialize the client system
+local function InitializeClient()
+	print("ClientLoader: Starting client initialization...")
+
+	-- Wait for server to be ready
+	if not WaitForServerReady() then
+		warn("ClientLoader: Proceeding without server ready confirmation")
+	end
+
+	-- Load GameClient
+	local GameClient = LoadGameClient()
+
+	-- Initialize with error handling
+	local initSuccess, errorMsg = pcall(function()
+		return GameClient:Initialize()
+	end)
+
+	if not initSuccess then
+		error("ClientLoader: GameClient initialization failed: " .. tostring(errorMsg))
+	end
+
+	-- Make GameClient globally available
+	_G.GameClient = GameClient
+
+	-- Create ready signal for other scripts
+	local clientReadyEvent = Instance.new("BindableEvent")
+	clientReadyEvent.Name = "GameClientReady"
+	clientReadyEvent.Parent = ReplicatedStorage
+	clientReadyEvent:Fire(GameClient)
+
+	print("ClientLoader: GameClient initialized and available globally")
+
+	return GameClient
+end
+
+-- Setup error handling and recovery
+local function SetupErrorHandling()
+	-- Handle character respawning
+	LocalPlayer.CharacterAdded:Connect(function(character)
+		print("ClientLoader: Character respawned, GameClient should handle this automatically")
+
+		-- Small delay to ensure character is fully loaded
+		spawn(function()
+			wait(1)
+			if _G.GameClient and _G.GameClient.HandleCharacterRespawn then
+				_G.GameClient:HandleCharacterRespawn(character)
+			end
+		end)
+	end)
+
+	-- Handle disconnection/reconnection scenarios
+	local heartbeatConnection
+	heartbeatConnection = RunService.Heartbeat:Connect(function()
+		-- Simple heartbeat to detect if systems are still working
+		if not _G.GameClient then
+			warn("ClientLoader: GameClient lost from global scope!")
+			heartbeatConnection:Disconnect()
+
+			-- Attempt recovery
+			spawn(function()
+				wait(2)
+				local success = pcall(InitializeClient)
+				if not success then
+					error("ClientLoader: Failed to recover GameClient")
+				end
+			end)
+		end
+	end)
+end
+
+-- Setup development tools (studio only)
+local function SetupDevTools()
+	if not RunService:IsStudio() then return end
+
+	print("ClientLoader: Setting up development tools...")
+
+	-- Add keybinds for testing
+	local UserInputService = game:GetService("UserInputService")
+
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+
+		if input.KeyCode == Enum.KeyCode.F1 then
+			-- Quick open pets menu
+			if _G.GameClient and _G.GameClient.OpenPets then
+				_G.GameClient:OpenPets()
+			end
+		elseif input.KeyCode == Enum.KeyCode.F2 then
+			-- Quick open shop
+			if _G.GameClient and _G.GameClient.OpenShop then
+				_G.GameClient:OpenShop()
+			end
+		elseif input.KeyCode == Enum.KeyCode.F3 then
+			-- Quick open farm
+			if _G.GameClient and _G.GameClient.OpenFarm then
+				_G.GameClient:OpenFarm()
+			end
+		elseif input.KeyCode == Enum.KeyCode.F9 then
+			-- Debug info
+			if _G.GameClient then
+				local playerData = _G.GameClient:GetPlayerData()
+				print("=== DEBUG INFO ===")
+				print("Player Data:", playerData)
+				print("Coins:", _G.GameClient:GetPlayerCurrency("coins"))
+				print("Gems:", _G.GameClient:GetPlayerCurrency("gems"))
+				if playerData and playerData.pets then
+					print("Owned Pets:", #playerData.pets.owned)
+					print("Equipped Pets:", #playerData.pets.equipped)
+				end
+				print("==================")
+			end
+		end
+	end)
+
+	print("ClientLoader: Dev tools active (F1=Pets, F2=Shop, F3=Farm, F9=Debug)")
+end
+
+-- Performance monitoring for client
+local function SetupClientMonitoring()
+	spawn(function()
+		while true do
+			wait(30) -- Check every 30 seconds
+
+			local fps = workspace:GetRealPhysicsFPS()
+			local ping = LocalPlayer:GetNetworkPing() * 1000 -- Convert to ms
+
+			if fps < 30 then
+				warn("ClientLoader: Low FPS detected: " .. math.floor(fps))
+			end
+
+			if ping > 200 then
+				warn("ClientLoader: High ping detected: " .. math.floor(ping) .. "ms")
+			end
+		end
+	end)
+end
+
+-- Create helpful UI hints for new players
+local function CreateHelpSystem()
+	spawn(function()
+		wait(5) -- Wait a bit after everything loads
+
+		if _G.GameClient and _G.GameClient.ShowNotification then
+			_G.GameClient:ShowNotification(
+				"Welcome to Pet Palace!", 
+				"Click on wild pets to collect them, then visit the shop to buy items!", 
+				"info"
+			)
+		end
+	end)
+end
+
+-- Main initialization function
+local function Main()
+	print("ClientLoader: Starting main client initialization...")
+
+	-- Initialize the client
+	local GameClient = InitializeClient()
+
+	-- Setup additional systems
+	SetupErrorHandling()
+	SetupDevTools()
+	SetupClientMonitoring()
+	CreateHelpSystem()
+
+	print("=== Pet Palace Client Loader Complete ===")
+	print("Client is ready! GameClient available globally as _G.GameClient")
+
+	return GameClient
+end
+
+-- Run with comprehensive error handling
+local success, result = pcall(Main)
+
+if not success then
+	-- Create emergency UI to inform player of the error
+	local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	local errorGui = Instance.new("ScreenGui")
+	errorGui.Name = "ErrorGui"
+	errorGui.Parent = PlayerGui
+
+	local errorFrame = Instance.new("Frame")
+	errorFrame.Size = UDim2.new(0.6, 0, 0.4, 0)
+	errorFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	errorFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	errorFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	errorFrame.Parent = errorGui
+
+	local errorLabel = Instance.new("TextLabel")
+	errorLabel.Size = UDim2.new(0.9, 0, 0.8, 0)
+	errorLabel.Position = UDim2.new(0.05, 0, 0.1, 0)
+	errorLabel.BackgroundTransparency = 1
+	errorLabel.Text = "Game Loading Error\n\nThere was a problem loading the game.\nPlease try rejoining.\n\nError: " .. tostring(result)
+	errorLabel.TextColor3 = Color3.new(1, 1, 1)
+	errorLabel.TextScaled = true
+	errorLabel.TextWrapped = true
+	errorLabel.Font = Enum.Font.SourceSans
+	errorLabel.Parent = errorFrame
+
+	error("CRITICAL CLIENT FAILURE: " .. tostring(result))
+else
+	print("ClientLoader: All client systems operational")
+end
