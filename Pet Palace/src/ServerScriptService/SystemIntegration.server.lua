@@ -2,16 +2,26 @@
 -- Place this in ServerScriptService to fix the pet movement issues
 -- Run this AFTER your main SystemInitializer
 
-wait(3) -- Wait for main systems to load
+local function WaitForGameCore(scriptName, maxWaitTime)
+	maxWaitTime = maxWaitTime or 15
+	local startTime = tick()
 
-print("=== SYSTEM INTEGRATION STARTING (FIXED VERSION) ===")
+	print(scriptName .. ": Waiting for GameCore...")
 
--- Get GameCore
-local GameCore = _G.GameCore
-if not GameCore then
-	error("GameCore not found! Make sure SystemInitializer ran first.")
+	while not _G.GameCore and (tick() - startTime) < maxWaitTime do
+		wait(0.5)
+	end
+
+	if not _G.GameCore then
+		error(scriptName .. ": GameCore not found after " .. maxWaitTime .. " seconds! Check SystemInitializer.")
+	end
+
+	print(scriptName .. ": GameCore found successfully!")
+	return _G.GameCore
 end
 
+-- Usage in your scripts:
+local GameCore = WaitForGameCore("SystemIntegration") 
 -- Services
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -89,7 +99,7 @@ GameCore.CreatePetCollectionEffect = function(self, petModel, player)
 
 	sound.SoundId = soundIds[math.random(1, #soundIds)]
 	sound.Volume = 0.5
-	sound.Pitch = 1.2
+	--sound.Pitch = 1.2
 	sound.Parent = workspace
 
 	-- Try to play the sound with fallback

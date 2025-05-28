@@ -1,13 +1,26 @@
-print("Hello world!")
 -- FarmingSystem.server.lua
 -- Complete farming/crop growing system
 
-wait(10) -- Wait for GameCore to load
+local function WaitForGameCore(scriptName, maxWaitTime)
+	maxWaitTime = maxWaitTime or 15
+	local startTime = tick()
 
-local GameCore = _G.GameCore
-if not GameCore then
-	error("FarmingSystem: GameCore not found!")
+	print(scriptName .. ": Waiting for GameCore...")
+
+	while not _G.GameCore and (tick() - startTime) < maxWaitTime do
+		wait(0.5)
+	end
+
+	if not _G.GameCore then
+		error(scriptName .. ": GameCore not found after " .. maxWaitTime .. " seconds! Check SystemInitializer.")
+	end
+
+	print(scriptName .. ": GameCore found successfully!")
+	return _G.GameCore
 end
+
+-- Usage in your scripts:
+local GameCore = WaitForGameCore("FarmingSystem") -- Replace with actual script name
 
 -- Services
 local RunService = game:GetService("RunService")
@@ -52,41 +65,74 @@ function GameCore:InitializeFarmingSystem()
 end
 
 -- Create a farming plot
-function GameCore:CreateFarmPlot(plotName, plotNumber)
-	local plot = Instance.new("Part")
-	plot.Name = plotName
-	plot.Size = Vector3.new(8, 1, 8)
-	plot.Color = Color3.fromRGB(101, 67, 33) -- Brown soil color
-	plot.Material = Enum.Material.Grass
-	plot.Anchored = true
-	plot.CanCollide = true
+function GameCore:CreateFarmPlot(plotNumber)
+	-- FIXED: Ensure plotNumber is a valid number
+	plotNumber = tonumber(plotNumber) or 1
 
-	-- Position plots in a grid
-	local row = math.floor((plotNumber - 1) / 5)
-	local col = (plotNumber - 1) % 5
-	plot.Position = Vector3.new(col * 15, 0.5, row * 15)
+	local plotModel = Instance.new("Model")
+	plotModel.Name = "FarmPlot_" .. plotNumber
 
-	-- Add plot marker
-	local plotLabel = Instance.new("SurfaceGui")
-	plotLabel.Face = Enum.NormalId.Top
-	plotLabel.Parent = plot
+	-- Create soil base
+	local soil = Instance.new("Part")
+	soil.Name = "Soil"
+	soil.Size = Vector3.new(8, 1, 8)
 
-	local textLabel = Instance.new("TextLabel")
-	textLabel.Size = UDim2.new(1, 0, 1, 0)
-	textLabel.BackgroundTransparency = 1
-	textLabel.Text = "Plot " .. plotNumber
-	textLabel.TextColor3 = Color3.new(1, 1, 1)
-	textLabel.TextScaled = true
-	textLabel.Font = Enum.Font.SourceSansBold
-	textLabel.Parent = plotLabel
+	-- FIXED: Better plot positioning logic
+	local plotsPerRow = 5
+	local plotSpacing = 12
+	local row = math.floor((plotNumber - 1) / plotsPerRow)
+	local col = (plotNumber - 1) % plotsPerRow
 
-	plot:SetAttribute("PlotNumber", plotNumber)
-	plot:SetAttribute("IsEmpty", true)
-	plot:SetAttribute("CropType", "")
-	plot:SetAttribute("PlantTime", 0)
-	plot:SetAttribute("GrowthStage", 0)
+	-- Calculate position with safe defaults
+	local xPos = col * plotSpacing
+	local zPos = row * plotSpacing
+	local yPos = 0.5
 
-	return plot
+	soil.Position = Vector3.new(xPos, yPos, zPos)
+	soil.Anchored = true
+	soil.CanCollide = true
+	soil.Material = Enum.Material.Ground
+	soil.Color = Color3.fromRGB(101, 67, 33)
+	soil.Parent = plotModel
+
+	-- Add plot border
+	local border = Instance.new("Part")
+	border.Name = "Border"
+	border.Size = Vector3.new(8.5, 0.2, 8.5)
+	border.Position = soil.Position + Vector3.new(0, 0.6, 0)
+	border.Anchored = true
+	border.CanCollide = false
+	border.Material = Enum.Material.Wood
+	border.Color = Color3.fromRGB(160, 100, 50)
+	border.Parent = plotModel
+
+	-- Add plot label
+	local plotGui = Instance.new("SurfaceGui")
+	plotGui.Face = Enum.NormalId.Top
+	plotGui.Parent = soil
+
+	local plotLabel = Instance.new("TextLabel")
+	plotLabel.Size = UDim2.new(1, 0, 1, 0)
+	plotLabel.BackgroundTransparency = 1
+	plotLabel.Text = "Plot " .. plotNumber
+	plotLabel.TextColor3 = Color3.new(1, 1, 1)
+	plotLabel.TextScaled = true
+	plotLabel.Font = Enum.Font.GothamBold
+	plotLabel.TextStrokeTransparency = 0
+	plotLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	plotLabel.Parent = plotGui
+
+	plotModel.PrimaryPart = soil
+
+	-- Set plot attributes with safe defaults
+	plotModel:SetAttribute("PlotID", plotNumber)
+	plotModel:SetAttribute("IsPlanted", false)
+	plotModel:SetAttribute("PlantType", "")
+	plotModel:SetAttribute("GrowthStage", 0)
+	plotModel:SetAttribute("PlantTime", 0)
+	plotModel:SetAttribute("TimeToGrow", 0)
+
+	return plotModel
 end
 
 -- Plant a seed

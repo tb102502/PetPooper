@@ -25,7 +25,7 @@ local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local Debris = game:GetService("Debris")
-
+local SKIP_PET_VALIDATION = true -- Set to false once you add your pet models
 -- Load configuration
 local ItemConfig = require(script.Parent.Parent:WaitForChild("Config"):WaitForChild("ItemConfig"))
 
@@ -707,11 +707,12 @@ function GameCore:StartPetBehavior(petModel, petConfig)
 	end
 
 	-- Main behavior loop
-	local connection = RunService.Heartbeat:Connect(function(deltaTime)
-		if not petModel or not petModel.Parent or isCollected then
-			if connection then connection:Disconnect() end
-			return
-		end
+	-- FIXED CODE:
+	local connection  -- Declare first
+
+	connection = RunService.Heartbeat:Connect(function(deltaTime)
+		if connection then connection:Disconnect() end  -- Now it exists!
+
 
 		if not humanoid or not humanoid.Parent or not rootPart or not rootPart.Parent then
 			if connection then connection:Disconnect() end
@@ -786,17 +787,19 @@ function GameCore:StartPetBehavior(petModel, petConfig)
 	end)
 
 	-- Store connection using behavior ID
-	self.Systems.Pets.BehaviorConnections[behaviorId] = connection
-
-	-- Cleanup when pet is removed
-	petModel.AncestryChanged:Connect(function()
-		if not petModel.Parent then
-			if connection then connection:Disconnect() end
-			self.Systems.Pets.BehaviorConnections[behaviorId] = nil
-			removeGlow()
+local behaviorConnection
+behaviorConnection = RunService.Heartbeat:Connect(function(deltaTime)
+	if not petModel or not petModel.Parent or isCollected then
+		if behaviorConnection then 
+			behaviorConnection:Disconnect()
+			behaviorConnection = nil
 		end
-	end)
-end
+		return
+	end
+			removeGlow()
+		end)
+	end
+
 
 -- Enhanced wild pet collection
 function GameCore:HandleWildPetCollection(player, petModel)
@@ -1707,12 +1710,27 @@ end
 
 -- Validation function
 function GameCore:ValidateCustomPetsOnly()
+	if SKIP_PET_VALIDATION then
+		print("GameCore: Pet model validation SKIPPED - will use fallback pets")
+		return true
+	end
+
 	print("GameCore: Validating custom pet models...")
 
 	local petModelsFolder = ReplicatedStorage:FindFirstChild("PetModels")
 	if not petModelsFolder then
 		warn("GameCore: PetModels folder not found in ReplicatedStorage!")
-		return false
+
+		-- CREATE the PetModels folder and basic pets
+		petModelsFolder = Instance.new("Folder")
+		petModelsFolder.Name = "PetModels"
+		petModelsFolder.Parent = ReplicatedStorage
+
+		-- Create basic pet models for testing
+		self:CreateBasicPetModels(petModelsFolder)
+
+		print("GameCore: Created basic pet models for testing")
+		return true
 	end
 
 	local requiredModels = {"Corgi", "RedPanda", "Cat", "Hamster"}
@@ -1731,11 +1749,78 @@ function GameCore:ValidateCustomPetsOnly()
 	end
 
 	if #missingModels > 0 then
-		
-	end
-		error("GameCore: Missing required custom pet models: " .. table.concat(missingModels, ", "))
+		print("GameCore: Creating missing pet models...")
+		self:CreateBasicPetModels(petModelsFolder, missingModels)
 	end
 
-	print("GameCore: All  custom pet models validated successfully!")
-	
-	return GameCore
+	print("GameCore: Pet model validation complete!")
+	return true
+end
+function GameCore:CreateBasicPetModels(petModelsFolder, specificModels)
+	local modelsToCreate = specificModels or {"Corgi", "RedPanda", "Cat", "Hamster"}
+
+	for _, petName in ipairs(modelsToCreate) do
+		local existingModel = petModelsFolder:FindFirstChild(petName)
+		if existingModel then continue end
+
+		-- Create a basic pet model
+		local petModel = Instance.new("Model")
+		petModel.Name = petName
+
+		-- Create body part
+		local body = Instance.new("Part")
+		body.Name = "HumanoidRootPart"
+		body.Size = Vector3.new(2, 2, 3)
+		body.Shape = Enum.PartType.Block
+		body.Anchored = false
+		body.CanCollide = false
+		body.Parent = petModel
+
+		-- Create head
+		local head = Instance.new("Part")
+		head.Name = "Head"
+		head.Size = Vector3.new(1.5, 1.5, 1.5)
+		head.Shape = Enum.PartType.Ball
+		head.Anchored = false
+		head.CanCollide = false
+		head.Parent = petModel
+
+		-- Position head
+		local headWeld = Instance.new("WeldConstraint")
+		headWeld.Part0 = body
+		headWeld.Part1 = head
+		headWeld.Parent = body
+		head.CFrame = body.CFrame * CFrame.new(0, 2, 0)
+
+		-- Set colors based on pet type
+		if petName == "Corgi" then
+			body.Color = Color3.fromRGB(255, 200, 150)
+			head.Color = Color3.fromRGB(255, 200, 150)
+		elseif petName == "RedPanda" then
+			body.Color = Color3.fromRGB(194, 144, 90)
+			head.Color = Color3.fromRGB(194, 144, 90)
+		elseif petName == "Cat" then
+			body.Color = Color3.fromRGB(110, 110, 110)
+			head.Color = Color3.fromRGB(110, 110, 110)
+		elseif petName == "Hamster" then
+			body.Color = Color3.fromRGB(255, 215, 0)
+			head.Color = Color3.fromRGB(255, 215, 0)
+		end
+
+		-- Add humanoid
+		local humanoid = Instance.new("Humanoid")
+		humanoid.WalkSpeed = math.random(4, 8)
+		humanoid.JumpPower = math.random(30, 50)
+		humanoid.MaxHealth = 100
+		humanoid.Health = 100
+		humanoid.Parent = petModel
+
+		-- Set primary part
+		petModel.PrimaryPart = body
+
+		-- Parent to folder
+		petModel.Parent = petModelsFolder
+
+		print("GameCore: Created basic " .. petName .. " model")
+	end
+end

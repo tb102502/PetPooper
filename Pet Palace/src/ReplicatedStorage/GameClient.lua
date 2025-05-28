@@ -1063,7 +1063,23 @@ function GameClient:CreatePetCard(petData, parent, index)
 
 	return card
 end
+function GameClient:ConvertNameToId(itemName)
+	-- Map display names to actual ItemConfig IDs
+	local nameToIdMap = {
+		["Speed Boost"] = "speed_upgrade",
+		["Jump Boost"] = "jump_boost", 
+		["Coin Magnet"] = "pet_magnet_upgrade",
+		["Basic Egg"] = "basic_seed_egg",
+		["Rare Egg"] = "premium_seed_egg", 
+		["Epic Egg"] = "legendary_seed_egg",
+		["Pet Storage"] = "pet_storage_upgrade",
+		["Auto Seller"] = "auto_seller",
+		["Premium Pass"] = "premium_pass",
+		["Collection Range"] = "collection_radius_upgrade"
+	}
 
+	return nameToIdMap[itemName] or itemName:lower():gsub(" ", "_")
+end
 function GameClient:UpdateSellingUI()
 	-- Placeholder for selling UI updates
 	print("GameClient: Updated selling UI")
@@ -1167,13 +1183,13 @@ function GameClient:SwitchShopTab(tabName, contentArea)
 	-- Populate items based on tab
 	if tabName == "Basic Items" then
 		self:CreateShopItem(itemsContainer, "Speed Boost", "Increases your walk speed", 250, "coins", "⚡")
-		self:CreateShopItem(itemsContainer, "Jump Boost", "Increases your jump height", 150, "coins", "🦘")
-		self:CreateShopItem(itemsContainer, "Coin Magnet", "Automatically collect nearby coins", 500, "coins", "🧲")
+		self:CreateShopItem(itemsContainer, "Collection Range", "Increases your collection radius", 150, "coins", "🎯")
+		self:CreateShopItem(itemsContainer, "Coin Magnet", "Automatically pulls nearby pets", 500, "coins", "🧲")
 
 	elseif tabName == "Pet Eggs" then
-		self:CreateShopItem(itemsContainer, "Basic Egg", "Contains common pets", 100, "coins", "🥚")
-		self:CreateShopItem(itemsContainer, "Rare Egg", "Contains rare pets", 50, "gems", "🌟")
-		self:CreateShopItem(itemsContainer, "Epic Egg", "Contains epic pets", 100, "gems", "💎")
+		self:CreateShopItem(itemsContainer, "Basic Egg", "Contains common seeds", 100, "coins", "🥚")
+		self:CreateShopItem(itemsContainer, "Rare Egg", "Contains rare seeds", 50, "gems", "🌟")
+		self:CreateShopItem(itemsContainer, "Epic Egg", "Contains epic seeds", 100, "gems", "💎")
 
 	elseif tabName == "Upgrades" then
 		self:CreateShopItem(itemsContainer, "Pet Storage", "Store more pets", 1000, "coins", "📦")
@@ -1260,12 +1276,15 @@ function GameClient:CreateShopItem(parent, itemName, description, price, currenc
 
 	if canAfford then
 		buyButton.MouseButton1Click:Connect(function()
-			self:PurchaseItem(itemName, price, currency)
+			-- FIXED: Convert item name to proper item ID
+			local itemId = self:ConvertNameToId(itemName)
+			self:PurchaseItem(itemId, price, currency)
 		end)
 	end
 
 	return itemCard
 end
+
 
 function GameClient:CanPlayerAfford(price, currency)
 	if not self.PlayerData then return false end

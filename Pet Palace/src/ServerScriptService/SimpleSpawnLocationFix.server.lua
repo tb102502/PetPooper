@@ -2,14 +2,26 @@
 -- Alternative approach - modify GameCore directly instead of creating new script
 -- Place in ServerScriptService and run AFTER GameCore is loaded
 
--- Wait a bit for systems to load
-wait(10)
+local function WaitForGameCore(scriptName, maxWaitTime)
+	maxWaitTime = maxWaitTime or 15
+	local startTime = tick()
 
-local GameCore = _G.GameCore
-if not GameCore then
-	warn("GameCore still not found after waiting. Check SystemInitializer.")
-	return
+	print(scriptName .. ": Waiting for GameCore...")
+
+	while not _G.GameCore and (tick() - startTime) < maxWaitTime do
+		wait(0.5)
+	end
+
+	if not _G.GameCore then
+		error(scriptName .. ": GameCore not found after " .. maxWaitTime .. " seconds! Check SystemInitializer.")
+	end
+
+	print(scriptName .. ": GameCore found successfully!")
+	return _G.GameCore
 end
+
+-- Usage in your scripts:
+local GameCore = WaitForGameCore("SimpleSpawnLocationFix")
 
 print("=== APPLYING SPAWN LOCATIONS FIX TO GAMECORE ===")
 
