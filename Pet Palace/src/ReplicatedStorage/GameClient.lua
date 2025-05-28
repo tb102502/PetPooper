@@ -332,7 +332,7 @@ function GameClient:PlayCollectionSound()
 	local sound = Instance.new("Sound")
 	sound.SoundId = "rbxasset://sounds/electronicpingsharp.wav"
 	sound.Volume = 0.5
-	sound.Pitch = 1.2
+	--sound.Pitch = 1.2
 	sound.Parent = workspace
 
 	sound:Play()
@@ -1280,11 +1280,20 @@ function GameClient:CanPlayerAfford(price, currency)
 end
 
 function GameClient:PurchaseItem(itemName, price, currency)
-	self:ShowNotification("Purchase", "Purchased " .. itemName .. " for " .. price .. " " .. currency, "success")
-	-- Here you would fire a remote event to actually purchase the item
-	-- if self.RemoteEvents.PurchaseItem then
-	--     self.RemoteEvents.PurchaseItem:FireServer(itemName, 1)
-	-- end
+	-- Check if player can afford
+	if not self:CanPlayerAfford(price, currency) then
+		self:ShowNotification("Purchase Failed", "Not enough " .. currency .. "!", "error")
+		return
+	end
+
+	-- Fire server event to actually purchase
+	if self.RemoteEvents.PurchaseItem then
+		self.RemoteEvents.PurchaseItem:FireServer(itemName, 1) -- quantity = 1
+		print("GameClient: Sent purchase request for " .. itemName)
+	else
+		warn("GameClient: PurchaseItem remote event not found!")
+		self:ShowNotification("Purchase Failed", "Server connection error!", "error")
+	end
 end
 
 -- FIXED: Enhanced farm menu
