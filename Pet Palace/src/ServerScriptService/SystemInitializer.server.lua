@@ -2,17 +2,19 @@
     SystemInitializer.server.lua - FIXED VERSION
     Place in: ServerScriptService/SystemInitializer.server.lua
     
-    FIXES:
-    1. Fixed syntax error on line 219
-    2. Proper error handling for GameCore initialization
-    3. Better module loading sequence
-    4. Immediate global availability of GameCore
+    CRITICAL FIXES:
+    1. ✅ Fixed all syntax errors
+    2. ✅ Proper error handling and recovery
+    3. ✅ Better module loading sequence
+    4. ✅ Immediate global availability of GameCore
+    5. ✅ Comprehensive validation
 ]]
 
 -- Services
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
 
 print("=== Pet Palace System Initializer Starting ===")
 
@@ -42,25 +44,53 @@ local function SetupClientModule()
 	local existingClient = ReplicatedStorage:FindFirstChild("GameClient")
 
 	if not existingClient then
-		print("SystemInitializer: Creating GameClient module in ReplicatedStorage...")
-
-		-- Try to get it from ServerScriptService first
-		local clientTemplate = ServerScriptService:FindFirstChild("GameClient")
-		if clientTemplate and clientTemplate:IsA("ModuleScript") then
-			local clientModule = clientTemplate:Clone()
-			clientModule.Parent = ReplicatedStorage
-			print("SystemInitializer: Cloned GameClient from template")
-		else
-			warn("SystemInitializer: No GameClient template found - clients may not work properly")
-		end
+		print("SystemInitializer: GameClient not found in ReplicatedStorage")
+		print("SystemInitializer: Make sure to place GameClient.lua in ReplicatedStorage manually")
+	else
+		print("SystemInitializer: Found existing GameClient module")
 	end
+end
+
+-- Validate required folder structure
+local function ValidateStructure()
+	print("SystemInitializer: Validating server structure...")
+
+	-- Check Core folder
+	local coreFolder = ServerScriptService:FindFirstChild("Core")
+	if not coreFolder then
+		error("CRITICAL: Core folder not found in ServerScriptService")
+	end
+
+	-- Check GameCore module
+	local gameCoreModule = coreFolder:FindFirstChild("GameCore")
+	if not gameCoreModule then
+		error("CRITICAL: GameCore module not found in ServerScriptService/Core")
+	end
+
+	-- Check Config folder
+	local configFolder = ServerScriptService:FindFirstChild("Config")
+	if not configFolder then
+		error("CRITICAL: Config folder not found in ServerScriptService")
+	end
+
+	-- Check ItemConfig
+	local itemConfig = configFolder:FindFirstChild("ItemConfig")
+	if not itemConfig then
+		error("CRITICAL: ItemConfig module not found in ServerScriptService/Config")
+	end
+
+	print("SystemInitializer: Structure validation passed")
+	return true
 end
 
 -- Initialize everything
 local function InitializeAllSystems()
 	print("SystemInitializer: Starting comprehensive initialization...")
 
-	-- Setup client module first
+	-- Validate structure first
+	ValidateStructure()
+
+	-- Setup client module
 	SetupClientModule()
 
 	-- Load GameCore module
@@ -85,9 +115,12 @@ local function InitializeAllSystems()
 	end
 
 	-- Create ready signal for clients
-	local readyEvent = Instance.new("BindableEvent")
-	readyEvent.Name = "GameCoreReady" 
-	readyEvent.Parent = ReplicatedStorage
+	local readyEvent = ReplicatedStorage:FindFirstChild("GameCoreReady")
+	if not readyEvent then
+		readyEvent = Instance.new("BindableEvent")
+		readyEvent.Name = "GameCoreReady" 
+		readyEvent.Parent = ReplicatedStorage
+	end
 
 	-- Fire ready event
 	spawn(function()
@@ -119,12 +152,12 @@ local function SetupErrorHandling()
 	game:BindToClose(function()
 		print("SystemInitializer: Server shutting down, saving all player data...")
 
-		for _, player in ipairs(Players:GetPlayers()) do
-			pcall(function()
-				if _G.GameCore and _G.GameCore.SavePlayerData then
+		if _G.GameCore and _G.GameCore.SavePlayerData then
+			for _, player in ipairs(Players:GetPlayers()) do
+				pcall(function()
 					_G.GameCore:SavePlayerData(player)
-				end
-			end)
+				end)
+			end
 		end
 
 		wait(2) -- Give time for saves to complete
@@ -134,8 +167,8 @@ end
 
 -- Setup development commands (if needed)
 local function SetupDevCommands()
-	-- Only enable in studio or for authorized users
-	if not game:GetService("RunService"):IsStudio() then
+	-- Only enable in studio or for specific users
+	if not RunService:IsStudio() then
 		return
 	end
 
@@ -144,7 +177,7 @@ local function SetupDevCommands()
 	-- Simple admin commands for development
 	Players.PlayerAdded:Connect(function(player)
 		-- Mark studio users as admin for testing
-		if game:GetService("RunService"):IsStudio() then
+		if RunService:IsStudio() then
 			player:SetAttribute("Admin", true)
 		end
 
@@ -199,10 +232,53 @@ local function SetupDevCommands()
 				-- Debug command to check GameCore status
 				if _G.GameCore then
 					print("GameCore Status: ACTIVE")
-					print("Players in data: " .. (#_G.GameCore.PlayerData or 0))
-					print("Spawn areas: " .. (#_G.GameCore.Systems.Pets.SpawnAreas or 0))
+					local playerCount = 0
+					for _ in pairs(_G.GameCore.PlayerData or {}) do
+						playerCount = playerCount + 1
+					end
+					print("Players in data: " .. playerCount)
+
+					local areaCount = 0
+					for _ in pairs(_G.GameCore.Systems.Pets.SpawnAreas or {}) do
+						areaCount = areaCount + 1
+					end
+					print("Spawn areas: " .. areaCount)
 				else
 					print("GameCore Status: NOT FOUND")
+				end
+
+			elseif command == "/clearpets" then
+				-- Clear all pets from all areas
+				if _G.GameCore then
+					for areaName, areaData in pairs(_G.GameCore.Systems.Pets.SpawnAreas) do
+						if areaData.container then
+							areaData.container:ClearAllChildren()
+						end
+					end
+					print("Cleared all pets from all areas")
+				end
+
+			elseif command == "/testshop" then
+				-- Test shop purchase
+				if _G.GameCore then
+					_G.GameCore:HandlePurchase(player, "speed_upgrade", 1)
+				end
+
+			elseif command == "/maxupgrades" then
+				-- Give max upgrades for testing
+				if _G.GameCore then
+					local playerData = _G.GameCore:GetPlayerData(player)
+					if playerData then
+						playerData.upgrades = {
+							speed_upgrade = 5,
+							collection_radius_upgrade = 5,
+							pet_magnet_upgrade = 5,
+							farm_plot_upgrade = 3,
+							pet_storage_upgrade = 5
+						}
+						_G.GameCore:ApplyAllUpgradeEffects(player)
+						print("Applied max upgrades to " .. player.Name)
+					end
 				end
 			end
 		end)
@@ -224,11 +300,52 @@ local function SetupPerformanceMonitoring()
 			-- Check GameCore status
 			if not _G.GameCore then
 				warn("SystemInitializer: CRITICAL - GameCore lost from global scope!")
+			else
+				-- Count active pets
+				local totalPets = 0
+				local totalConnections = 0
+
+				if _G.GameCore.Systems and _G.GameCore.Systems.Pets then
+					for _, areaData in pairs(_G.GameCore.Systems.Pets.SpawnAreas or {}) do
+						if areaData.container then
+							totalPets = totalPets + #areaData.container:GetChildren()
+						end
+					end
+
+					for _ in pairs(_G.GameCore.Systems.Pets.BehaviorConnections or {}) do
+						totalConnections = totalConnections + 1
+					end
+				end
+
+				print(string.format("SystemInitializer: Game Stats - Pets: %d, Connections: %d", 
+					totalPets, totalConnections))
 			end
 
 			-- Warn if memory usage is high
 			if memoryUsage > 1000 then
 				warn("SystemInitializer: High memory usage detected: " .. memoryUsage .. " MB")
+			end
+		end
+	end)
+end
+
+-- Setup automatic error recovery
+local function SetupErrorRecovery()
+	spawn(function()
+		while true do
+			wait(30) -- Check every 30 seconds
+
+			-- Check if GameCore is still available
+			if not _G.GameCore then
+				warn("SystemInitializer: GameCore missing - attempting recovery...")
+
+				local success, newGameCore = pcall(LoadGameCore)
+				if success then
+					_G.GameCore = newGameCore
+					print("SystemInitializer: GameCore recovered successfully")
+				else
+					warn("SystemInitializer: Failed to recover GameCore: " .. tostring(newGameCore))
+				end
 			end
 		end
 	end)
@@ -250,10 +367,25 @@ local function Main()
 	SetupErrorHandling()
 	SetupDevCommands()
 	SetupPerformanceMonitoring()
+	SetupErrorRecovery()
 
 	print("=== Pet Palace System Initializer Complete ===")
 	print("Game is ready for players!")
 	print("GameCore Status: " .. (_G.GameCore and "ACTIVE" or "MISSING"))
+
+	-- Print debug commands available
+	if RunService:IsStudio() then
+		print("\n=== DEBUG COMMANDS AVAILABLE ===")
+		print("/givecoins [amount] - Give coins to player")
+		print("/givegems [amount] - Give gems to player")
+		print("/spawnpets [count] - Spawn pets in all areas")
+		print("/reset - Reset player data (WARNING: Dangerous!)")
+		print("/checkgamecore - Check GameCore status")
+		print("/clearpets - Clear all pets from workspace")
+		print("/testshop - Test shop purchase")
+		print("/maxupgrades - Give max upgrades for testing")
+		print("=================================")
+	end
 
 	return GameCore
 end
@@ -270,9 +402,27 @@ if not initSuccess then
 	-- Try to provide helpful debug info
 	local coreExists = ServerScriptService:FindFirstChild("Core")
 	local gameCoreExists = coreExists and coreExists:FindFirstChild("GameCore")
+	local configExists = ServerScriptService:FindFirstChild("Config")
+	local itemConfigExists = configExists and configExists:FindFirstChild("ItemConfig")
 
 	warn("Core folder exists: " .. (coreExists and "Yes" or "No"))
 	warn("GameCore module exists: " .. (gameCoreExists and "Yes" or "No"))
+	warn("Config folder exists: " .. (configExists and "Yes" or "No"))
+	warn("ItemConfig module exists: " .. (itemConfigExists and "Yes" or "No"))
+
+	-- Try to provide solutions
+	if not coreExists then
+		warn("SOLUTION: Create ServerScriptService/Core/ folder and place GameCore.lua inside")
+	end
+	if not configExists then
+		warn("SOLUTION: Create ServerScriptService/Config/ folder and place ItemConfig.lua inside")
+	end
+	if not gameCoreExists then
+		warn("SOLUTION: Place GameCore.lua in ServerScriptService/Core/")
+	end
+	if not itemConfigExists then
+		warn("SOLUTION: Place ItemConfig.lua in ServerScriptService/Config/")
+	end
 
 	error("CRITICAL SYSTEM FAILURE: " .. tostring(initError))
 else
@@ -282,6 +432,24 @@ else
 	-- Final verification
 	if _G.GameCore then
 		print("✅ Global GameCore verification: SUCCESS")
+
+		-- Test basic functionality
+		if _G.GameCore.Systems then
+			print("✅ GameCore systems initialized: SUCCESS")
+		else
+			warn("⚠️  GameCore systems not properly initialized")
+		end
+
+		if _G.GameCore.RemoteEvents then
+			local eventCount = 0
+			for _ in pairs(_G.GameCore.RemoteEvents) do
+				eventCount = eventCount + 1
+			end
+			print("✅ Remote events created: " .. eventCount)
+		else
+			warn("⚠️  Remote events not properly created")
+		end
+
 	else
 		error("❌ Global GameCore verification: FAILED")
 	end
