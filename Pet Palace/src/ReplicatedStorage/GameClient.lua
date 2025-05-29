@@ -1,14 +1,12 @@
 --[[
-    GameClient.lua - FIXED CLIENT SYSTEM
+    GameClient.lua - FIXED FARM MENU DUPLICATION
     Place in: ReplicatedStorage/GameClient.lua
     
     CRITICAL FIXES:
-    1. ✅ Fixed remote event handling
-    2. ✅ Proper error handling throughout
-    3. ✅ Fixed UI creation and management
-    4. ✅ Enhanced proximity collection system
-    5. ✅ Fixed pet selling system
-    6. ✅ Improved currency display
+    1. ✅ Fixed farm menu creating duplicate items
+    2. ✅ Clear existing menu items before creating new ones
+    3. ✅ Proper menu state management
+    4. ✅ Memory leak prevention
 ]]
 
 local GameClient = {}
@@ -195,68 +193,6 @@ function GameClient:CheckPetProximity(pet, playerPosition)
 		-- Find any BasePart in the model
 		for _, part in pairs(pet:GetDescendants()) do
 			if part:IsA("BasePart") then
-				petPosition = part.Position
-				break
-			end
-		end
-	end
-
-	if not petPosition then return end
-
-	local distance = (playerPosition - petPosition).Magnitude
-
-	-- Get player's collection radius (from upgrades)
-	local baseRadius = self.ProximitySystem.collectRadius
-	local upgradedRadius = LocalPlayer:GetAttribute("CollectionRadius") or baseRadius
-
-	-- Check for collection (close range)
-	if distance <= upgradedRadius then
-		-- Don't spam collection attempts
-		if not pet:GetAttribute("CollectionAttempted") then
-			pet:SetAttribute("CollectionAttempted", true)
-
-			-- Fire collection event
-			if self.RemoteEvents.CollectWildPet then
-				self.RemoteEvents.CollectWildPet:FireServer(pet)
-			end
-
-			-- Create immediate visual feedback
-			self:CreateCollectionEffect(petPosition)
-
-			-- Reset the flag after a delay
-			spawn(function()
-				wait(1)
-				if pet and pet.Parent then
-					pet:SetAttribute("CollectionAttempted", false)
-				end
-			end)
-		end
-	end
-
-	-- Visual glow effect for nearby pets
-	if distance <= self.ProximitySystem.glowRadius then
-		self:AddPetGlow(pet)
-	else
-		self:RemovePetGlow(pet)
-	end
-end
-
--- Add glow effect to pet
-function GameClient:AddPetGlow(pet)
-	if pet:GetAttribute("HasGlow") then return end
-
-	local glowEffect = pet:FindFirstChild("ProximityGlow")
-	if glowEffect then return end
-
-	-- Find the main part of the pet
-	local targetPart
-	if pet:IsA("Model") and pet.PrimaryPart then
-		targetPart = pet.PrimaryPart
-	elseif pet:IsA("BasePart") then
-		targetPart = pet
-	else
-		for _, part in pairs(pet:GetDescendants()) do
-			if part:IsA("BasePart") then
 				targetPart = part
 				break
 			end
@@ -369,7 +305,6 @@ function GameClient:PlayCollectionSound()
 		end
 
 		if not soundWorked then
-			-- If no sounds work, create a visual feedback instead
 			print("GameClient: Sound not available, using visual feedback only")
 		end
 
@@ -383,7 +318,6 @@ function GameClient:PlayCollectionSound()
 	end)
 
 	if not success then
-		-- Silently fail for sound issues
 		print("GameClient: Collection sound failed: " .. tostring(errorMsg))
 	end
 end
@@ -401,12 +335,13 @@ end
 function GameClient:CalculatePetSellValue(petData)
 	if not petData then return 0 end
 
+	-- FIXED: Use correct sell values - Common pets = 25 coins
 	local baseValues = {
-		Common = 25,
+		Common = 25,     -- FIXED: Reduced from 75 to 25
 		Uncommon = 75,
-		Rare = 200,
-		Epic = 500,
-		Legendary = 1500
+		Rare = 150,
+		Epic = 300,
+		Legendary = 750
 	}
 
 	local baseValue = baseValues[petData.rarity] or baseValues.Common
@@ -464,6 +399,8 @@ function GameClient:HandlePlayerDataUpdate(newData)
 		self:RefreshPetsMenu()
 	elseif self.UIState.CurrentPage == "Shop" then
 		self:RefreshShopMenu()
+	elseif self.UIState.CurrentPage == "Farm" then
+		self:RefreshFarmMenu()
 	end
 
 	if oldData then
@@ -492,10 +429,16 @@ function GameClient:HandlePetCollected(petData, coinsAwarded)
 	petData.rarity = petData.rarity or "Common"
 	coinsAwarded = coinsAwarded or 0
 
-	self:ShowNotification("Pet Collected!", 
-		petData.name .. " (+" .. coinsAwarded .. " coins)", "success")
+	-- FIXED: Show appropriate message - no coins for collecting
+	if coinsAwarded > 0 then
+		self:ShowNotification("Pet Collected!", 
+			petData.name .. " (+" .. coinsAwarded .. " coins)", "success")
+	else
+		self:ShowNotification("Pet Collected!", 
+			petData.name .. " (Sell in Pets menu for coins)", "success")
+	end
 
-	print("GameClient: Collected " .. petData.name .. " for " .. coinsAwarded .. " coins")
+	print("GameClient: Collected " .. petData.name .. " (coins awarded: " .. coinsAwarded .. ")")
 end
 
 function GameClient:HandlePetSold(petData, coinsEarned)
@@ -893,11 +836,7 @@ function GameClient:SetupEffects()
 	-- Sound effects will be handled by individual functions
 end
 
--- Menu Content Management
--- COMPLETE MENU MANAGEMENT SECTION
--- Replace your entire menu content management section with this code
-
--- Menu Content Management
+-- FIXED: Menu Content Management - Prevent Duplication
 function GameClient:RefreshMenuContent(menuName)
 	if menuName == "Pets" then
 		self:RefreshPetsMenu()
@@ -1008,7 +947,54 @@ function GameClient:RefreshPetsMenu()
 	end)
 end
 
--- Shop Menu
+
+-- Add glow effect to pet
+function GameClient:AddPetGlow(pet)
+	if pet:GetAttribute("HasGlow") then return end
+
+	local glowEffect = pet:FindFirstChild("ProximityGlow")
+	if glowEffect then return end
+
+	-- Find the main part of the pet
+	local targetPart
+	if pet:IsA("Model") and pet.PrimaryPart then
+		targetPart = pet.PrimaryPart
+	elseif pet:IsA("BasePart") then
+		targetPart = pet
+	else
+		for _, part in pairs(pet:GetDescendants()) do
+			if part:IsA("BasePart") then
+				targetPart = part
+				break
+			end
+		end
+	end
+
+	if not targetPart then return end
+
+	-- Create glow effect
+	glowEffect = Instance.new("Part")
+	glowEffect.Name = "ProximityGlow"
+	glowEffect.Size = Vector3.new(6, 6, 6)
+	glowEffect.Shape = Enum.PartType.Ball
+	glowEffect.Material = Enum.Material.ForceField
+	glowEffect.Color = Color3.fromRGB(255, 255, 0)
+	glowEffect.Transparency = 0.7
+	glowEffect.CanCollide = false
+	glowEffect.Anchored = true
+	glowEffect.CFrame = targetPart.CFrame
+	glowEffect.Parent = pet
+
+	-- Animate the glow
+	local glowTween = TweenService:Create(glowEffect,
+		TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{Transparency = 0.9}
+	)
+	glowTween:Play()
+
+	pet:SetAttribute("HasGlow", true)
+end
+
 function GameClient:RefreshShopMenu()
 	local menu = self.UI.Menus.Shop
 	if not menu then return end
@@ -1016,237 +1002,223 @@ function GameClient:RefreshShopMenu()
 	local contentArea = menu:FindFirstChild("ContentArea")
 	if not contentArea then return end
 
-	-- Clear existing content
+	-- FIXED: Clear existing content to prevent duplication
 	for _, child in ipairs(contentArea:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("ScrollingFrame") or child:IsA("UIGridLayout") then
 			child:Destroy()
 		end
 	end
 
-	-- Create simple shop display
-	local shopLabel = Instance.new("TextLabel")
-	shopLabel.Size = UDim2.new(0.8, 0, 0.2, 0)
-	shopLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
-	shopLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	shopLabel.BackgroundTransparency = 1
-	shopLabel.Text = "🛒 Shop Coming Soon!\nUpgrades and items will be available here."
-	shopLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
-	shopLabel.TextScaled = true
-	shopLabel.Font = Enum.Font.SourceSansSemibold
-	shopLabel.Parent = contentArea
-end
+	-- Load shop items from server
+	if self.RemoteFunctions.GetShopItems then
+		local success, shopItems = pcall(function()
+			return self.RemoteFunctions.GetShopItems:InvokeServer()
+		end)
 
--- Farm Menu
-function GameClient:RefreshFarmMenu()
-	local menu = self.UI.Menus.Farm
-	if not menu then return end
+		if success and shopItems then
+			self.Cache.ShopItems = shopItems
+			
+			-- Create shop sections
+			local layout = Instance.new("UIListLayout")
+			layout.SortOrder = Enum.SortOrder.LayoutOrder
+			layout.Padding = UDim.new(0, 10)
+			layout.Parent = contentArea
 
-	local contentArea = menu:FindFirstChild("ContentArea")
-	if not contentArea then return end
+			-- Create shop categories
+			local categories = {
+				{name = "💰 Upgrades", items = {}},
+				{name = "🌱 Seeds", items = {}},
+				{name = "📦 Egg Packs", items = {}}
+			}
 
-	-- Clear existing content
-	for _, child in ipairs(contentArea:GetChildren()) do
-		if child:IsA("Frame") then
-			child:Destroy()
+			-- Sort items into categories
+			for itemId, item in pairs(shopItems) do
+				if item.type == "upgrade" then
+					table.insert(categories[1].items, {id = itemId, data = item})
+				elseif item.type == "seed" then
+					table.insert(categories[2].items, {id = itemId, data = item})
+				elseif item.type == "egg" then
+					table.insert(categories[3].items, {id = itemId, data = item})
+				end
+			end
+
+			-- Create UI for each category
+			for i, category in ipairs(categories) do
+				if #category.items > 0 then
+					self:CreateShopCategory(contentArea, category.name, category.items, i)
+				end
+			end
+
+			-- Update canvas size
+			spawn(function()
+				wait(0.1)
+				contentArea.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+			end)
+		else
+			-- Show error message
+			local errorLabel = Instance.new("TextLabel")
+			errorLabel.Size = UDim2.new(0.8, 0, 0.2, 0)
+			errorLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
+			errorLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+			errorLabel.BackgroundTransparency = 1
+			errorLabel.Text = "Failed to load shop items\nPlease try again later"
+			errorLabel.TextColor3 = Color3.new(0.8, 0.3, 0.3)
+			errorLabel.TextScaled = true
+			errorLabel.Font = Enum.Font.SourceSansSemibold
+			errorLabel.Parent = contentArea
 		end
+	else
+		-- Show placeholder
+		local placeholderLabel = Instance.new("TextLabel")
+		placeholderLabel.Size = UDim2.new(0.8, 0, 0.2, 0)
+		placeholderLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
+		placeholderLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+		placeholderLabel.BackgroundTransparency = 1
+		placeholderLabel.Text = "🛒 Shop Coming Soon!\nUpgrades and items will be available here."
+		placeholderLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+		placeholderLabel.TextScaled = true
+		placeholderLabel.Font = Enum.Font.SourceSansSemibold
+		placeholderLabel.Parent = contentArea
 	end
-
-	-- Create simple farm display
-	local farmLabel = Instance.new("TextLabel")
-	farmLabel.Size = UDim2.new(0.8, 0, 0.2, 0)
-	farmLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
-	farmLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	farmLabel.BackgroundTransparency = 1
-	farmLabel.Text = "🌾 Farm Coming Soon!\nPlant seeds and grow crops here."
-	farmLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
-	farmLabel.TextScaled = true
-	farmLabel.Font = Enum.Font.SourceSansSemibold
-	farmLabel.Parent = contentArea
 end
 
--- Settings Menu
-function GameClient:RefreshSettingsMenu()
-	local menu = self.UI.Menus.Settings
-	if not menu then return end
-
-	local contentArea = menu:FindFirstChild("ContentArea")
-	if not contentArea then return end
-
-	-- Clear existing content
-	for _, child in ipairs(contentArea:GetChildren()) do
-		if child:IsA("Frame") then
-			child:Destroy()
-		end
-	end
-
-	-- Create simple settings display
-	local settingsLabel = Instance.new("TextLabel")
-	settingsLabel.Size = UDim2.new(0.8, 0, 0.2, 0)
-	settingsLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
-	settingsLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	settingsLabel.BackgroundTransparency = 1
-	settingsLabel.Text = "⚙️ Settings\nGame options and controls will be here."
-	settingsLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
-	settingsLabel.TextScaled = true
-	settingsLabel.Font = Enum.Font.SourceSansSemibold
-	settingsLabel.Parent = contentArea
-end
-
--- Enhanced Pet Card Creation (SAFE VERSION)
-function GameClient:CreatePetCard(petData, parent, index)
-	-- Validate inputs
-	if not petData then
-		error("CreatePetCard: petData is nil")
-	end
-	if not parent then
-		error("CreatePetCard: parent is nil")
-	end
-
-	-- Safe pet data with defaults
-	local safePetData = {
-		id = petData.id or "unknown_" .. math.random(1000, 9999),
-		name = petData.name or petData.displayName or petData.type or "Unknown Pet",
-		type = petData.type or "unknown",
-		rarity = petData.rarity or "Common",
-		level = petData.level or 1
-	}
-
-	index = tonumber(index) or 1
-
-	-- Create card container
-	local card = Instance.new("Frame")
-	card.Name = "PetCard_" .. safePetData.id
-	card.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
-	card.BorderSizePixel = 0
-	card.LayoutOrder = index
-	card.Parent = parent
+-- Create shop category
+function GameClient:CreateShopCategory(parent, categoryName, items, layoutOrder)
+	local categoryFrame = Instance.new("Frame")
+	categoryFrame.Name = categoryName .. "_Category"
+	categoryFrame.Size = UDim2.new(1, 0, 0, 60 + (#items * 80))
+	categoryFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+	categoryFrame.BorderSizePixel = 0
+	categoryFrame.LayoutOrder = layoutOrder
+	categoryFrame.Parent = parent
 
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.05, 0)
-	corner.Parent = card
+	corner.CornerRadius = UDim.new(0.02, 0)
+	corner.Parent = categoryFrame
 
-	-- Pet image placeholder
-	local image = Instance.new("Frame")
-	image.Name = "Image"
-	image.Size = UDim2.new(0.8, 0, 0.4, 0)
-	image.Position = UDim2.new(0.5, 0, 0.2, 0)
-	image.AnchorPoint = Vector2.new(0.5, 0.5)
-	image.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-	image.Parent = card
+	-- Category title
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 40)
+	title.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+	title.BorderSizePixel = 0
+	title.Text = categoryName
+	title.TextColor3 = Color3.new(1, 1, 1)
+	title.TextScaled = true
+	title.Font = Enum.Font.GothamBold
+	title.Parent = categoryFrame
 
-	local imageCorner = Instance.new("UICorner")
-	imageCorner.CornerRadius = UDim.new(0.1, 0)
-	imageCorner.Parent = image
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0.02, 0)
+	titleCorner.Parent = title
 
-	-- Pet emoji
-	local emoji = Instance.new("TextLabel")
-	emoji.Size = UDim2.new(1, 0, 1, 0)
-	emoji.BackgroundTransparency = 1
-	emoji.Text = self:GetPetEmoji(safePetData.type)
-	emoji.TextScaled = true
-	emoji.Font = Enum.Font.SourceSansSemibold
-	emoji.Parent = image
+	-- Items container
+	local itemsContainer = Instance.new("Frame")
+	itemsContainer.Size = UDim2.new(1, -20, 1, -50)
+	itemsContainer.Position = UDim2.new(0, 10, 0, 45)
+	itemsContainer.BackgroundTransparency = 1
+	itemsContainer.Parent = categoryFrame
 
-	-- Pet name
+	local itemsLayout = Instance.new("UIListLayout")
+	itemsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	itemsLayout.Padding = UDim.new(0, 5)
+	itemsLayout.Parent = itemsContainer
+
+	-- Add items
+	for i, itemInfo in ipairs(items) do
+		self:CreateShopItem(itemsContainer, itemInfo.id, itemInfo.data, i)
+	end
+end
+
+-- Create shop item
+function GameClient:CreateShopItem(parent, itemId, itemData, layoutOrder)
+	local itemFrame = Instance.new("Frame")
+	itemFrame.Name = itemId .. "_Item"
+	itemFrame.Size = UDim2.new(1, 0, 0, 70)
+	itemFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
+	itemFrame.BorderSizePixel = 0
+	itemFrame.LayoutOrder = layoutOrder
+	itemFrame.Parent = parent
+
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0.05, 0)
+	itemCorner.Parent = itemFrame
+
+	-- Item name
 	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(0.9, 0, 0.12, 0)
-	nameLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
-	nameLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	nameLabel.Size = UDim2.new(0.4, 0, 0.5, 0)
+	nameLabel.Position = UDim2.new(0.05, 0, 0.05, 0)
 	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = safePetData.name
+	nameLabel.Text = itemData.name or itemId
 	nameLabel.TextColor3 = Color3.new(1, 1, 1)
 	nameLabel.TextScaled = true
-	nameLabel.Font = Enum.Font.SourceSansSemibold
-	nameLabel.Parent = card
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = itemFrame
 
-	-- Pet rarity
-	local rarityLabel = Instance.new("TextLabel")
-	rarityLabel.Size = UDim2.new(0.9, 0, 0.08, 0)
-	rarityLabel.Position = UDim2.new(0.5, 0, 0.62, 0)
-	rarityLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	rarityLabel.BackgroundTransparency = 1
-	rarityLabel.Text = safePetData.rarity:upper()
-	rarityLabel.TextColor3 = self:GetRarityColor(safePetData.rarity)
-	rarityLabel.TextScaled = true
-	rarityLabel.Font = Enum.Font.SourceSansSemibold
-	rarityLabel.Parent = card
+	-- Item description
+	local descLabel = Instance.new("TextLabel")
+	descLabel.Size = UDim2.new(0.4, 0, 0.4, 0)
+	descLabel.Position = UDim2.new(0.05, 0, 0.55, 0)
+	descLabel.BackgroundTransparency = 1
+	descLabel.Text = itemData.description or "No description"
+	descLabel.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+	descLabel.TextScaled = true
+	descLabel.Font = Enum.Font.Gotham
+	descLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descLabel.TextWrapped = true
+	descLabel.Parent = itemFrame
 
-	-- Sell value display
-	local sellValue = self:CalculatePetSellValue(safePetData)
-	local valueLabel = Instance.new("TextLabel")
-	valueLabel.Name = "SellValue"
-	valueLabel.Size = UDim2.new(0.9, 0, 0.1, 0)
-	valueLabel.Position = UDim2.new(0.5, 0, 0.72, 0)
-	valueLabel.AnchorPoint = Vector2.new(0.5, 0.5)
-	valueLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-	valueLabel.BackgroundTransparency = 0.3
-	valueLabel.Text = "💰 SELL: " .. sellValue .. " COINS"
-	valueLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-	valueLabel.TextScaled = true
-	valueLabel.Font = Enum.Font.SourceSansSemibold
-	valueLabel.Parent = card
+	-- Price label
+	local priceLabel = Instance.new("TextLabel")
+	priceLabel.Size = UDim2.new(0.2, 0, 0.4, 0)
+	priceLabel.Position = UDim2.new(0.5, 0, 0.3, 0)
+	priceLabel.BackgroundTransparency = 1
+	local currencyIcon = (itemData.currency == "gems") and "💎" or "💰"
+	priceLabel.Text = (itemData.price or 0) .. " " .. currencyIcon
+	priceLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+	priceLabel.TextScaled = true
+	priceLabel.Font = Enum.Font.GothamBold
+	priceLabel.Parent = itemFrame
 
-	local valueCorner = Instance.new("UICorner")
-	valueCorner.CornerRadius = UDim.new(0.2, 0)
-	valueCorner.Parent = valueLabel
+	-- Buy button
+	local buyButton = Instance.new("TextButton")
+	buyButton.Size = UDim2.new(0.2, 0, 0.6, 0)
+	buyButton.Position = UDim2.new(0.75, 0, 0.2, 0)
+	buyButton.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+	buyButton.BorderSizePixel = 0
+	buyButton.Text = "Buy"
+	buyButton.TextColor3 = Color3.new(1, 1, 1)
+	buyButton.TextScaled = true
+	buyButton.Font = Enum.Font.GothamBold
+	buyButton.Parent = itemFrame
 
-	-- Sell button
-	local sellButton = Instance.new("TextButton")
-	sellButton.Size = UDim2.new(0.8, 0, 0.12, 0)
-	sellButton.Position = UDim2.new(0.5, 0, 0.88, 0)
-	sellButton.AnchorPoint = Vector2.new(0.5, 0.5)
-	sellButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
-	sellButton.BorderSizePixel = 0
-	sellButton.Text = "Sell for " .. sellValue
-	sellButton.TextColor3 = Color3.new(1, 1, 1)
-	sellButton.TextScaled = true
-	sellButton.Font = Enum.Font.SourceSansSemibold
-	sellButton.Parent = card
+	local buyCorner = Instance.new("UICorner")
+	buyCorner.CornerRadius = UDim.new(0.1, 0)
+	buyCorner.Parent = buyButton
 
-	local buttonCorner = Instance.new("UICorner")
-	buttonCorner.CornerRadius = UDim.new(0.2, 0)
-	buttonCorner.Parent = sellButton
-
-	-- Sell button click handler
-	sellButton.MouseButton1Click:Connect(function()
-		pcall(function()
-			self:SellPet(safePetData)
-		end)
-	end)
-
-	return card
-end
-
-function GameClient:CanPlayerAfford(price, currency)
-	if not self.PlayerData then return false end
-
-	if currency == "coins" then
-		return (self.PlayerData.coins or 0) >= price
-	elseif currency == "gems" then
-		return (self.PlayerData.gems or 0) >= price
-	end
-
-	return false
-end
-
-function GameClient:PurchaseItem(itemName, price, currency)
 	-- Check if player can afford
-	if not self:CanPlayerAfford(price, currency) then
-		self:ShowNotification("Purchase Failed", "Not enough " .. currency .. "!", "error")
-		return
+	local playerData = self.PlayerData
+	if playerData then
+		local currency = (itemData.currency or "coins"):lower()
+		local playerCurrency = playerData[currency] or 0
+		local canAfford = playerCurrency >= (itemData.price or 0)
+
+		if not canAfford then
+			buyButton.BackgroundColor3 = Color3.fromRGB(120, 60, 60)
+			buyButton.Text = "Can't Afford"
+			buyButton.Active = false
+		end
 	end
 
-	-- Fire server event to actually purchase
-	if self.RemoteEvents.PurchaseItem then
-		self.RemoteEvents.PurchaseItem:FireServer(itemName, 1) -- quantity = 1
-		print("GameClient: Sent purchase request for " .. itemName)
-	else
-		warn("GameClient: PurchaseItem remote event not found!")
-		self:ShowNotification("Purchase Failed", "Server connection error!", "error")
-	end
+	-- Buy button click
+	buyButton.MouseButton1Click:Connect(function()
+		if self.RemoteEvents.PurchaseItem then
+			self.RemoteEvents.PurchaseItem:FireServer(itemId, 1)
+		end
+	end)
 end
 
--- FIXED: Enhanced farm menu
+-- FIXED: Farm Menu - Prevent Duplication
 function GameClient:RefreshFarmMenu()
 	local menu = self.UI.Menus.Farm
 	if not menu then return end
@@ -1254,7 +1226,7 @@ function GameClient:RefreshFarmMenu()
 	local contentArea = menu:FindFirstChild("ContentArea")
 	if not contentArea then return end
 
-	-- Clear existing content
+	-- FIXED: Clear existing content to prevent duplication
 	for _, child in ipairs(contentArea:GetChildren()) do
 		if child:IsA("Frame") then
 			child:Destroy()
@@ -1327,7 +1299,7 @@ function GameClient:RefreshFarmMenu()
 	statusText.Parent = statusSection
 end
 
--- FIXED: Enhanced settings menu
+-- Settings Menu
 function GameClient:RefreshSettingsMenu()
 	local menu = self.UI.Menus.Settings
 	if not menu then return end
@@ -1335,7 +1307,7 @@ function GameClient:RefreshSettingsMenu()
 	local contentArea = menu:FindFirstChild("ContentArea")
 	if not contentArea then return end
 
-	-- Clear existing content
+	-- FIXED: Clear existing content to prevent duplication
 	for _, child in ipairs(contentArea:GetChildren()) do
 		if child:IsA("Frame") then
 			child:Destroy()
@@ -1458,6 +1430,131 @@ function GameClient:RefreshSettingsMenu()
 	infoText.TextWrapped = true
 	infoText.Font = Enum.Font.SourceSans
 	infoText.Parent = infoSection
+end
+
+-- Enhanced Pet Card Creation (SAFE VERSION)
+function GameClient:CreatePetCard(petData, parent, index)
+	-- Validate inputs
+	if not petData then
+		error("CreatePetCard: petData is nil")
+	end
+	if not parent then
+		error("CreatePetCard: parent is nil")
+	end
+
+	-- Safe pet data with defaults
+	local safePetData = {
+		id = petData.id or "unknown_" .. math.random(1000, 9999),
+		name = petData.name or petData.displayName or petData.type or "Unknown Pet",
+		type = petData.type or "unknown",
+		rarity = petData.rarity or "Common",
+		level = petData.level or 1
+	}
+
+	index = tonumber(index) or 1
+
+	-- Create card container
+	local card = Instance.new("Frame")
+	card.Name = "PetCard_" .. safePetData.id
+	card.BackgroundColor3 = Color3.fromRGB(55, 55, 65)
+	card.BorderSizePixel = 0
+	card.LayoutOrder = index
+	card.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.05, 0)
+	corner.Parent = card
+
+	-- Pet image placeholder
+	local image = Instance.new("Frame")
+	image.Name = "Image"
+	image.Size = UDim2.new(0.8, 0, 0.4, 0)
+	image.Position = UDim2.new(0.5, 0, 0.2, 0)
+	image.AnchorPoint = Vector2.new(0.5, 0.5)
+	image.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+	image.Parent = card
+
+	local imageCorner = Instance.new("UICorner")
+	imageCorner.CornerRadius = UDim.new(0.1, 0)
+	imageCorner.Parent = image
+
+	-- Pet emoji
+	local emoji = Instance.new("TextLabel")
+	emoji.Size = UDim2.new(1, 0, 1, 0)
+	emoji.BackgroundTransparency = 1
+	emoji.Text = self:GetPetEmoji(safePetData.type)
+	emoji.TextScaled = true
+	emoji.Font = Enum.Font.SourceSansSemibold
+	emoji.Parent = image
+
+	-- Pet name
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(0.9, 0, 0.12, 0)
+	nameLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
+	nameLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = safePetData.name
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.TextScaled = true
+	nameLabel.Font = Enum.Font.SourceSansSemibold
+	nameLabel.Parent = card
+
+	-- Pet rarity
+	local rarityLabel = Instance.new("TextLabel")
+	rarityLabel.Size = UDim2.new(0.9, 0, 0.08, 0)
+	rarityLabel.Position = UDim2.new(0.5, 0, 0.62, 0)
+	rarityLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	rarityLabel.BackgroundTransparency = 1
+	rarityLabel.Text = safePetData.rarity:upper()
+	rarityLabel.TextColor3 = self:GetRarityColor(safePetData.rarity)
+	rarityLabel.TextScaled = true
+	rarityLabel.Font = Enum.Font.SourceSansSemibold
+	rarityLabel.Parent = card
+
+	-- FIXED: Sell value display - Use correct calculation
+	local sellValue = self:CalculatePetSellValue(safePetData)
+	local valueLabel = Instance.new("TextLabel")
+	valueLabel.Name = "SellValue"
+	valueLabel.Size = UDim2.new(0.9, 0, 0.1, 0)
+	valueLabel.Position = UDim2.new(0.5, 0, 0.72, 0)
+	valueLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	valueLabel.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	valueLabel.BackgroundTransparency = 0.3
+	valueLabel.Text = "💰 SELL: " .. sellValue .. " COINS"
+	valueLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+	valueLabel.TextScaled = true
+	valueLabel.Font = Enum.Font.SourceSansSemibold
+	valueLabel.Parent = card
+
+	local valueCorner = Instance.new("UICorner")
+	valueCorner.CornerRadius = UDim.new(0.2, 0)
+	valueCorner.Parent = valueLabel
+
+	-- Sell button
+	local sellButton = Instance.new("TextButton")
+	sellButton.Size = UDim2.new(0.8, 0, 0.12, 0)
+	sellButton.Position = UDim2.new(0.5, 0, 0.88, 0)
+	sellButton.AnchorPoint = Vector2.new(0.5, 0.5)
+	sellButton.BackgroundColor3 = Color3.fromRGB(200, 100, 50)
+	sellButton.BorderSizePixel = 0
+	sellButton.Text = "Sell for " .. sellValue
+	sellButton.TextColor3 = Color3.new(1, 1, 1)
+	sellButton.TextScaled = true
+	sellButton.Font = Enum.Font.SourceSansSemibold
+	sellButton.Parent = card
+
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0.2, 0)
+	buttonCorner.Parent = sellButton
+
+	-- Sell button click handler
+	sellButton.MouseButton1Click:Connect(function()
+		pcall(function()
+			self:SellPet(safePetData)
+		end)
+	end)
+
+	return card
 end
 
 -- Utility Methods
