@@ -90,116 +90,19 @@ ItemConfig.Pets = {
 	}
 }
 
--- Seeds and Crops
-ItemConfig.Seeds = {
-	carrot_seeds = {
-		id = "carrot_seeds",
-		name = "Carrot Seeds",
-		type = "seed",
-		rarity = "Common",
-		price = 20,
-		currency = "coins",
-		description = "Basic carrot seeds. Fast growing crop.",
-		growTime = 60,
-		yieldAmount = 2,
-		resultId = "carrot",
-		coinReward = 35,
-		image = "rbxassetid://6686038519"
-	},
-
-	corn_seeds = {
-		id = "corn_seeds", 
-		name = "Corn Seeds",
-		type = "seed",
-		rarity = "Common",
-		price = 50,
-		currency = "coins",
-		description = "Corn seeds that yield multiple crops.",
-		growTime = 120,
-		yieldAmount = 4,
-		resultId = "corn",
-		coinReward = 80,
-		image = "rbxassetid://6686045507"
-	},
-
-	strawberry_seeds = {
-		id = "strawberry_seeds",
-		name = "Strawberry Seeds", 
-		type = "seed",
-		rarity = "Uncommon",
-		price = 100,
-		currency = "coins",
-		description = "Sweet strawberry seeds with good yield.",
-		growTime = 180,
-		yieldAmount = 6,
-		resultId = "strawberry",
-		coinReward = 160,
-		image = "rbxassetid://6686051791"
-	},
-
-	golden_seeds = {
-		id = "golden_seeds",
-		name = "Golden Seeds",
-		type = "seed", 
-		rarity = "Rare",
-		price = 25,
-		currency = "gems",
-		description = "Magical golden seeds with amazing yield!",
-		growTime = 300,
-		yieldAmount = 3,
-		resultId = "golden_fruit",
-		coinReward = 600,
-		image = "rbxassetid://6686054839"
-	}
-}
-
--- Crops
-ItemConfig.Crops = {
-	carrot = {
-		id = "carrot",
-		name = "Carrot",
-		feedValue = 1,
-		sellValue = 35,
-		image = "rbxassetid://6686041557"
-	},
-
-	corn = {
-		id = "corn", 
-		name = "Corn",
-		feedValue = 2,
-		sellValue = 80,
-		image = "rbxassetid://6686047557"
-	},
-
-	strawberry = {
-		id = "strawberry",
-		name = "Strawberry",
-		feedValue = 3,
-		sellValue = 160,
-		image = "rbxassetid://6686052839"
-	},
-
-	golden_fruit = {
-		id = "golden_fruit",
-		name = "Golden Fruit",
-		feedValue = 10,
-		sellValue = 600,
-		image = "rbxassetid://6686056891"
-	}
-}
-
--- FIXED: Shop Items with farming plot purchase
+-- UPDATED: Shop Items with proper farm plot purchase system
 ItemConfig.ShopItems = {
-	-- FARMING PLOT - Must purchase first plot
+	-- FARMING PLOT SYSTEM - Players must buy initial plot for 100 coins
 	farm_plot_starter = {
 		id = "farm_plot_starter",
-		name = "Your First Farm Plot",
+		name = "🌾 Your First Farm Plot",
 		type = "farm_plot",
-		price = 500,
+		price = 100, -- 100 coins as requested
 		currency = "coins",
-		description = "Purchase your first farming plot! It will be placed in Starter Meadow.",
+		description = "Purchase your first farming plot for 100 coins! Automatically placed in Starter Meadow with free starter seeds included.",
 		maxLevel = 1,  -- Can only buy once
-		isStarterPlot = true
+		isStarterPlot = true,
+		image = "rbxassetid://6686060000"
 	},
 
 	-- Seeds (direct purchase) - Only available AFTER buying first plot
@@ -209,7 +112,7 @@ ItemConfig.ShopItems = {
 		type = "seed",
 		price = 20,
 		currency = "coins",
-		description = "Basic carrot seeds. Fast growing crop.",
+		description = "Basic carrot seeds. Fast growing crop that yields 2 carrots.",
 		requiresFarmPlot = true,  -- Requires farm plot first
 		growTime = 60,
 		yieldAmount = 2,
@@ -223,7 +126,7 @@ ItemConfig.ShopItems = {
 		type = "seed",
 		price = 50,
 		currency = "coins",
-		description = "Corn seeds that yield multiple crops.",
+		description = "Corn seeds that yield multiple crops. Takes longer to grow.",
 		requiresFarmPlot = true,
 		growTime = 120,
 		yieldAmount = 4,
@@ -237,7 +140,7 @@ ItemConfig.ShopItems = {
 		type = "seed",
 		price = 100,
 		currency = "coins",
-		description = "Sweet strawberry seeds with good yield.",
+		description = "Sweet strawberry seeds with excellent yield.",
 		requiresFarmPlot = true,
 		growTime = 180,
 		yieldAmount = 6,
@@ -251,7 +154,7 @@ ItemConfig.ShopItems = {
 		type = "seed", 
 		price = 25,
 		currency = "gems",
-		description = "Magical golden seeds with amazing yield!",
+		description = "Magical golden seeds with amazing yield and high pig feeding value!",
 		requiresFarmPlot = true,
 		growTime = 300,
 		yieldAmount = 3,
@@ -266,7 +169,7 @@ ItemConfig.ShopItems = {
 		type = "egg",
 		price = 75,
 		currency = "coins",
-		description = "Contains common seeds for farming",
+		description = "Contains 3-8 common seeds for farming. Great value pack!",
 		requiresFarmPlot = true,
 		possibleSeeds = {"carrot_seeds", "corn_seeds"},
 		guaranteedAmount = {min = 3, max = 8},
@@ -279,7 +182,7 @@ ItemConfig.ShopItems = {
 		type = "egg", 
 		price = 40,
 		currency = "gems",
-		description = "Contains rare seeds",
+		description = "Contains rare and valuable seeds with bonus chance.",
 		requiresFarmPlot = true,
 		possibleSeeds = {"strawberry_seeds", "golden_seeds"},
 		guaranteedAmount = {min = 2, max = 5},
@@ -287,14 +190,28 @@ ItemConfig.ShopItems = {
 		image = "rbxassetid://123456790"
 	},
 
-	-- Upgrades
+	-- FARM PLOT UPGRADES - Additional plots placed automatically
+	farm_plot_upgrade = {
+		id = "farm_plot_upgrade",
+		name = "Additional Farm Plot",
+		type = "upgrade",
+		price = 500,  -- Starts at 250, increases with each purchase
+		currency = "coins", 
+		description = "Add another farm plot next to your existing ones. Price increases with each additional plot.",
+		maxLevel = 7,  -- Max 8 total plots (1 starter + 7 additional)
+		effectPerLevel = 1,
+		requiresFarmPlot = true,  -- Must have starter plot first
+		priceMultiplier = 1.3  -- Each additional plot costs 30% more
+	},
+
+	-- MOVEMENT & COLLECTION UPGRADES
 	speed_upgrade = {
 		id = "speed_upgrade",
 		name = "Speed Boost",
 		type = "upgrade",
 		price = 200,
 		currency = "coins",
-		description = "Increases your movement speed (+2 per level)",
+		description = "Increases your movement speed (+2 per level). Great for getting around your farm!",
 		maxLevel = 15,
 		effectPerLevel = 2,
 		baseEffect = 16
@@ -324,19 +241,6 @@ ItemConfig.ShopItems = {
 		baseEffect = 8
 	},
 
-	-- Additional farm plots (after buying starter)
-	farm_plot_upgrade = {
-		id = "farm_plot_upgrade",
-		name = "Additional Farm Plot",
-		type = "upgrade",
-		price = 800,  -- More expensive than starter
-		currency = "coins", 
-		description = "Add another farm plot to grow more crops",
-		maxLevel = 5,  -- Max 6 total plots (1 starter + 5 additional)
-		effectPerLevel = 1,
-		requiresFarmPlot = true  -- Must have starter plot first
-	},
-
 	pet_storage_upgrade = {
 		id = "pet_storage_upgrade",
 		name = "Pet Storage Expansion",
@@ -347,8 +251,84 @@ ItemConfig.ShopItems = {
 		maxLevel = 20,
 		effectPerLevel = 25,
 		baseEffect = 100
+	},
+
+	-- FARMING TOOLS & BOOSTS
+	farming_speed_boost = {
+		id = "farming_speed_boost",
+		name = "Growth Accelerator",
+		type = "upgrade",
+		price = 400,
+		currency = "coins",
+		description = "Reduces crop growth time by 10% per level",
+		maxLevel = 5,
+		effectPerLevel = 0.1,
+		requiresFarmPlot = true
+	},
+
+	auto_harvest = {
+		id = "auto_harvest",
+		name = "Auto-Harvester",
+		type = "upgrade",
+		price = 100,
+		currency = "gems",
+		description = "Automatically harvests ready crops every 60 seconds",
+		maxLevel = 1,
+		requiresFarmPlot = true
 	}
 }
+
+-- UPDATED: Calculate upgrade price with multiplier for farm plots
+function ItemConfig.GetNextUpgradeCost(upgradeId, currentLevel)
+	local upgrade = ItemConfig.ShopItems[upgradeId]
+	if not upgrade or upgrade.type ~= "upgrade" then
+		return 0
+	end
+
+	if currentLevel >= upgrade.maxLevel then
+		return 0
+	end
+
+	local basePrice = upgrade.price
+	local nextLevel = currentLevel + 1
+
+	-- Special pricing for farm plots - gets more expensive
+	if upgradeId == "farm_plot_upgrade" then
+		local multiplier = upgrade.priceMultiplier or 1.3
+		return math.floor(basePrice * (multiplier ^ currentLevel))
+	else
+		-- Standard upgrade pricing
+		local priceMultiplier = 1.5
+		return math.floor(basePrice * (priceMultiplier ^ (nextLevel - 1)))
+	end
+end
+
+-- UPDATED: Check if player has farm plot (moved to ItemConfig for easy access)
+function ItemConfig.PlayerHasFarmPlot(playerData)
+	if not playerData then return false end
+
+	-- Check if they bought the starter plot
+	local purchaseHistory = playerData.purchaseHistory or {}
+	return purchaseHistory.farm_plot_starter == true
+end
+
+-- NEW: Get farm plot position in Starter Meadow
+function ItemConfig.GetFarmPlotPosition(plotNumber)
+	-- Base position in Starter Meadow (dedicated farming area)
+	local basePosition = Vector3.new(-30, 1, 50)  -- Away from spawn and pets
+	local plotSpacing = 10  -- 10 studs between plot centers
+
+	if plotNumber == 1 then
+		return basePosition
+	else
+		-- Place additional plots in a grid pattern
+		local plotsPerRow = 3
+		local row = math.floor((plotNumber - 1) / plotsPerRow)
+		local col = (plotNumber - 1) % plotsPerRow
+
+		return basePosition + Vector3.new(col * plotSpacing, 0, row * plotSpacing)
+	end
+end
 
 -- FIXED: Only Starter Meadow with MUCH slower spawning
 ItemConfig.SpawnAreas = {
@@ -397,28 +377,6 @@ ItemConfig.RarityInfo = {
 	}
 }
 
--- UTILITY FUNCTIONS
-
--- Check if player has farm plot
-function ItemConfig.PlayerHasFarmPlot(playerData)
-	if not playerData then return false end
-
-	-- Check if they bought the starter plot
-	local purchaseHistory = playerData.purchaseHistory or {}
-	return purchaseHistory.farm_plot_starter == true
-end
-
--- Get farm plot position in Starter Meadow
-function ItemConfig.GetFarmPlotPosition(plotNumber)
-	-- Place farm plots in a designated area of Starter Meadow
-	local basePosition = Vector3.new(30, 1, 30)  -- Corner of Starter Meadow
-	local plotSpacing = 12
-
-	local row = math.floor((plotNumber - 1) / 3)  -- 3 plots per row
-	local col = (plotNumber - 1) % 3
-
-	return basePosition + Vector3.new(col * plotSpacing, 0, row * plotSpacing)
-end
 
 -- Get upgrade effect for player
 function ItemConfig.GetUpgradeEffect(upgradeId, level)
@@ -450,24 +408,6 @@ function ItemConfig.GetUpgradePrice(upgradeId, targetLevel)
 	end
 
 	return totalCost
-end
-
--- Get next level upgrade cost
-function ItemConfig.GetNextUpgradeCost(upgradeId, currentLevel)
-	local upgrade = ItemConfig.ShopItems[upgradeId]
-	if not upgrade or upgrade.type ~= "upgrade" then
-		return 0
-	end
-
-	if currentLevel >= upgrade.maxLevel then
-		return 0
-	end
-
-	local basePrice = upgrade.price
-	local priceMultiplier = 1.5
-	local nextLevel = currentLevel + 1
-
-	return math.floor(basePrice * (priceMultiplier ^ (nextLevel - 1)))
 end
 
 -- Egg hatching function

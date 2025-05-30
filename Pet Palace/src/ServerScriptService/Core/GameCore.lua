@@ -417,22 +417,70 @@ function GameCore:ApplyItemEffects(player, item, quantity)
 	local playerData = self:GetPlayerData(player)
 	if not playerData then return false end
 
-	if item.type == "seed" then
-		-- Add seeds to farming inventory
-		if not playerData.farming then
-			playerData.farming = {inventory = {}}
+	if item.type == "farm_plot" then
+		-- Handle farm plot purchase
+		if item.id == "farm_plot_starter" then
+			-- Check if they already have a farm plot
+			if not playerData.purchaseHistory then
+				playerData.purchaseHistory = {}
+			end
+
+			if playerData.purchaseHistory.farm_plot_starter then
+				self:SendNotification(player, "Already Owned", "You already have a farm plot!", "warning")
+				return false
+			end
+
+			-- Deduct coins (100 coins for starter plot)
+			if playerData.coins < 100 then
+				self:SendNotification(player, "Insufficient Coins", "You need 100 coins to purchase your first farm plot!", "error")
+				return false
+			end
+
+			playerData.coins = playerData.coins - 100
+
+			-- Create the farm plot
+			local success = self:CreatePlayerFarmPlot(player, 1)
+			if success then
+				playerData.purchaseHistory.farm_plot_starter = true
+
+				-- Initialize farming data
+				if not playerData.farming then
+					playerData.farming = {
+						plots = 1,
+						inventory = {
+							carrot_seeds = 5, -- Give starter seeds
+							corn_seeds = 3
+						},
+						pig = { feedCount = 0, size = 1.0 }
+					}
+				end
+				playerData.farming.plots = 1
+
+				-- Update leaderstats
+				self:UpdatePlayerLeaderstats(player)
+
+				self:SendNotification(player, "Farm Plot Created!", 
+					"Your first farm plot has been placed in Starter Meadow! You received starter seeds too!", "success")
+
+				return true
+			else
+				-- Refund coins if creation failed
+				playerData.coins = playerData.coins + 100
+				self:SendNotification(player, "Error", "Failed to create farm plot. Coins refunded.", "error")
+				return false
+			end
 		end
-		if not playerData.farming.inventory then
-			playerData.farming.inventory = {}
+
+	elseif item.type == "seed" or item.type == "egg" then
+		-- Check if player has farm plot first
+		if item.requiresFarmPlot and not self:PlayerHasFarmPlot(playerData) then
+			self:SendNotification(player, "Farm Plot Required", 
+				"You need to purchase a farm plot first before buying seeds!", "warning")
+			return false
 		end
 
-		playerData.farming.inventory[item.id] = (playerData.farming.inventory[item.id] or 0) + quantity
-
-	elseif item.type == "egg" then
-		-- Hatch eggs to get seeds
-		for i = 1, quantity do
-			local hatchResults = ItemConfig.HatchEgg(item.id)
-
+		-- Handle seeds normally
+		if item.type == "seed" then
 			if not playerData.farming then
 				playerData.farming = {inventory = {}}
 			end
@@ -440,29 +488,49 @@ function GameCore:ApplyItemEffects(player, item, quantity)
 				playerData.farming.inventory = {}
 			end
 
-			-- Add hatched seeds to inventory
-			for seedId, seedAmount in pairs(hatchResults) do
-				playerData.farming.inventory[seedId] = (playerData.farming.inventory[seedId] or 0) + seedAmount
-			end
+			playerData.farming.inventory[item.id] = (playerData.farming.inventory[item.id] or 0) + quantity
 
-			-- Send notification about what was hatched
-			local hatchedItems = {}
-			for seedId, seedAmount in pairs(hatchResults) do
-				local seedConfig = ItemConfig.Seeds[seedId]
-				local seedName = seedConfig and seedConfig.name or seedId
-				table.insert(hatchedItems, seedAmount .. "x " .. seedName)
-			end
+		elseif item.type == "egg" then
+			-- Hatch eggs to get seeds
+			for i = 1, quantity do
+				local hatchResults = ItemConfig.HatchEgg(item.id)
 
-			if #hatchedItems > 0 then
-				self:SendNotification(player, "Egg Hatched!", 
-					"Received: " .. table.concat(hatchedItems, ", "), "success")
+				if not playerData.farming then
+					playerData.farming = {inventory = {}}
+				end
+				if not playerData.farming.inventory then
+					playerData.farming.inventory = {}
+				end
+
+				for seedId, seedAmount in pairs(hatchResults) do
+					playerData.farming.inventory[seedId] = (playerData.farming.inventory[seedId] or 0) + seedAmount
+				end
+
+				local hatchedItems = {}
+				for seedId, seedAmount in pairs(hatchResults) do
+					local seedConfig = ItemConfig.Seeds[seedId]
+					local seedName = seedConfig and seedConfig.name or seedId
+					table.insert(hatchedItems, seedAmount .. "x " .. seedName)
+				end
+
+				if #hatchedItems > 0 then
+					self:SendNotification(player, "Seed Pack Opened!", 
+						"Received: " .. table.concat(hatchedItems, ", "), "success")
+				end
 			end
 		end
 
 	elseif item.type == "upgrade" then
-		-- Handle upgrades
+		-- Handle upgrades normally
 		if not playerData.upgrades then
 			playerData.upgrades = {}
+		end
+
+		-- Check farm plot requirement for additional plots
+		if item.id == "farm_plot_upgrade" and not self:PlayerHasFarmPlot(playerData) then
+			self:SendNotification(player, "Farm Plot Required", 
+				"You need to purchase your first farm plot before buying additional ones!", "warning")
+			return false
 		end
 
 		local currentLevel = playerData.upgrades[item.id] or 0
@@ -473,11 +541,25 @@ function GameCore:ApplyItemEffects(player, item, quantity)
 			return false
 		end
 
-		-- Increase upgrade level
 		playerData.upgrades[item.id] = currentLevel + quantity
 
-		-- Apply upgrade effects to player immediately
-		self:ApplyUpgradeEffects(player, item.id, playerData.upgrades[item.id])
+		-- Handle farm plot upgrades (additional plots)
+		if item.id == "farm_plot_upgrade" then
+			local newPlotNumber = (playerData.farming.plots or 1) + 1
+			local success = self:CreatePlayerFarmPlot(player, newPlotNumber)
+			if success then
+				playerData.farming.plots = newPlotNumber
+				self:SendNotification(player, "New Farm Plot!", 
+					"Additional farm plot created! You now have " .. newPlotNumber .. " plots.", "success")
+			else
+				-- Refund the upgrade if creation failed
+				playerData.upgrades[item.id] = currentLevel
+				return false
+			end
+		else
+			-- Apply other upgrade effects
+			self:ApplyUpgradeEffects(player, item.id, playerData.upgrades[item.id])
+		end
 
 	else
 		warn("GameCore: Unknown item type: " .. tostring(item.type))
@@ -486,6 +568,189 @@ function GameCore:ApplyItemEffects(player, item, quantity)
 
 	return true
 end
+
+-- NEW: Check if player has farm plot
+function GameCore:PlayerHasFarmPlot(playerData)
+	if not playerData then return false end
+
+	-- Check if they bought the starter plot
+	local purchaseHistory = playerData.purchaseHistory or {}
+	return purchaseHistory.farm_plot_starter == true
+end
+
+-- UPDATED: Create farm plot for player with automatic positioning
+function GameCore:CreatePlayerFarmPlot(player, plotNumber)
+	-- Calculate plot position in Starter Meadow
+	local plotPosition = self:GetFarmPlotPosition(player, plotNumber)
+
+	-- Create the plot model
+	local plotModel = Instance.new("Model")
+	plotModel.Name = player.Name .. "_FarmPlot_" .. plotNumber
+
+	-- Create soil base
+	local soil = Instance.new("Part")
+	soil.Name = "Soil"
+	soil.Size = Vector3.new(8, 1, 8)
+	soil.Position = plotPosition
+	soil.Anchored = true
+	soil.CanCollide = true
+	soil.Material = Enum.Material.Ground
+	soil.Color = Color3.fromRGB(101, 67, 33)
+	soil.Parent = plotModel
+
+	-- Add plot border
+	local border = Instance.new("Part")
+	border.Name = "Border"
+	border.Size = Vector3.new(8.5, 0.2, 8.5)
+	border.Position = soil.Position + Vector3.new(0, 0.6, 0)
+	border.Anchored = true
+	border.CanCollide = false
+	border.Material = Enum.Material.Wood
+	border.Color = Color3.fromRGB(160, 100, 50)
+	border.Parent = plotModel
+
+	-- Add corner decorations
+	local cornerCorner = Instance.new("UICorner")
+	cornerCorner.CornerRadius = UDim.new(0.1, 0)
+
+	-- Add plot sign
+	local sign = Instance.new("Part")
+	sign.Name = "Sign"
+	sign.Size = Vector3.new(2, 3, 0.2)
+	sign.Position = soil.Position + Vector3.new(4.5, 1.5, 4.5)
+	sign.Anchored = true
+	sign.CanCollide = false
+	sign.Material = Enum.Material.Wood
+	sign.Color = Color3.fromRGB(139, 69, 19)
+	sign.Parent = plotModel
+
+	-- Add sign text
+	local signGui = Instance.new("SurfaceGui")
+	signGui.Face = Enum.NormalId.Front
+	signGui.Parent = sign
+
+	local signLabel = Instance.new("TextLabel")
+	signLabel.Size = UDim2.new(1, 0, 1, 0)
+	signLabel.BackgroundTransparency = 1
+	signLabel.Text = player.Name .. "'s\nFarm Plot " .. plotNumber
+	signLabel.TextColor3 = Color3.new(1, 1, 1)
+	signLabel.TextScaled = true
+	signLabel.Font = Enum.Font.GothamBold
+	signLabel.TextStrokeTransparency = 0
+	signLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	signLabel.Parent = signGui
+
+	-- Add farming tools (decorative)
+	local hoe = Instance.new("Part")
+	hoe.Name = "Hoe"
+	hoe.Size = Vector3.new(0.2, 2, 0.2)
+	hoe.Position = soil.Position + Vector3.new(-4.2, 1, 4.2)
+	hoe.Anchored = true
+	hoe.CanCollide = false
+	hoe.Material = Enum.Material.Wood
+	hoe.Color = Color3.fromRGB(101, 67, 33)
+	hoe.Parent = plotModel
+
+	-- Add watering can (decorative)
+	local wateringCan = Instance.new("Part")
+	wateringCan.Name = "WateringCan"
+	wateringCan.Size = Vector3.new(1, 1, 0.5)
+	wateringCan.Position = soil.Position + Vector3.new(-4, 0.5, -4)
+	wateringCan.Anchored = true
+	wateringCan.CanCollide = false
+	wateringCan.Material = Enum.Material.Metal
+	wateringCan.Color = Color3.fromRGB(150, 150, 150)
+	wateringCan.Parent = plotModel
+
+	plotModel.PrimaryPart = soil
+
+	-- Set plot attributes
+	plotModel:SetAttribute("PlotID", plotNumber)
+	plotModel:SetAttribute("Owner", player.Name)
+	plotModel:SetAttribute("IsPlanted", false)
+	plotModel:SetAttribute("PlantType", "")
+	plotModel:SetAttribute("GrowthStage", 0)
+	plotModel:SetAttribute("PlantTime", 0)
+	plotModel:SetAttribute("TimeToGrow", 0)
+
+	-- Place in Starter Meadow
+	local starterMeadow = workspace:FindFirstChild("Areas"):FindFirstChild("Starter Meadow")
+	if starterMeadow then
+		-- Create Farm area if it doesn't exist
+		local farmArea = starterMeadow:FindFirstChild("Farm")
+		if not farmArea then
+			farmArea = Instance.new("Folder")
+			farmArea.Name = "Farm"
+			farmArea.Parent = starterMeadow
+		end
+
+		-- Create player's farm folder
+		local playerFarm = farmArea:FindFirstChild(player.Name .. "_Farm")
+		if not playerFarm then
+			playerFarm = Instance.new("Folder")
+			playerFarm.Name = player.Name .. "_Farm"
+			playerFarm.Parent = farmArea
+		end
+
+		plotModel.Parent = playerFarm
+	else
+		plotModel.Parent = workspace
+	end
+
+	print("GameCore: Created farm plot " .. plotNumber .. " for " .. player.Name .. " at " .. tostring(plotPosition))
+	return true
+end
+
+-- NEW: Calculate farm plot position with smart placement
+function GameCore:GetFarmPlotPosition(player, plotNumber)
+	-- Base position in Starter Meadow (away from spawn and pet areas)
+	local baseFarmPosition = Vector3.new(-30, 1, 50) -- Corner of Starter Meadow
+
+	-- Plot spacing
+	local plotSize = 8
+	local plotSpacing = 2
+	local totalPlotSize = plotSize + plotSpacing
+
+	if plotNumber == 1 then
+		-- First plot at base position
+		return baseFarmPosition
+	else
+		-- Additional plots placed in a grid pattern next to existing plots
+		local plotsPerRow = 3 -- 3 plots per row before starting new row
+
+		local row = math.floor((plotNumber - 1) / plotsPerRow)
+		local col = (plotNumber - 1) % plotsPerRow
+
+		local xOffset = col * totalPlotSize
+		local zOffset = row * totalPlotSize
+
+		return baseFarmPosition + Vector3.new(xOffset, 0, zOffset)
+	end
+end
+
+-- NEW: Get all farm plots for a player
+function GameCore:GetPlayerFarmPlots(player)
+	local plots = {}
+	local starterMeadow = workspace:FindFirstChild("Areas"):FindFirstChild("Starter Meadow")
+
+	if starterMeadow then
+		local farmArea = starterMeadow:FindFirstChild("Farm")
+		if farmArea then
+			local playerFarm = farmArea:FindFirstChild(player.Name .. "_Farm")
+			if playerFarm then
+				for _, plot in pairs(playerFarm:GetChildren()) do
+					if plot:IsA("Model") and plot.Name:find("FarmPlot") then
+						table.insert(plots, plot)
+					end
+				end
+			end
+		end
+	end
+
+	return plots
+end
+
+
 
 -- Apply upgrade effects
 function GameCore:ApplyUpgradeEffects(player, upgradeId, level)
@@ -1046,15 +1311,15 @@ function GameCore:InitializeFarmingSystem()
 
 		local ground = Instance.new("Part")
 		ground.Name = "FarmGround"
-		ground.Size = Vector3.new(80, 2, 60)
-		ground.Position = Vector3.new(-50, 1, -50)
+		ground.Size = Vector3.new(33.425, 1.65, 32.575)
+		ground.Position = Vector3.new(-362.98, -2.142, 76.55)
 		ground.Anchored = true
 		ground.CanCollide = true
-		ground.Material = Enum.Material.Grass
-		ground.Color = Color3.fromRGB(86, 125, 70)
+		ground.Material = Enum.Material.Ground
+		ground.Color = Color3.fromRGB(120, 60, 0)
 		ground.Parent = farmingArea
 
-		print("GameCore: Created basic farming area at (-50, 1, -50)")
+		print("GameCore: Created basic farming area at (-362.98, -2.142, 76.55)")
 	end
 
 	print("GameCore: Farming system initialized")
@@ -1242,37 +1507,226 @@ end
 
 -- FIXED: Update Loops - Reduced frequency for memory
 function GameCore:StartUpdateLoops()
-	-- Pet spawning loop - ONLY for Starter Meadow
+	print("GameCore: Starting update loops with performance optimizations...")
+
+	-- FIXED: Pet spawning loop - ONLY for Starter Meadow with reduced frequency
 	spawn(function()
 		while true do
-			wait(20) -- Increased spawn interval to reduce memory usage
+			wait(25) -- Increased from 20 to 25 seconds to reduce memory usage
 
+			-- Only spawn in Starter Meadow
 			local areaData = self.Systems.Pets.SpawnAreas["Starter Meadow"]
-			if areaData and os.time() - areaData.lastSpawn >= areaData.config.spawnInterval then
-				self:SpawnWildPet("Starter Meadow")
-				areaData.lastSpawn = os.time()
+			if areaData then
+				local currentPetCount = #areaData.container:GetChildren()
+				local maxPets = areaData.config.maxPets
+				local timeSinceLastSpawn = os.time() - (areaData.lastSpawn or 0)
+				local minSpawnInterval = areaData.config.spawnInterval or 15
+
+				-- Only spawn if we need more pets and enough time has passed
+				if currentPetCount < maxPets and timeSinceLastSpawn >= minSpawnInterval then
+					local success, newPet = pcall(function()
+						return self:SpawnWildPet("Starter Meadow")
+					end)
+
+					if success and newPet then
+						areaData.lastSpawn = os.time()
+						print("GameCore: Spawned pet in Starter Meadow (" .. (currentPetCount + 1) .. "/" .. maxPets .. ")")
+					else
+						warn("GameCore: Failed to spawn pet in Starter Meadow: " .. tostring(newPet))
+					end
+				end
 			end
 		end
 	end)
 
-	-- Auto-save loop
+	-- Auto-save loop with player validation
 	spawn(function()
 		while true do
 			wait(300) -- Save every 5 minutes
+
+			local playerCount = 0
 			for _, player in ipairs(Players:GetPlayers()) do
-				self:SavePlayerData(player)
+				if player and player.Parent and self.PlayerData[player.UserId] then
+					pcall(function()
+						self:SavePlayerData(player)
+					end)
+					playerCount = playerCount + 1
+				end
 			end
-			print("GameCore: Auto-saved all player data")
+
+			if playerCount > 0 then
+				print("GameCore: Auto-saved data for " .. playerCount .. " players")
+			end
 		end
 	end)
 
-	-- FIXED: Enhanced memory cleanup loop
+	-- FIXED: Enhanced memory cleanup loop with better performance monitoring
 	spawn(function()
 		while true do
 			wait(60) -- Every minute
-			self:CleanupMemory()
+
+			local success, errorMsg = pcall(function()
+				self:CleanupMemory()
+			end)
+
+			if not success then
+				warn("GameCore: Memory cleanup failed: " .. tostring(errorMsg))
+			end
 		end
 	end)
+
+	-- FIXED: Performance monitoring loop
+	spawn(function()
+		while true do
+			wait(120) -- Every 2 minutes
+
+			local memoryUsage = game:GetService("Stats"):GetTotalMemoryUsageMb()
+			local playerCount = #Players:GetPlayers()
+
+			-- Count active pets across all areas
+			local totalPets = 0
+			for areaName, areaData in pairs(self.Systems.Pets.SpawnAreas) do
+				if areaData and areaData.container then
+					totalPets = totalPets + #areaData.container:GetChildren()
+				end
+			end
+
+			-- Count active behavior connections
+			local totalConnections = 0
+			for behaviorId, connection in pairs(self.Systems.Pets.BehaviorConnections) do
+				if connection and connection.Connected then
+					totalConnections = totalConnections + 1
+				end
+			end
+
+			print(string.format("GameCore: Performance Monitor - Memory: %.1fMB, Players: %d, Pets: %d, Connections: %d", 
+				memoryUsage, playerCount, totalPets, totalConnections))
+
+			-- Warning thresholds
+			if memoryUsage > 800 then
+				warn("GameCore: High memory usage detected: " .. math.floor(memoryUsage) .. "MB")
+
+				-- Trigger aggressive cleanup
+				if memoryUsage > 1000 then
+					warn("GameCore: Critical memory usage - triggering aggressive cleanup")
+					self:CleanupMemory()
+				end
+			end
+
+			if totalPets > 15 then
+				warn("GameCore: Too many pets detected: " .. totalPets .. " - consider cleanup")
+			end
+
+			if totalConnections > 20 then
+				warn("GameCore: Too many connections detected: " .. totalConnections .. " - cleaning up")
+				self:CleanupMemory()
+			end
+		end
+	end)
+	function GameCore:UpdatePlayerFarmGrowth(playerId)
+		local playerData = self.PlayerData[playerId]
+		if not playerData or not playerData.farming then return end
+
+		-- This would integrate with your farming system
+		-- For now, it's a placeholder for future farm growth mechanics
+		print("GameCore: Updated farm growth for player " .. playerId)
+	end
+
+	-- FIXED: Farming system growth loop (if farming is enabled)
+	spawn(function()
+		while true do
+			wait(30) -- Check every 30 seconds
+
+			-- Update crop growth for all players
+			for playerId, playerData in pairs(self.PlayerData) do
+				if playerData.farming and playerData.farming.plots then
+					pcall(function()
+						self:UpdatePlayerFarmGrowth(playerId)
+					end)
+				end
+			end
+		end
+	end)
+
+	-- FIXED: Connection cleanup loop
+	spawn(function()
+		while true do
+			wait(180) -- Every 3 minutes
+
+			local cleanedConnections = 0
+
+			-- Clean up broken behavior connections
+			for behaviorId, connection in pairs(self.Systems.Pets.BehaviorConnections) do
+				if not connection or not connection.Connected then
+					self.Systems.Pets.BehaviorConnections[behaviorId] = nil
+					cleanedConnections = cleanedConnections + 1
+				end
+			end
+
+			if cleanedConnections > 0 then
+				print("GameCore: Cleaned up " .. cleanedConnections .. " broken connections")
+			end
+		end
+	end)
+
+	-- FIXED: Player data validation loop
+	function GameCore:ValidatePlayerData(player)
+		local playerData = self.PlayerData[player.UserId]
+		if not playerData then return end
+
+		-- Ensure required fields exist
+		if not playerData.coins then playerData.coins = 0 end
+		if not playerData.gems then playerData.gems = 0 end
+		if not playerData.pets then playerData.pets = {owned = {}, equipped = {}} end
+		if not playerData.upgrades then playerData.upgrades = {} end
+		if not playerData.stats then 
+			playerData.stats = {
+				totalPetsCollected = 0,
+				coinsEarned = 0,
+				itemsPurchased = 0,
+				cropsHarvested = 0,
+				petsSold = 0,
+				legendaryPetsFound = 0
+			}
+		end
+
+		-- Validate pets array
+		if playerData.pets.owned then
+			for i = #playerData.pets.owned, 1, -1 do
+				local pet = playerData.pets.owned[i]
+				if not pet or not pet.id or not pet.type then
+					table.remove(playerData.pets.owned, i)
+				end
+			end
+		end
+
+		-- Validate numeric values
+		if playerData.coins < 0 then playerData.coins = 0 end
+		if playerData.gems < 0 then playerData.gems = 0 end
+	end
+	spawn(function()
+		while true do
+			wait(600) -- Every 10 minutes
+
+			-- Validate player data integrity
+			for playerId, playerData in pairs(self.PlayerData) do
+				local player = Players:GetPlayerByUserId(playerId)
+
+				-- Remove data for players who left
+				if not player then
+					self.PlayerData[playerId] = nil
+					print("GameCore: Cleaned up data for disconnected player: " .. playerId)
+				else
+					-- Validate data structure
+					pcall(function()
+						self:ValidatePlayerData(player)
+					end)
+				end
+			end
+		end
+	end)
+
+	print("GameCore: All update loops started successfully")
 end
 
 -- FIXED: Enhanced memory cleanup
@@ -1470,13 +1924,368 @@ function GameCore:CreateBasicPetModels(specificModels)
 end
 
 -- Stub functions for completeness
-function GameCore:PlantSeed(player, plotNumber, seedType)
-	print("GameCore: PlantSeed called - implement farming system")
+--[[
+    Complete Seed Planting System
+    Add these functions to your GameCore.lua for the server-side planting logic
+]]
+
+-- SERVER-SIDE: Enhanced planting system for GameCore.lua
+
+-- Plant a seed in a specific plot
+function GameCore:PlantSeed(player, plotModel, seedType)
+    local playerData = self:GetPlayerData(player)
+    if not playerData then 
+        self:SendNotification(player, "Error", "Player data not found", "error")
+        return false 
+    end
+
+    -- Validate plot ownership
+    local plotOwner = plotModel:GetAttribute("Owner")
+    if plotOwner ~= player.Name then
+        self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
+        return false
+    end
+
+    -- Check if plot is already planted
+    if plotModel:GetAttribute("IsPlanted") then
+        local plantType = plotModel:GetAttribute("PlantType") or "something"
+        local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+        local maxStage = 4
+        local progress = math.floor((growthStage / maxStage) * 100)
+        
+        self:SendNotification(player, "Plot Occupied", 
+            "This plot already has " .. plantType .. " growing (" .. progress .. "% complete)", "warning")
+        return false
+    end
+
+    -- Check if player has the seed
+    local farmingData = playerData.farming or {}
+    local inventory = farmingData.inventory or {}
+    local seedCount = inventory[seedType] or 0
+
+    if seedCount <= 0 then
+        local seedConfig = ItemConfig.Seeds[seedType]
+        local seedName = seedConfig and seedConfig.name or seedType
+        self:SendNotification(player, "No Seeds", 
+            "You don't have any " .. seedName .. "!", "error")
+        return false
+    end
+
+    -- Get seed configuration
+    local seedConfig = ItemConfig.Seeds[seedType]
+    if not seedConfig then
+        self:SendNotification(player, "Invalid Seed", "Unknown seed type: " .. seedType, "error")
+        return false
+    end
+
+    -- Consume the seed
+    inventory[seedType] = seedCount - 1
+
+    -- Plant the seed
+    plotModel:SetAttribute("IsPlanted", true)
+    plotModel:SetAttribute("PlantType", seedType)
+    plotModel:SetAttribute("GrowthStage", 1)
+    plotModel:SetAttribute("PlantTime", os.time())
+    plotModel:SetAttribute("TimeToGrow", seedConfig.growTime or 60)
+    plotModel:SetAttribute("YieldAmount", seedConfig.yieldAmount or 1)
+    plotModel:SetAttribute("ResultCrop", seedConfig.resultId or "unknown")
+
+    -- Create initial plant model
+    self:CreatePlantModel(plotModel, seedType, 1)
+
+    -- Start growth timer
+    self:StartPlantGrowth(plotModel, seedConfig.growTime or 60)
+
+    -- Update player data
+    playerData.farming.inventory = inventory
+    self:SavePlayerData(player)
+
+    -- Send success notification
+    self:SendNotification(player, "Seed Planted!", 
+        "Planted " .. (seedConfig.name or seedType) .. "! It will be ready in " .. 
+        math.floor((seedConfig.growTime or 60) / 60) .. " minutes.", "success")
+
+    -- Update client
+    if self.RemoteEvents.PlayerDataUpdated then
+        self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+    end
+
+    print("GameCore: " .. player.Name .. " planted " .. seedType .. " in plot " .. (plotModel:GetAttribute("PlotID") or "unknown"))
+    return true
 end
 
-function GameCore:HarvestCrop(player, plotNumber)
-	print("GameCore: HarvestCrop called - implement farming system")
+-- Create visual plant model based on growth stage
+function GameCore:CreatePlantModel(plotModel, seedType, growthStage)
+    -- Remove existing plant
+    local existingPlant = plotModel:FindFirstChild("PlantModel")
+    if existingPlant then
+        existingPlant:Destroy()
+    end
+
+    -- Create new plant model
+    local plantModel = Instance.new("Model")
+    plantModel.Name = "PlantModel"
+    plantModel.Parent = plotModel
+
+    -- Get plot center position
+    local plotCenter = plotModel.PrimaryPart.Position + Vector3.new(0, 0.5, 0)
+
+    -- Create plant based on seed type and growth stage
+    local seedConfig = ItemConfig.Seeds[seedType]
+    local cropConfig = ItemConfig.Crops[seedConfig.resultId]
+
+    -- Create stem/base
+    local stem = Instance.new("Part")
+    stem.Name = "Stem"
+    stem.Size = Vector3.new(0.3, 0.5 * growthStage, 0.3)
+    stem.Position = plotCenter + Vector3.new(0, stem.Size.Y/2, 0)
+    stem.Anchored = true
+    stem.CanCollide = false
+    stem.Material = Enum.Material.Grass
+    stem.Color = Color3.fromRGB(58, 125, 21)
+    stem.Parent = plantModel
+
+    -- Add leaves based on growth stage
+    if growthStage >= 2 then
+        for i = 1, math.min(growthStage - 1, 3) do
+            local leaf = Instance.new("Part")
+            leaf.Name = "Leaf_" .. i
+            leaf.Size = Vector3.new(0.8, 0.1, 0.4)
+            leaf.Position = stem.Position + Vector3.new(
+                math.cos(i * math.pi / 2) * 0.5,
+                0.2 * i,
+                math.sin(i * math.pi / 2) * 0.5
+            )
+            leaf.Anchored = true
+            leaf.CanCollide = false
+            leaf.Material = Enum.Material.Grass
+            leaf.Color = Color3.fromRGB(86, 171, 47)
+            leaf.Parent = plantModel
+        end
+    end
+
+    -- Create fruit/crop when fully grown (stage 4)
+    if growthStage >= 4 then
+        local crop = Instance.new("Part")
+        crop.Name = "Crop"
+        crop.Position = stem.Position + Vector3.new(0, stem.Size.Y/2 + 0.3, 0)
+        crop.Anchored = true
+        crop.CanCollide = false
+
+        -- Set crop appearance based on type
+        if seedType == "carrot_seeds" then
+            crop.Color = Color3.fromRGB(255, 165, 0) -- Orange
+            crop.Shape = Enum.PartType.Cylinder
+            crop.Size = Vector3.new(0.4, 1, 0.4)
+            crop.Orientation = Vector3.new(0, 0, 90)
+        elseif seedType == "corn_seeds" then
+            crop.Color = Color3.fromRGB(255, 255, 0) -- Yellow
+            crop.Shape = Enum.PartType.Cylinder
+            crop.Size = Vector3.new(0.5, 1.2, 0.5)
+        elseif seedType == "strawberry_seeds" then
+            crop.Color = Color3.fromRGB(255, 0, 100) -- Red-pink
+            crop.Shape = Enum.PartType.Ball
+            crop.Size = Vector3.new(0.6, 0.6, 0.6)
+        elseif seedType == "golden_seeds" then
+            crop.Color = Color3.fromRGB(255, 215, 0) -- Gold
+            crop.Material = Enum.Material.Neon
+            crop.Shape = Enum.PartType.Ball
+            crop.Size = Vector3.new(0.8, 0.8, 0.8)
+
+            -- Add golden glow effect
+            local light = Instance.new("PointLight")
+            light.Color = Color3.fromRGB(255, 215, 0)
+            light.Range = 10
+            light.Brightness = 1
+            light.Parent = crop
+        end
+
+        crop.Parent = plantModel
+
+        -- Add harvest indicator
+        local harvestGui = Instance.new("BillboardGui")
+        harvestGui.Size = UDim2.new(0, 100, 0, 50)
+        harvestGui.StudsOffset = Vector3.new(0, 2, 0)
+        harvestGui.Parent = crop
+
+        local harvestLabel = Instance.new("TextLabel")
+        harvestLabel.Size = UDim2.new(1, 0, 1, 0)
+        harvestLabel.BackgroundTransparency = 1
+        harvestLabel.Text = "🌾 Ready!"
+        harvestLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+        harvestLabel.TextScaled = true
+        harvestLabel.Font = Enum.Font.GothamBold
+        harvestLabel.TextStrokeTransparency = 0
+        harvestLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+        harvestLabel.Parent = harvestGui
+
+        -- Pulsing effect
+        local tween = game:GetService("TweenService"):Create(harvestLabel,
+            TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+            {TextTransparency = 0.3}
+        )
+        tween:Play()
+    end
+
+    -- Set primary part
+    plantModel.PrimaryPart = stem
 end
+
+-- Start plant growth process
+function GameCore:StartPlantGrowth(plotModel, totalGrowTime)
+    local plotId = plotModel:GetAttribute("PlotID")
+    local seedType = plotModel:GetAttribute("PlantType")
+    local stageTime = totalGrowTime / 4 -- 4 growth stages
+
+    spawn(function()
+        for stage = 2, 4 do
+            wait(stageTime)
+
+            -- Check if plot still exists and has the same crop
+            if plotModel and plotModel.Parent and 
+               plotModel:GetAttribute("IsPlanted") and 
+               plotModel:GetAttribute("PlantType") == seedType then
+
+                plotModel:SetAttribute("GrowthStage", stage)
+                self:CreatePlantModel(plotModel, seedType, stage)
+
+                print("GameCore: Plot " .. (plotId or "unknown") .. " " .. seedType .. " reached stage " .. stage)
+            else
+                print("GameCore: Growth cancelled for plot " .. (plotId or "unknown"))
+                break
+            end
+        end
+    end)
+end
+
+-- Harvest a fully grown crop
+function GameCore:HarvestCrop(player, plotModel)
+    local playerData = self:GetPlayerData(player)
+    if not playerData then return false end
+
+    -- Validate plot ownership
+    local plotOwner = plotModel:GetAttribute("Owner")
+    if plotOwner ~= player.Name then
+        self:SendNotification(player, "Not Your Plot", "You can only harvest your own crops!", "error")
+        return false
+    end
+
+    -- Check if plot has a crop
+    if not plotModel:GetAttribute("IsPlanted") then
+        self:SendNotification(player, "Empty Plot", "This plot doesn't have any crops to harvest!", "warning")
+        return false
+    end
+
+    -- Check if crop is ready
+    local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+    if growthStage < 4 then
+        local progress = math.floor((growthStage / 4) * 100)
+        self:SendNotification(player, "Not Ready", "Crop is only " .. progress .. "% grown. Wait a bit longer!", "warning")
+        return false
+    end
+
+    -- Get crop info
+    local seedType = plotModel:GetAttribute("PlantType")
+    local yieldAmount = plotModel:GetAttribute("YieldAmount") or 1
+    local resultCrop = plotModel:GetAttribute("ResultCrop")
+
+    -- Get configurations
+    local seedConfig = ItemConfig.Seeds[seedType]
+    local cropConfig = ItemConfig.Crops[resultCrop]
+
+    if not seedConfig or not cropConfig then
+        self:SendNotification(player, "Error", "Invalid crop configuration", "error")
+        return false
+    end
+
+    -- Add crops to player inventory
+    local farmingData = playerData.farming or {inventory = {}}
+    if not farmingData.inventory then
+        farmingData.inventory = {}
+    end
+
+    farmingData.inventory[resultCrop] = (farmingData.inventory[resultCrop] or 0) + yieldAmount
+
+    -- Calculate coin reward
+    local coinReward = cropConfig.sellValue and (cropConfig.sellValue * yieldAmount) or 0
+    if coinReward > 0 then
+        playerData.coins = playerData.coins + coinReward
+    end
+
+    -- Update stats
+    playerData.stats.cropsHarvested = (playerData.stats.cropsHarvested or 0) + yieldAmount
+    if coinReward > 0 then
+        playerData.stats.coinsEarned = playerData.stats.coinsEarned + coinReward
+    end
+
+    -- Clear the plot
+    plotModel:SetAttribute("IsPlanted", false)
+    plotModel:SetAttribute("PlantType", "")
+    plotModel:SetAttribute("GrowthStage", 0)
+    plotModel:SetAttribute("PlantTime", 0)
+    plotModel:SetAttribute("TimeToGrow", 0)
+    plotModel:SetAttribute("YieldAmount", 0)
+    plotModel:SetAttribute("ResultCrop", "")
+
+    -- Remove plant model
+    local plantModel = plotModel:FindFirstChild("PlantModel")
+    if plantModel then
+        plantModel:Destroy()
+    end
+
+    -- Save data
+    self:SavePlayerData(player)
+
+    -- Update leaderstats and client
+    self:UpdatePlayerLeaderstats(player)
+    if self.RemoteEvents.PlayerDataUpdated then
+        self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+    end
+
+    -- Send success notification
+    local message = "Harvested " .. yieldAmount .. "x " .. (cropConfig.name or resultCrop) .. "!"
+    if coinReward > 0 then
+        message = message .. " (+" .. coinReward .. " coins)"
+    end
+    self:SendNotification(player, "Harvest Complete!", message, "success")
+
+    print("GameCore: " .. player.Name .. " harvested " .. yieldAmount .. "x " .. resultCrop .. " from plot")
+    return true
+end
+
+-- Setup remote events for planting system
+function GameCore:SetupPlantingRemoteEvents()
+    -- Plant seed event
+    if not self.RemoteEvents.PlantSeed then
+        local plantSeedEvent = Instance.new("RemoteEvent")
+        plantSeedEvent.Name = "PlantSeed"
+        plantSeedEvent.Parent = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+        self.RemoteEvents.PlantSeed = plantSeedEvent
+    end
+
+    -- Harvest crop event  
+    if not self.RemoteEvents.HarvestCrop then
+        local harvestCropEvent = Instance.new("RemoteEvent")
+        harvestCropEvent.Name = "HarvestCrop"
+        harvestCropEvent.Parent = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+        self.RemoteEvents.HarvestCrop = harvestCropEvent
+    end
+
+    -- Connect events
+    self.RemoteEvents.PlantSeed.OnServerEvent:Connect(function(player, plotModel, seedType)
+        self:PlantSeed(player, plotModel, seedType)
+    end)
+
+    self.RemoteEvents.HarvestCrop.OnServerEvent:Connect(function(player, plotModel)
+        self:HarvestCrop(player, plotModel)
+    end)
+
+    print("GameCore: Planting remote events setup complete")
+end
+
+-- Call this in your GameCore:Initialize() function
+-- Add this line to your GameCore:Initialize():
+-- self:SetupPlantingRemoteEvents()
 
 function GameCore:FeedPig(player, cropId)
 	print("GameCore: FeedPig called - implement farming system")
