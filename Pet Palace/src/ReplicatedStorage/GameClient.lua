@@ -19,7 +19,23 @@ local ItemConfig = require(ServerScriptService:WaitForChild("Config"):WaitForChi
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local ServerScriptService = game:GetService("ServerScriptService")
+local ItemConfig = nil
 
+-- Safe ItemConfig loader
+local function loadItemConfig()
+	if not ItemConfig then
+		local success, result = pcall(function()
+			return require(ServerScriptService:WaitForChild("Config"):WaitForChild("ItemConfig"))
+		end)
+		if success then
+			ItemConfig = result
+		else
+			warn("GameClient: Could not load ItemConfig: " .. tostring(result))
+		end
+	end
+	return ItemConfig
+end
 -- Player and Game State
 local LocalPlayer = Players.LocalPlayer
 GameClient.PlayerData = {}
@@ -960,19 +976,36 @@ function GameClient:ToggleSellingMode()
 	self:UpdateSellingUI()
 end
 
+-- FIXED: Calculate correct pet sell values
 function GameClient:CalculatePetSellValue(petData)
-	if not petData then return 0 end
+	-- Add validation
+	if not petData or type(petData) ~= "table" then
+		return 25 -- Default common pet value
+	end
 
-	-- FIXED: Use correct sell values - Common pets = 25 coins
+	-- Load ItemConfig safely
+	local config = loadItemConfig()
+	if config and config.Pets and petData.type then
+		local petConfig = config.Pets[petData.type]
+		if petConfig and petConfig.sellValue then
+			local baseValue = petConfig.sellValue
+			local level = tonumber(petData.level) or 1
+			local levelMultiplier = 1 + ((level - 1) * 0.1)
+			return math.floor(baseValue * levelMultiplier)
+		end
+	end
+
+	-- Fallback to hardcoded values
 	local baseValues = {
-		Common = 25,     -- FIXED: Reduced from 75 to 25
+		Common = 25,
 		Uncommon = 75,
 		Rare = 150,
 		Epic = 300,
 		Legendary = 750
 	}
 
-	local baseValue = baseValues[petData.rarity] or baseValues.Common
+	local rarity = petData.rarity or "Common"
+	local baseValue = baseValues[rarity] or baseValues.Common
 	local level = tonumber(petData.level) or 1
 	local levelMultiplier = 1 + ((level - 1) * 0.1)
 
@@ -1861,13 +1894,15 @@ function GameClient:RefreshFarmMenu()
 		end
 	end
 
-	-- Create farm info section
-	local farmInfo = Instance.new("Frame")
-	farmInfo.Name = "FarmInfo"
-	farmInfo.Size = UDim2.new(1, 0, 0.3, 0)
-	farmInfo.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-	farmInfo.BorderSizePixel = 0
-	farmInfo.Parent = contentArea
+	-- Safe creation with error handling
+	local success, errorMsg = pcall(function()
+		-- Create farm info section
+		local farmInfo = Instance.new("Frame")
+		farmInfo.Name = "FarmInfo"
+		farmInfo.Size = UDim2.new(1, 0, 0.3, 0)
+		farmInfo.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+		farmInfo.BorderSizePixel = 0
+		farmInfo.Parent = contentArea
 
 	local infoCorner = Instance.new("UICorner")
 	infoCorner.CornerRadius = UDim.new(0.02, 0)
@@ -1925,8 +1960,24 @@ function GameClient:RefreshFarmMenu()
 	statusText.TextWrapped = true
 	statusText.Font = Enum.Font.SourceSans
 	statusText.Parent = statusSection
-end
+	end)
 
+	if not success then
+		warn("GameClient: Error creating farm menu: " .. tostring(errorMsg))
+
+		-- Create fallback error display
+		local errorLabel = Instance.new("TextLabel")
+		errorLabel.Size = UDim2.new(0.8, 0, 0.2, 0)
+		errorLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
+		errorLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+		errorLabel.BackgroundTransparency = 1
+		errorLabel.Text = "Farm menu temporarily unavailable\nPlease try again later"
+		errorLabel.TextColor3 = Color3.new(0.8, 0.3, 0.3)
+		errorLabel.TextScaled = true
+		errorLabel.Font = Enum.Font.SourceSansSemibold
+		errorLabel.Parent = contentArea
+	end
+end
 -- Settings Menu
 function GameClient:RefreshSettingsMenu()
 	local menu = self.UI.Menus.Settings
@@ -2062,22 +2113,30 @@ end
 
 -- Enhanced Pet Card Creation (SAFE VERSION)
 function GameClient:CreatePetCard(petData, parent, index)
-	-- Validate inputs
+	-- Enhanced validation
 	if not petData then
 		error("CreatePetCard: petData is nil")
 	end
 	if not parent then
 		error("CreatePetCard: parent is nil")
 	end
+	if type(petData) ~= "table" then
+		error("CreatePetCard: petData must be a table, got " .. type(petData))
+	end
 
-	-- Safe pet data with defaults
+	-- Safe pet data with defaults and validation
 	local safePetData = {
 		id = petData.id or "unknown_" .. math.random(1000, 9999),
 		name = petData.name or petData.displayName or petData.type or "Unknown Pet",
 		type = petData.type or "unknown",
 		rarity = petData.rarity or "Common",
-		level = petData.level or 1
+		level = tonumber(petData.level) or 1
 	}
+
+	-- Validate required fields
+	if not safePetData.id or safePetData.id == "" then
+		safePetData.id = "unknown_" .. tick()
+	end
 
 	index = tonumber(index) or 1
 

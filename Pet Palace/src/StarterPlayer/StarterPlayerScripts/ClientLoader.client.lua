@@ -16,9 +16,58 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-
+local errorHandlingConnections = {} -- FIXED: Store connections for cleanup
 print("=== Pet Palace Client Loader Starting ===")
+local function SetupErrorHandling()
+	-- Handle character respawning
+	local charConnection = LocalPlayer.CharacterAdded:Connect(function(character)
+		print("ClientLoader: Character respawned, GameClient should handle this automatically")
 
+		-- Small delay to ensure character is fully loaded
+		spawn(function()
+			wait(1)
+			-- FIXED: Add type checking
+			if _G.GameClient and type(_G.GameClient) == "table" and type(_G.GameClient.HandleCharacterRespawn) == "function" then
+				_G.GameClient:HandleCharacterRespawn(character)
+			end
+		end)
+	end)
+
+	-- Store connection for cleanup
+	errorHandlingConnections.characterAdded = charConnection
+
+	-- Handle disconnection/reconnection scenarios
+	local heartbeatConnection = RunService.Heartbeat:Connect(function()
+		-- FIXED: Add proper type checking
+		if not _G.GameClient or type(_G.GameClient) ~= "table" then
+			warn("ClientLoader: GameClient lost from global scope!")
+			heartbeatConnection:Disconnect()
+			errorHandlingConnections.heartbeat = nil
+
+			-- Attempt recovery
+			spawn(function()
+				wait(2)
+				local success = pcall(InitializeClient)
+				if not success then
+					error("ClientLoader: Failed to recover GameClient")
+				end
+			end)
+		end
+	end)
+
+	-- Store connection for cleanup
+	errorHandlingConnections.heartbeat = heartbeatConnection
+end
+
+-- FIXED: Add cleanup function
+local function CleanupErrorHandling()
+	for name, connection in pairs(errorHandlingConnections) do
+		if connection then
+			connection:Disconnect()
+			errorHandlingConnections[name] = nil
+		end
+	end
+end
 -- Wait for character to load
 if not LocalPlayer.Character then
 	LocalPlayer.CharacterAdded:Wait()
@@ -57,13 +106,14 @@ end
 local function LoadGameClient()
 	print("ClientLoader: Loading GameClient module...")
 
-	local gameClientModule = ReplicatedStorage:WaitForChild("GameClient", 10)
+	-- FIXED: Add timeout and better error handling
+	local gameClientModule = ReplicatedStorage:WaitForChild("GameClient", 30)
 	if not gameClientModule then
-		error("ClientLoader: GameClient module not found in ReplicatedStorage")
+		error("ClientLoader: GameClient module not found in ReplicatedStorage after 30 seconds")
 	end
 
 	if not gameClientModule:IsA("ModuleScript") then
-		error("ClientLoader: GameClient is not a ModuleScript")
+		error("ClientLoader: GameClient is not a ModuleScript, it's a " .. gameClientModule.ClassName)
 	end
 
 	local success, GameClient = pcall(function()
@@ -74,8 +124,17 @@ local function LoadGameClient()
 		error("ClientLoader: Failed to require GameClient: " .. tostring(GameClient))
 	end
 
-	if not GameClient or typeof(GameClient.Initialize) ~= "function" then
-		error("ClientLoader: GameClient is missing or malformed")
+	-- Enhanced validation
+	if not GameClient then
+		error("ClientLoader: GameClient module returned nil")
+	end
+
+	if type(GameClient) ~= "table" then
+		error("ClientLoader: GameClient must be a table, got " .. type(GameClient))
+	end
+
+	if type(GameClient.Initialize) ~= "function" then
+		error("ClientLoader: GameClient is missing Initialize function")
 	end
 
 	return GameClient
@@ -116,40 +175,6 @@ local function InitializeClient()
 	return GameClient
 end
 
--- Setup error handling and recovery
-local function SetupErrorHandling()
-	-- Handle character respawning
-	LocalPlayer.CharacterAdded:Connect(function(character)
-		print("ClientLoader: Character respawned, GameClient should handle this automatically")
-
-		-- Small delay to ensure character is fully loaded
-		spawn(function()
-			wait(1)
-			if _G.GameClient and _G.GameClient.HandleCharacterRespawn then
-				_G.GameClient:HandleCharacterRespawn(character)
-			end
-		end)
-	end)
-
-	-- Handle disconnection/reconnection scenarios
-	local heartbeatConnection
-	heartbeatConnection = RunService.Heartbeat:Connect(function()
-		-- Simple heartbeat to detect if systems are still working
-		if not _G.GameClient then
-			warn("ClientLoader: GameClient lost from global scope!")
-			heartbeatConnection:Disconnect()
-
-			-- Attempt recovery
-			spawn(function()
-				wait(2)
-				local success = pcall(InitializeClient)
-				if not success then
-					error("ClientLoader: Failed to recover GameClient")
-				end
-			end)
-		end
-	end)
-end
 
 -- Setup development tools (studio only)
 local function SetupDevTools()
@@ -234,25 +259,29 @@ local function CreateHelpSystem()
 end
 
 -- Main initialization function
-local function Main()
-	print("ClientLoader: Starting main client initialization...")
+local GameClient = InitializeClient()
 
-	-- Initialize the client
-	local GameClient = InitializeClient()
-
-	-- Setup additional systems
-	SetupErrorHandling()
-	SetupDevTools()
-	SetupClientMonitoring()
-	CreateHelpSystem()
-
-	print("=== Pet Palace Client Loader Complete ===")
-	print("Client is ready! GameClient available globally as _G.GameClient")
-
-	return GameClient
+-- FIXED: Enhanced validation
+if not _G.GameClient then
+	error("CRITICAL: GameClient not available in global scope after initialization")
 end
 
--- Run with comprehensive error handling
+if type(_G.GameClient) ~= "table" then
+	error("CRITICAL: GameClient is not a table: " .. type(_G.GameClient))
+end
+
+-- Setup additional systems
+SetupErrorHandling()
+SetupDevTools()
+SetupClientMonitoring()
+CreateHelpSystem()
+
+print("=== Pet Palace Client Loader Complete ===")
+print("Client is ready! GameClient available globally as _G.GameClient")
+
+return GameClient
+end
+ with comprehensive error handling
 local success, result = pcall(Main)
 
 if not success then
