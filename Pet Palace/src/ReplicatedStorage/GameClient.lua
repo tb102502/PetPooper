@@ -540,7 +540,7 @@ function GameClient:GetFarmPlotFromPart(part)
 
 	-- Check if this is a farm plot
 	while model and model ~= workspace do
-		if model:IsA("Model") and model.Name:find("FarmPlot") then
+		if model:IsA("Model") and (model.Name:find("FarmPlot") or model.Name:find("_Farm")) then
 			-- Verify it's owned by the player
 			local owner = model:GetAttribute("Owner")
 			if owner == LocalPlayer.Name then
@@ -550,10 +550,19 @@ function GameClient:GetFarmPlotFromPart(part)
 		model = model.Parent
 	end
 
+	-- Alternative: check if we clicked on soil directly
+	if part.Name == "Soil" and part.Parent:IsA("Model") then
+		local plotModel = part.Parent
+		local owner = plotModel:GetAttribute("Owner")
+		if owner == LocalPlayer.Name then
+			return plotModel
+		end
+	end
+
 	return nil
 end
 
--- Handle farm plot click (plant or harvest)
+-- FIXED: Enhanced plot clicking with better feedback
 function GameClient:HandlePlotClick(plotModel)
 	local isPlanted = plotModel:GetAttribute("IsPlanted")
 
@@ -565,38 +574,114 @@ function GameClient:HandlePlotClick(plotModel)
 		else
 			local progress = math.floor((growthStage / 4) * 100)
 			local plantType = plotModel:GetAttribute("PlantType") or "crop"
+			local timeLeft = self:CalculateTimeRemaining(plotModel)
+
 			self:ShowNotification("Still Growing", 
-				plantType:gsub("_seeds", "") .. " is " .. progress .. "% grown", "info")
+				plantType:gsub("_seeds", "") .. " is " .. progress .. "% grown" .. 
+					(timeLeft and (" (" .. timeLeft .. " remaining)") or ""), "info")
 		end
 	else
 		-- Try to plant
 		if self.FarmingState.selectedSeed then
+			print("GameClient: Attempting to plant " .. self.FarmingState.selectedSeed .. " in plot")
 			self:PlantSeedInPlot(plotModel, self.FarmingState.selectedSeed)
 		else
 			self:ShowNotification("No Seed Selected", 
 				"Select a seed from your farming inventory first!", "warning")
+			-- Auto-open farming UI if not visible
+			if self.UI.SeedInventory and not self.UI.SeedInventory.Visible then
+				self:ToggleFarmingUI()
+			end
 		end
 	end
 end
 
--- Plant seed in plot
+-- NEW: Calculate time remaining for crop growth
+function GameClient:CalculateTimeRemaining(plotModel)
+	local plantTime = plotModel:GetAttribute("PlantTime")
+	local timeToGrow = plotModel:GetAttribute("TimeToGrow")
+
+	if not plantTime or not timeToGrow then return nil end
+
+	local elapsed = os.time() - plantTime
+	local remaining = timeToGrow - elapsed
+
+	if remaining <= 0 then return "Ready!" end
+
+	local minutes = math.floor(remaining / 60)
+	local seconds = remaining % 60
+
+	if minutes > 0 then
+		return minutes .. "m " .. seconds .. "s"
+	else
+		return seconds .. "s"
+	end
+end
+
+-- FIXED: Enhanced planting with proper error handling
 function GameClient:PlantSeedInPlot(plotModel, seedType)
+	-- Ensure remote events exist
 	if not self.RemoteEvents.PlantSeed then
-		warn("GameClient: PlantSeed remote event not found")
-		return
+		-- Try to find it
+		local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+		if gameRemotes then
+			self.RemoteEvents.PlantSeed = gameRemotes:FindFirstChild("PlantSeed")
+		end
+
+		if not self.RemoteEvents.PlantSeed then
+			warn("GameClient: PlantSeed remote event not found")
+			self:ShowNotification("Error", "Planting system not available", "error")
+			return
+		end
 	end
 
+	print("GameClient: Firing PlantSeed event with:", plotModel.Name, seedType)
+
 	-- Fire server event
-	self.RemoteEvents.PlantSeed:FireServer(plotModel, seedType)
+	local success, errorMsg = pcall(function()
+		self.RemoteEvents.PlantSeed:FireServer(plotModel, seedType)
+	end)
+
+	if not success then
+		warn("GameClient: Failed to fire PlantSeed event:", errorMsg)
+		self:ShowNotification("Error", "Failed to plant seed", "error")
+		return
+	end
 
 	-- Visual feedback
 	self:CreatePlantingEffect(plotModel)
 
-	-- Update inventory display
+	-- Update inventory display after a delay
 	spawn(function()
-		wait(0.5) -- Wait for server response
-		self:UpdateSeedInventory()
+		wait(1) -- Wait for server response
+		if self.UI.SeedInventory and self.UI.SeedInventory.Visible then
+			self:UpdateSeedInventory()
+		end
 	end)
+
+	print("GameClient: Planting request sent successfully")
+end
+
+function GameClient:EnsureFarmingRemotes()
+	local gameRemotes = game:GetService("ReplicatedStorage"):WaitForChild("GameRemotes", 10)
+	if not gameRemotes then
+		warn("GameClient: GameRemotes not found")
+		return false
+	end
+
+	-- Get planting remotes
+	self.RemoteEvents.PlantSeed = gameRemotes:FindFirstChild("PlantSeed")
+	self.RemoteEvents.HarvestCrop = gameRemotes:FindFirstChild("HarvestCrop")
+
+	if not self.RemoteEvents.PlantSeed then
+		warn("GameClient: PlantSeed remote not found")
+	end
+
+	if not self.RemoteEvents.HarvestCrop then
+		warn("GameClient: HarvestCrop remote not found")
+	end
+
+	return self.RemoteEvents.PlantSeed and self.RemoteEvents.HarvestCrop
 end
 
 -- Harvest crop from plot

@@ -579,6 +579,14 @@ function GameCore:PlayerHasFarmPlot(playerData)
 end
 
 -- UPDATED: Create farm plot for player with automatic positioning
+--[[
+    Enhanced Farming System - FIXES & FEATURES
+    This combines fixes for both server and client code
+]]
+
+-- ========== SERVER-SIDE FIXES (Add to GameCore.lua) ==========
+
+-- FIXED: Enhanced farm plot creation with highlighting
 function GameCore:CreatePlayerFarmPlot(player, plotNumber)
 	-- Calculate plot position in Starter Meadow
 	local plotPosition = self:GetFarmPlotPosition(player, plotNumber)
@@ -609,9 +617,10 @@ function GameCore:CreatePlayerFarmPlot(player, plotNumber)
 	border.Color = Color3.fromRGB(160, 100, 50)
 	border.Parent = plotModel
 
-	-- Add corner decorations
-	local cornerCorner = Instance.new("UICorner")
-	cornerCorner.CornerRadius = UDim.new(0.1, 0)
+	-- NEW: Add tutorial highlighting for first plot
+	if plotNumber == 1 then
+		self:AddTutorialHighlight(plotModel, player)
+	end
 
 	-- Add plot sign
 	local sign = Instance.new("Part")
@@ -640,28 +649,6 @@ function GameCore:CreatePlayerFarmPlot(player, plotNumber)
 	signLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 	signLabel.Parent = signGui
 
-	-- Add farming tools (decorative)
-	local hoe = Instance.new("Part")
-	hoe.Name = "Hoe"
-	hoe.Size = Vector3.new(0.2, 2, 0.2)
-	hoe.Position = soil.Position + Vector3.new(-4.2, 1, 4.2)
-	hoe.Anchored = true
-	hoe.CanCollide = false
-	hoe.Material = Enum.Material.Wood
-	hoe.Color = Color3.fromRGB(101, 67, 33)
-	hoe.Parent = plotModel
-
-	-- Add watering can (decorative)
-	local wateringCan = Instance.new("Part")
-	wateringCan.Name = "WateringCan"
-	wateringCan.Size = Vector3.new(1, 1, 0.5)
-	wateringCan.Position = soil.Position + Vector3.new(-4, 0.5, -4)
-	wateringCan.Anchored = true
-	wateringCan.CanCollide = false
-	wateringCan.Material = Enum.Material.Metal
-	wateringCan.Color = Color3.fromRGB(150, 150, 150)
-	wateringCan.Parent = plotModel
-
 	plotModel.PrimaryPart = soil
 
 	-- Set plot attributes
@@ -672,11 +659,11 @@ function GameCore:CreatePlayerFarmPlot(player, plotNumber)
 	plotModel:SetAttribute("GrowthStage", 0)
 	plotModel:SetAttribute("PlantTime", 0)
 	plotModel:SetAttribute("TimeToGrow", 0)
+	plotModel:SetAttribute("HasTutorialHighlight", plotNumber == 1)
 
 	-- Place in Starter Meadow
 	local starterMeadow = workspace:FindFirstChild("Areas"):FindFirstChild("Starter Meadow")
 	if starterMeadow then
-		-- Create Farm area if it doesn't exist
 		local farmArea = starterMeadow:FindFirstChild("Farm")
 		if not farmArea then
 			farmArea = Instance.new("Folder")
@@ -684,7 +671,6 @@ function GameCore:CreatePlayerFarmPlot(player, plotNumber)
 			farmArea.Parent = starterMeadow
 		end
 
-		-- Create player's farm folder
 		local playerFarm = farmArea:FindFirstChild(player.Name .. "_Farm")
 		if not playerFarm then
 			playerFarm = Instance.new("Folder")
@@ -701,6 +687,107 @@ function GameCore:CreatePlayerFarmPlot(player, plotNumber)
 	return true
 end
 
+-- NEW: Add tutorial highlighting to farm plot
+function GameCore:AddTutorialHighlight(plotModel, player)
+	local soil = plotModel:FindFirstChild("Soil")
+	if not soil then return end
+
+	-- Create highlight effect
+	local highlight = Instance.new("SelectionBox")
+	highlight.Name = "TutorialHighlight"
+	highlight.Adornee = soil
+	highlight.Color3 = Color3.fromRGB(100, 255, 100)
+	highlight.LineThickness = 0.3
+	highlight.Transparency = 0.5
+	highlight.Parent = soil
+
+	-- Create pulsing glow effect
+	local glowPart = Instance.new("Part")
+	glowPart.Name = "TutorialGlow"
+	glowPart.Size = Vector3.new(10, 0.1, 10)
+	glowPart.Position = soil.Position + Vector3.new(0, 0.6, 0)
+	glowPart.Anchored = true
+	glowPart.CanCollide = false
+	glowPart.Material = Enum.Material.Neon
+	glowPart.Color = Color3.fromRGB(100, 255, 100)
+	glowPart.Transparency = 0.8
+	glowPart.Shape = Enum.PartType.Cylinder
+	glowPart.Parent = plotModel
+
+	-- Animate the glow
+	local TweenService = game:GetService("TweenService")
+	local glowTween = TweenService:Create(glowPart,
+		TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+		{Transparency = 0.9}
+	)
+	glowTween:Play()
+
+	-- Create floating text hint
+	local hintPart = Instance.new("Part")
+	hintPart.Name = "TutorialHint"
+	hintPart.Size = Vector3.new(0.1, 0.1, 0.1)
+	hintPart.Position = soil.Position + Vector3.new(0, 4, 0)
+	hintPart.Anchored = true
+	hintPart.CanCollide = false
+	hintPart.Transparency = 1
+	hintPart.Parent = plotModel
+
+	local hintGui = Instance.new("BillboardGui")
+	hintGui.Size = UDim2.new(0, 200, 0, 100)
+	hintGui.StudsOffset = Vector3.new(0, 2, 0)
+	hintGui.Parent = hintPart
+
+	local hintLabel = Instance.new("TextLabel")
+	hintLabel.Size = UDim2.new(1, 0, 1, 0)
+	hintLabel.BackgroundTransparency = 1
+	hintLabel.Text = "🌱 Your First Farm Plot!\nPress F to open farming menu"
+	hintLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+	hintLabel.TextScaled = true
+	hintLabel.Font = Enum.Font.GothamBold
+	hintLabel.TextStrokeTransparency = 0
+	hintLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	hintLabel.Parent = hintGui
+
+	-- Bounce animation for hint
+	local bounceTween = TweenService:Create(hintGui,
+		TweenInfo.new(1.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.InOut, -1, true),
+		{StudsOffset = Vector3.new(0, 3, 0)}
+	)
+	bounceTween:Play()
+
+	-- Send notification to player
+	spawn(function()
+		wait(2)
+		self:SendNotification(player, "Farm Plot Ready!", 
+			"Your farm plot is highlighted! Press F to open the farming menu and start planting.", "info")
+	end)
+
+	print("GameCore: Added tutorial highlight to farm plot for " .. player.Name)
+end
+
+-- NEW: Remove tutorial highlighting when first seed is planted
+function GameCore:RemoveTutorialHighlight(plotModel)
+	local soil = plotModel:FindFirstChild("Soil")
+	if soil then
+		local highlight = soil:FindFirstChild("TutorialHighlight")
+		if highlight then
+			highlight:Destroy()
+		end
+	end
+
+	local tutorialGlow = plotModel:FindFirstChild("TutorialGlow")
+	if tutorialGlow then
+		tutorialGlow:Destroy()
+	end
+
+	local tutorialHint = plotModel:FindFirstChild("TutorialHint")
+	if tutorialHint then
+		tutorialHint:Destroy()
+	end
+
+	plotModel:SetAttribute("HasTutorialHighlight", false)
+	print("GameCore: Removed tutorial highlight from farm plot")
+end
 -- NEW: Calculate farm plot position with smart placement
 function GameCore:GetFarmPlotPosition(player, plotNumber)
 	-- Base position in Starter Meadow (away from spawn and pet areas)
@@ -1933,87 +2020,93 @@ end
 
 -- Plant a seed in a specific plot
 function GameCore:PlantSeed(player, plotModel, seedType)
-    local playerData = self:GetPlayerData(player)
-    if not playerData then 
-        self:SendNotification(player, "Error", "Player data not found", "error")
-        return false 
-    end
+	if not player or not plotModel or not seedType then 
+		return false, "Invalid parameters" 
+	end
 
-    -- Validate plot ownership
-    local plotOwner = plotModel:GetAttribute("Owner")
-    if plotOwner ~= player.Name then
-        self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
-        return false
-    end
+	-- Validate plot ownership
+	local plotOwner = plotModel:GetAttribute("Owner")
+	if plotOwner ~= player.Name then
+		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
+		return false
+	end
 
-    -- Check if plot is already planted
-    if plotModel:GetAttribute("IsPlanted") then
-        local plantType = plotModel:GetAttribute("PlantType") or "something"
-        local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-        local maxStage = 4
-        local progress = math.floor((growthStage / maxStage) * 100)
-        
-        self:SendNotification(player, "Plot Occupied", 
-            "This plot already has " .. plantType .. " growing (" .. progress .. "% complete)", "warning")
-        return false
-    end
+	-- Check if plot is already planted
+	if plotModel:GetAttribute("IsPlanted") then
+		local plantType = plotModel:GetAttribute("PlantType") or "something"
+		local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+		local progress = math.floor((growthStage / 4) * 100)
 
-    -- Check if player has the seed
-    local farmingData = playerData.farming or {}
-    local inventory = farmingData.inventory or {}
-    local seedCount = inventory[seedType] or 0
+		self:SendNotification(player, "Plot Occupied", 
+			"This plot already has " .. plantType .. " growing (" .. progress .. "% complete)", "warning")
+		return false
+	end
 
-    if seedCount <= 0 then
-        local seedConfig = ItemConfig.Seeds[seedType]
-        local seedName = seedConfig and seedConfig.name or seedType
-        self:SendNotification(player, "No Seeds", 
-            "You don't have any " .. seedName .. "!", "error")
-        return false
-    end
+	-- Check if player has the seed
+	local playerData = self:GetPlayerData(player)
+	local farmingData = playerData.farming or {}
+	local inventory = farmingData.inventory or {}
+	local seedCount = inventory[seedType] or 0
 
-    -- Get seed configuration
-    local seedConfig = ItemConfig.Seeds[seedType]
-    if not seedConfig then
-        self:SendNotification(player, "Invalid Seed", "Unknown seed type: " .. seedType, "error")
-        return false
-    end
+	if seedCount <= 0 then
+		local seedName = seedType:gsub("_", " "):gsub("seeds", "Seeds")
+		self:SendNotification(player, "No Seeds", 
+			"You don't have any " .. seedName .. "!", "error")
+		return false
+	end
 
-    -- Consume the seed
-    inventory[seedType] = seedCount - 1
+	-- Get seed configuration from ItemConfig
+	local ServerScriptService = game:GetService("ServerScriptService")
+	local ItemConfig = require(ServerScriptService.Config.ItemConfig)
+	local seedConfig = ItemConfig.ShopItems[seedType]
 
-    -- Plant the seed
-    plotModel:SetAttribute("IsPlanted", true)
-    plotModel:SetAttribute("PlantType", seedType)
-    plotModel:SetAttribute("GrowthStage", 1)
-    plotModel:SetAttribute("PlantTime", os.time())
-    plotModel:SetAttribute("TimeToGrow", seedConfig.growTime or 60)
-    plotModel:SetAttribute("YieldAmount", seedConfig.yieldAmount or 1)
-    plotModel:SetAttribute("ResultCrop", seedConfig.resultId or "unknown")
+	if not seedConfig then
+		self:SendNotification(player, "Invalid Seed", "Unknown seed type: " .. seedType, "error")
+		return false
+	end
 
-    -- Create initial plant model
-    self:CreatePlantModel(plotModel, seedType, 1)
+	-- Consume the seed
+	inventory[seedType] = seedCount - 1
+	playerData.farming.inventory = inventory
 
-    -- Start growth timer
-    self:StartPlantGrowth(plotModel, seedConfig.growTime or 60)
+	-- Plant the seed
+	plotModel:SetAttribute("IsPlanted", true)
+	plotModel:SetAttribute("PlantType", seedType)
+	plotModel:SetAttribute("GrowthStage", 1)
+	plotModel:SetAttribute("PlantTime", os.time())
+	plotModel:SetAttribute("TimeToGrow", seedConfig.growTime or 60)
+	plotModel:SetAttribute("YieldAmount", seedConfig.yieldAmount or 1)
+	plotModel:SetAttribute("ResultCrop", seedConfig.resultId or "unknown")
 
-    -- Update player data
-    playerData.farming.inventory = inventory
-    self:SavePlayerData(player)
+	-- NEW: Remove tutorial highlighting if this is the first planting
+	if plotModel:GetAttribute("HasTutorialHighlight") then
+		self:RemoveTutorialHighlight(plotModel)
+		self:SendNotification(player, "Great Start!", 
+			"You've planted your first seed! Watch it grow over time.", "success")
+	end
 
-    -- Send success notification
-    self:SendNotification(player, "Seed Planted!", 
-        "Planted " .. (seedConfig.name or seedType) .. "! It will be ready in " .. 
-        math.floor((seedConfig.growTime or 60) / 60) .. " minutes.", "success")
+	-- Create initial plant model
+	self:CreatePlantModel(plotModel, seedType, 1)
 
-    -- Update client
-    if self.RemoteEvents.PlayerDataUpdated then
-        self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-    end
+	-- Start growth timer
+	self:StartPlantGrowth(plotModel, seedConfig.growTime or 60)
 
-    print("GameCore: " .. player.Name .. " planted " .. seedType .. " in plot " .. (plotModel:GetAttribute("PlotID") or "unknown"))
-    return true
+	-- Save player data
+	self:SavePlayerData(player)
+
+	-- Send success notification
+	self:SendNotification(player, "Seed Planted!", 
+		"Planted " .. (seedConfig.name or seedType) .. "! It will be ready in " .. 
+			math.floor((seedConfig.growTime or 60) / 60) .. " minutes.", "success")
+
+	-- Update client
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	print("GameCore: " .. player.Name .. " planted " .. seedType .. " in plot " .. (plotModel:GetAttribute("PlotID") or "unknown"))
+	return true
 end
-
 -- Create visual plant model based on growth stage
 function GameCore:CreatePlantModel(plotModel, seedType, growthStage)
     -- Remove existing plant
@@ -2255,33 +2348,34 @@ end
 
 -- Setup remote events for planting system
 function GameCore:SetupPlantingRemoteEvents()
-    -- Plant seed event
-    if not self.RemoteEvents.PlantSeed then
-        local plantSeedEvent = Instance.new("RemoteEvent")
-        plantSeedEvent.Name = "PlantSeed"
-        plantSeedEvent.Parent = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
-        self.RemoteEvents.PlantSeed = plantSeedEvent
-    end
+	-- Plant seed event
+	if not self.RemoteEvents.PlantSeed then
+		local plantSeedEvent = Instance.new("RemoteEvent")
+		plantSeedEvent.Name = "PlantSeed"
+		plantSeedEvent.Parent = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+		self.RemoteEvents.PlantSeed = plantSeedEvent
+	end
 
-    -- Harvest crop event  
-    if not self.RemoteEvents.HarvestCrop then
-        local harvestCropEvent = Instance.new("RemoteEvent")
-        harvestCropEvent.Name = "HarvestCrop"
-        harvestCropEvent.Parent = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
-        self.RemoteEvents.HarvestCrop = harvestCropEvent
-    end
+	-- Harvest crop event  
+	if not self.RemoteEvents.HarvestCrop then
+		local harvestCropEvent = Instance.new("RemoteEvent")
+		harvestCropEvent.Name = "HarvestCrop"
+		harvestCropEvent.Parent = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+		self.RemoteEvents.HarvestCrop = harvestCropEvent
+	end
 
-    -- Connect events
-    self.RemoteEvents.PlantSeed.OnServerEvent:Connect(function(player, plotModel, seedType)
-        self:PlantSeed(player, plotModel, seedType)
-    end)
+	-- Connect events
+	self.RemoteEvents.PlantSeed.OnServerEvent:Connect(function(player, plotModel, seedType)
+		self:PlantSeed(player, plotModel, seedType)
+	end)
 
-    self.RemoteEvents.HarvestCrop.OnServerEvent:Connect(function(player, plotModel)
-        self:HarvestCrop(player, plotModel)
-    end)
+	self.RemoteEvents.HarvestCrop.OnServerEvent:Connect(function(player, plotModel)
+		self:HarvestPlot(plotModel, player)
+	end)
 
-    print("GameCore: Planting remote events setup complete")
+	print("GameCore: Planting remote events setup complete")
 end
+
 
 -- Call this in your GameCore:Initialize() function
 -- Add this line to your GameCore:Initialize():

@@ -1,5 +1,5 @@
 -- FarmingSystem.server.lua
--- Complete farming/crop growing system
+-- Complete farming/crop growing system with custom plot positioning
 
 local function WaitForGameCore(scriptName, maxWaitTime)
 	maxWaitTime = maxWaitTime or 15
@@ -29,6 +29,31 @@ local Players = game:GetService("Players")
 
 print("=== FARMING SYSTEM STARTING ===")
 
+-- CUSTOM PLOT POSITIONS CONFIGURATION
+-- Add or modify positions as needed for each plot
+local PLOT_POSITIONS = {
+	[1] = Vector3.new(-366.118, -1.593, 75.731),      -- Plot 1 position
+	[2] = Vector3.new(-400.768, -1.593, 75.731),     -- Plot 2 position
+	[3] = Vector3.new(-366.118, -1.593, 109.531),     -- Plot 3 position
+	[4] = Vector3.new(-400.768, -1.593, 109.381),     -- Plot 4 position
+	[5] = Vector3.new(-400.768, -1.593, 142.681),     -- Plot 5 position
+	[6] = Vector3.new(-366.118, -1.593, 142.681),     -- Plot 6 position
+	[7] = Vector3.new(-366.118, -1.593, 176.481),    -- Plot 7 position
+	[8] = Vector3.new(-400.768, -1.593, 176.331),    -- Plot 8 position
+	[9] = Vector3.new(45, 0.5, 15),    -- Plot 9 position
+	[10] = Vector3.new(60, 0.5, 15),   -- Plot 10 position
+	[11] = Vector3.new(0, 0.5, 30),    -- Plot 11 position
+	[12] = Vector3.new(15, 0.5, 30),   -- Plot 12 position
+	[13] = Vector3.new(30, 0.5, 30),   -- Plot 13 position
+	[14] = Vector3.new(45, 0.5, 30),   -- Plot 14 position
+	[15] = Vector3.new(60, 0.5, 30),   -- Plot 15 position
+	[16] = Vector3.new(0, 0.5, 45),    -- Plot 16 position
+	[17] = Vector3.new(15, 0.5, 45),   -- Plot 17 position
+	[18] = Vector3.new(30, 0.5, 45),   -- Plot 18 position
+	[19] = Vector3.new(45, 0.5, 45),   -- Plot 19 position
+	[20] = Vector3.new(60, 0.5, 45),   -- Plot 20 position
+}
+
 -- Enhanced farming system for GameCore
 function GameCore:InitializeFarmingSystem()
 	print("GameCore: Initializing farming system...")
@@ -42,12 +67,12 @@ function GameCore:InitializeFarmingSystem()
 		farmingArea.Parent = workspace
 	end
 
-	-- Create farming plots if they don't exist
-	for i = 1, 20 do -- 20 farming plots
-		local plotName = "Plot" .. i
+	-- Create farming plots with custom positions
+	for plotNumber, position in pairs(PLOT_POSITIONS) do
+		local plotName = "Plot" .. plotNumber
 		local plot = farmingArea:FindFirstChild(plotName)
 		if not plot then
-			plot = self:CreateFarmPlot(plotName, i)
+			plot = self:CreateFarmPlot(plotNumber, position)
 			plot.Parent = farmingArea
 		end
 	end
@@ -64,8 +89,8 @@ function GameCore:InitializeFarmingSystem()
 	print("GameCore: Farming system initialized with crop growing!")
 end
 
--- Create a farming plot
-function GameCore:CreateFarmPlot(plotNumber)
+-- Create a farming plot at a specific position
+function GameCore:CreateFarmPlot(plotNumber, customPosition)
 	-- FIXED: Ensure plotNumber is a valid number
 	plotNumber = tonumber(plotNumber) or 1
 
@@ -75,20 +100,27 @@ function GameCore:CreateFarmPlot(plotNumber)
 	-- Create soil base
 	local soil = Instance.new("Part")
 	soil.Name = "Soil"
-	soil.Size = Vector3.new(8, 1, 8)
+	soil.Size = Vector3.new(34.375, 1, 32.975)
 
-	-- FIXED: Better plot positioning logic
-	local plotsPerRow = 5
-	local plotSpacing = 12
-	local row = math.floor((plotNumber - 1) / plotsPerRow)
-	local col = (plotNumber - 1) % plotsPerRow
+	-- Use custom position if provided, otherwise use default positioning
+	if customPosition then
+		soil.Position = customPosition
+		print("GameCore: Creating Plot " .. plotNumber .. " at custom position: " .. tostring(customPosition))
+	else
+		-- Fallback to automatic grid positioning if no custom position provided
+		local plotsPerRow = 5
+		local plotSpacing = 12
+		local row = math.floor((plotNumber - 1) / plotsPerRow)
+		local col = (plotNumber - 1) % plotsPerRow
 
-	-- Calculate position with safe defaults
-	local xPos = col * plotSpacing
-	local zPos = row * plotSpacing
-	local yPos = 0.5
+		local xPos = col * plotSpacing
+		local zPos = row * plotSpacing
+		local yPos = 0.5
 
-	soil.Position = Vector3.new(xPos, yPos, zPos)
+		soil.Position = Vector3.new(xPos, yPos, zPos)
+		print("GameCore: Creating Plot " .. plotNumber .. " at default position: " .. tostring(soil.Position))
+	end
+
 	soil.Anchored = true
 	soil.CanCollide = true
 	soil.Material = Enum.Material.Ground
@@ -98,7 +130,7 @@ function GameCore:CreateFarmPlot(plotNumber)
 	-- Add plot border
 	local border = Instance.new("Part")
 	border.Name = "Border"
-	border.Size = Vector3.new(8.5, 0.2, 8.5)
+	border.Size = Vector3.new(2, 0.2, 2)
 	border.Position = soil.Position + Vector3.new(0, 0.6, 0)
 	border.Anchored = true
 	border.CanCollide = false
@@ -126,13 +158,53 @@ function GameCore:CreateFarmPlot(plotNumber)
 
 	-- Set plot attributes with safe defaults
 	plotModel:SetAttribute("PlotID", plotNumber)
+	plotModel:SetAttribute("PlotNumber", plotNumber) -- Added for consistency
+	plotModel:SetAttribute("IsEmpty", true) -- Changed to match the logic used elsewhere
 	plotModel:SetAttribute("IsPlanted", false)
 	plotModel:SetAttribute("PlantType", "")
+	plotModel:SetAttribute("CropType", "")
 	plotModel:SetAttribute("GrowthStage", 0)
 	plotModel:SetAttribute("PlantTime", 0)
 	plotModel:SetAttribute("TimeToGrow", 0)
 
 	return plotModel
+end
+
+-- Function to easily add or update plot positions
+function GameCore:SetPlotPosition(plotNumber, newPosition)
+	PLOT_POSITIONS[plotNumber] = newPosition
+	print("GameCore: Updated Plot " .. plotNumber .. " position to: " .. tostring(newPosition))
+
+	-- If the plot already exists, update its position
+	local farmingArea = workspace:FindFirstChild("FarmingArea")
+	if farmingArea then
+		local existingPlot = farmingArea:FindFirstChild("FarmPlot_" .. plotNumber)
+		if existingPlot then
+			local soil = existingPlot:FindFirstChild("Soil")
+			local border = existingPlot:FindFirstChild("Border")
+
+			if soil then
+				soil.Position = newPosition
+				if border then
+					border.Position = newPosition + Vector3.new(0, 0.6, 0)
+				end
+
+				-- Update crop position if there's a crop
+				local cropModel = existingPlot:FindFirstChild("CropModel")
+				if cropModel then
+					local crop = cropModel:FindFirstChild("Crop")
+					if crop then
+						crop.Position = newPosition + Vector3.new(0, soil.Size.Y/2 + crop.Size.Y/2, 0)
+					end
+				end
+			end
+		end
+	end
+end
+
+-- Function to get current plot positions (for debugging/reference)
+function GameCore:GetPlotPositions()
+	return PLOT_POSITIONS
 end
 
 -- Plant a seed
@@ -151,7 +223,7 @@ function GameCore:PlantSeed(player, plotNumber, seedType)
 	local farmingArea = workspace:FindFirstChild("FarmingArea")
 	if not farmingArea then return end
 
-	local plot = farmingArea:FindFirstChild("Plot" .. plotNumber)
+	local plot = farmingArea:FindFirstChild("FarmPlot_" .. plotNumber)
 	if not plot then return end
 
 	-- Check if plot is empty
@@ -212,8 +284,11 @@ function GameCore:CreateCropModel(plot, cropType, stage)
 	local sizeMultiplier = stage / 4
 	cropPart.Size = Vector3.new(2 * sizeMultiplier, 3 * sizeMultiplier, 2 * sizeMultiplier)
 
-	-- Position on top of plot
-	cropPart.Position = plot.Position + Vector3.new(0, plot.Size.Y/2 + cropPart.Size.Y/2, 0)
+	-- Position on top of plot soil
+	local soil = plot:FindFirstChild("Soil")
+	if soil then
+		cropPart.Position = soil.Position + Vector3.new(0, soil.Size.Y/2 + cropPart.Size.Y/2, 0)
+	end
 
 	-- Set crop appearance based on type
 	if cropType == "carrot" then
@@ -300,7 +375,7 @@ function GameCore:HarvestCrop(player, plotNumber)
 	local farmingArea = workspace:FindFirstChild("FarmingArea")
 	if not farmingArea then return end
 
-	local plot = farmingArea:FindFirstChild("Plot" .. plotNumber)
+	local plot = farmingArea:FindFirstChild("FarmPlot_" .. plotNumber)
 	if not plot then return end
 
 	-- Check if plot has a fully grown crop
