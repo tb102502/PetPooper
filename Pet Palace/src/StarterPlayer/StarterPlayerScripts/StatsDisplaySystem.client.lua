@@ -333,7 +333,7 @@ function StatsSystem:CreateUpgradeItem(parent, upgradeId, layoutOrder)
 	if not playerData then return end
 
 	-- Get upgrade info from ItemConfig
-	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Config"):WaitForChild("ItemConfig"))
+	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 	local upgrade = ItemConfig.ShopItems[upgradeId]
 	if not upgrade then return end
 

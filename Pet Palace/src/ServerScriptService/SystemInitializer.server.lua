@@ -68,16 +68,13 @@ local function ValidateStructure()
 	end
 
 	-- Check Config folder
-	local configFolder = ServerScriptService:FindFirstChild("Config")
-	if not configFolder then
+	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
+	if not ItemConfig then
 		error("CRITICAL: Config folder not found in ServerScriptService")
 	end
 
 	-- Check ItemConfig
-	local itemConfig = configFolder:FindFirstChild("ItemConfig")
-	if not itemConfig then
-		error("CRITICAL: ItemConfig module not found in ServerScriptService/Config")
-	end
+	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 
 	print("SystemInitializer: Structure validation passed")
 	return true

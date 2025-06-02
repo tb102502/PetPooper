@@ -26,17 +26,9 @@ local GameCore = WaitForGameCore("SimpleSpawnLocationFix")
 print("=== APPLYING SPAWN LOCATIONS FIX TO GAMECORE ===")
 
 -- Get ItemConfig
-local ServerScriptService = game:GetService("ServerScriptService")
-local ItemConfig
-local success, result = pcall(function()
-	return require(ServerScriptService.Config.ItemConfig)
-end)
+local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 
-if success then
-	ItemConfig = result
-else
-	error("Failed to load ItemConfig: " .. tostring(result))
-end
+
 
 -- Function to get spawn locations from workspace parts
 local function getSpawnLocationsForArea(areaName)

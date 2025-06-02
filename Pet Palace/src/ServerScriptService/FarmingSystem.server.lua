@@ -130,7 +130,7 @@ function GameCore:CreateFarmPlot(plotNumber, customPosition)
 	-- Add plot border
 	local border = Instance.new("Part")
 	border.Name = "Border"
-	border.Size = Vector3.new(2, 0.2, 2)
+	border.Size = Vector3.new(2, 1, 2)
 	border.Position = soil.Position + Vector3.new(0, 0.6, 0)
 	border.Anchored = true
 	border.CanCollide = false
@@ -233,7 +233,7 @@ function GameCore:PlantSeed(player, plotNumber, seedType)
 	end
 
 	-- Get seed config
-	local ItemConfig = require(script.Parent.Config.ItemConfig)
+	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 	local seedConfig = ItemConfig.Seeds[seedType .. "_seeds"]
 	if not seedConfig then return end
 

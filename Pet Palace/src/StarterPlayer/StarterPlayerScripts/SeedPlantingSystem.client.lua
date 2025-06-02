@@ -6,6 +6,7 @@
 -- CLIENT-SIDE: Planting Interface for GameClient.lua
 
 -- Enhanced farming interface with seed selection and planting
+local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -35,17 +36,7 @@ else
 end
 
 -- Safely require ItemConfig with error handling
-local ItemConfig = nil
-pcall(function()
-	local configFolder = ReplicatedStorage:FindFirstChild("Config")
-	if configFolder then
-		local itemConfigModule = configFolder:FindFirstChild("ItemConfig")
-		if itemConfigModule then
-			ItemConfig = require(itemConfigModule)
-		end
-	end
-end)
-
+local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 -- If ItemConfig doesn't exist, create a basic fallback
 if not ItemConfig then
 	ItemConfig = {

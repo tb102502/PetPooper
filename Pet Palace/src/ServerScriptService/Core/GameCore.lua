@@ -24,7 +24,7 @@ local HttpService = game:GetService("HttpService")
 local Debris = game:GetService("Debris")
 
 -- Load configuration
-local ItemConfig = require(script.Parent.Parent:WaitForChild("Config"):WaitForChild("ItemConfig"))
+local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 
 -- Core Data Management
 GameCore.PlayerData = {}

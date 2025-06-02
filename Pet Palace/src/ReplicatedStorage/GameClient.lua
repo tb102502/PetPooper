@@ -22,45 +22,9 @@ local RunService = game:GetService("RunService")
 -- FIXED: Safe ItemConfig loader with better error handling
 local ItemConfig = nil
 local function loadItemConfig()
-	if not ItemConfig then
-		local success, result = pcall(function()
-			-- Try ServerScriptService first (for server scripts that might access this)
-			local serverConfig = ServerScriptService:FindFirstChild("Config")
-			if serverConfig and serverConfig:FindFirstChild("ItemConfig") then
-				return require(serverConfig.ItemConfig)
-			end
-
-			-- Try ReplicatedStorage (for client access)
-			local replicatedConfig = ReplicatedStorage:FindFirstChild("Config")
-			if replicatedConfig and replicatedConfig:FindFirstChild("ItemConfig") then
-				return require(replicatedConfig.ItemConfig)
-			end
-
-			-- Last resort: try requiring from ReplicatedStorage directly
-			local itemConfigModule = ReplicatedStorage:FindFirstChild("ItemConfig")
-			if itemConfigModule then
-				return require(itemConfigModule)
-			end
-
-			error("ItemConfig not found in any expected location")
-		end)
-
-		if success then
-			ItemConfig = result
-			print("GameClient: ItemConfig loaded successfully")
-		else
-			warn("GameClient: Could not load ItemConfig: " .. tostring(result))
-			-- Create fallback ItemConfig to prevent errors
-			ItemConfig = {
-				Seeds = {},
-				Crops = {},
-				ShopItems = {},
-				Pets = {}
-			}
+	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
 		end
-	end
-	return ItemConfig
-end
+
 
 -- Player and Game State
 local LocalPlayer = Players.LocalPlayer
