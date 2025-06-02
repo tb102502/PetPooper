@@ -7,20 +7,70 @@
 
 -- Enhanced farming interface with seed selection and planting
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local GameClient = require(ReplicatedStorage:WaitForChild("GameClient"))
-local ItemConfig = require(script.Parent.Parent:WaitForChild("Config"):WaitForChild("ItemConfig"))
-local Player = game.Players.LocalPlayer
-function GameClient:SetupFarmingInterface()
-	local UserInputService = game:GetService("UserInputService")
-	local Players = game:GetService("Players")
-	local LocalPlayer = Players.LocalPlayer
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
+-- Define LocalPlayer
+local LocalPlayer = Players.LocalPlayer
+
+-- Get or create GameClient
+local GameClient
+if ReplicatedStorage:FindFirstChild("GameClient") then
+	GameClient = require(ReplicatedStorage:WaitForChild("GameClient"))
+else
+	-- Create a basic GameClient if it doesn't exist
+	GameClient = {}
+	GameClient.UI = {}
+	GameClient.RemoteEvents = {}
+
+	-- Basic functions that might be called
+	function GameClient:GetPlayerData()
+		return nil -- Return nil if no data system exists
+	end
+
+	function GameClient:ShowNotification(title, message, type)
+		print("[" .. title .. "] " .. message)
+	end
+end
+
+-- Safely require ItemConfig with error handling
+local ItemConfig = nil
+pcall(function()
+	local configFolder = ReplicatedStorage:FindFirstChild("Config")
+	if configFolder then
+		local itemConfigModule = configFolder:FindFirstChild("ItemConfig")
+		if itemConfigModule then
+			ItemConfig = require(itemConfigModule)
+		end
+	end
+end)
+
+-- If ItemConfig doesn't exist, create a basic fallback
+if not ItemConfig then
+	ItemConfig = {
+		Seeds = {
+			carrot_seeds = {name = "Carrot Seeds", growTime = 300},
+			corn_seeds = {name = "Corn Seeds", growTime = 600},
+			strawberry_seeds = {name = "Strawberry Seeds", growTime = 450},
+			golden_seeds = {name = "Golden Seeds", growTime = 900}
+		}
+	}
+	warn("ItemConfig not found, using fallback configuration")
+end
+
+function GameClient:SetupFarmingInterface()
 	-- Farming state
 	self.FarmingState = {
 		selectedSeed = nil,
 		isPlantingMode = false,
 		seedInventory = {}
 	}
+
+	-- Initialize UI table if it doesn't exist
+	if not self.UI then
+		self.UI = {}
+	end
 
 	-- Create farming UI
 	self:CreateFarmingUI()
@@ -381,7 +431,7 @@ function GameClient:ShowPlantingHint(show)
 	hintCorner.Parent = hintLabel
 
 	-- Pulsing effect
-	local pulseTween = game:GetService("TweenService"):Create(hintLabel,
+	local pulseTween = TweenService:Create(hintLabel,
 		TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 		{BackgroundColor3 = Color3.fromRGB(60, 80, 40)}
 	)
@@ -407,7 +457,6 @@ function GameClient:SetupFarmingInputs()
 	end)
 
 	-- Keyboard shortcuts
-	local UserInputService = game:GetService("UserInputService")
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then return end
 
@@ -468,7 +517,7 @@ end
 
 -- Plant seed in plot
 function GameClient:PlantSeedInPlot(plotModel, seedType)
-	if not self.RemoteEvents.PlantSeed then
+	if not self.RemoteEvents or not self.RemoteEvents.PlantSeed then
 		warn("GameClient: PlantSeed remote event not found")
 		return
 	end
@@ -488,7 +537,7 @@ end
 
 -- Harvest crop from plot
 function GameClient:HarvestPlot(plotModel)
-	if not self.RemoteEvents.HarvestCrop then
+	if not self.RemoteEvents or not self.RemoteEvents.HarvestCrop then
 		warn("GameClient: HarvestCrop remote event not found")
 		return
 	end
@@ -524,7 +573,7 @@ function GameClient:CreatePlantingEffect(plotModel)
 		sparkle.Parent = workspace
 
 		-- Animate sparkle
-		local tween = game:GetService("TweenService"):Create(sparkle,
+		local tween = TweenService:Create(sparkle,
 			TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
 				Position = sparkle.Position + Vector3.new(0, 3, 0),
@@ -566,7 +615,7 @@ function GameClient:CreateHarvestEffect(plotModel)
 		sparkle.Parent = workspace
 
 		-- Animate sparkle
-		local tween = game:GetService("TweenService"):Create(sparkle,
+		local tween = TweenService:Create(sparkle,
 			TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
 				Position = sparkle.Position + Vector3.new(0, 5, 0),
@@ -594,11 +643,11 @@ function GameClient:PlayFarmingSound(soundType)
 	if soundType == "plant" then
 		sound.SoundId = "rbxasset://sounds/impact_water.mp3"
 		sound.Volume = 0.3
-	--	sound.Pitch = 1.2
+		--	sound.Pitch = 1.2
 	elseif soundType == "harvest" then
 		sound.SoundId = "rbxasset://sounds/electronicpingsharp.wav"
 		sound.Volume = 0.5
-	--	sound.Pitch = 0.8
+		--	sound.Pitch = 0.8
 	end
 
 	sound.Parent = character.HumanoidRootPart
@@ -612,6 +661,17 @@ end
 
 -- Initialize farming system when player joins
 function GameClient:InitializeFarmingSystem()
+	-- Initialize required tables
+	if not self.FarmingState then
+		self.FarmingState = {}
+	end
+	if not self.UI then
+		self.UI = {}
+	end
+	if not self.RemoteEvents then
+		self.RemoteEvents = {}
+	end
+
 	-- Wait for character and game to load
 	spawn(function()
 		wait(3)
@@ -626,13 +686,22 @@ function GameClient:InitializeFarmingSystem()
 	end)
 end
 
--- Call this in your main GameClient initialization
--- Add this line to your GameClient:Initialize() function:
--- self:InitializeFarmingSystem()
+-- Initialize the farming system
+if GameClient then
+	GameClient:InitializeFarmingSystem()
+end
 
 -- Make farming system available for other scripts
 _G.FarmingClient = {
-	GetSelectedSeed = function() return self.FarmingState.selectedSeed end,
-	IsPlantingMode = function() return self.FarmingState.isPlantingMode end,
-	OpenFarmingUI = function() return self:ToggleFarmingUI() end
+	GetSelectedSeed = function() 
+		return GameClient.FarmingState and GameClient.FarmingState.selectedSeed or nil
+	end,
+	IsPlantingMode = function() 
+		return GameClient.FarmingState and GameClient.FarmingState.isPlantingMode or false
+	end,
+	OpenFarmingUI = function() 
+		if GameClient.ToggleFarmingUI then
+			return GameClient:ToggleFarmingUI() 
+		end
+	end
 }

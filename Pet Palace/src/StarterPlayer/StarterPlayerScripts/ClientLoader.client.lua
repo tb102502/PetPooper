@@ -1,14 +1,11 @@
 --[[
-    ClientLoader.client.lua - SINGLE CLIENT LOADER
+    ClientLoader.client.lua - FIXED VERSION
     Place in: StarterPlayerScripts/ClientLoader.client.lua
     
-    This replaces ALL individual client loaders:
-    - PetSystemClientLoader
-    - ShopSystemClientLoader
-    - UIControllerLoader
-    - Various other client scripts
-    
-    Single point of initialization for all client systems
+    FIXES:
+    1. ✅ Fixed syntax error at line 283
+    2. ✅ Proper function structure
+    3. ✅ Better error handling
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,8 +13,11 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local LocalPlayer = Players.LocalPlayer
-local errorHandlingConnections = {} -- FIXED: Store connections for cleanup
+local errorHandlingConnections = {}
+
 print("=== Pet Palace Client Loader Starting ===")
+
+-- FIXED: Proper error handling setup
 local function SetupErrorHandling()
 	-- Handle character respawning
 	local charConnection = LocalPlayer.CharacterAdded:Connect(function(character)
@@ -26,7 +26,6 @@ local function SetupErrorHandling()
 		-- Small delay to ensure character is fully loaded
 		spawn(function()
 			wait(1)
-			-- FIXED: Add type checking
 			if _G.GameClient and type(_G.GameClient) == "table" and type(_G.GameClient.HandleCharacterRespawn) == "function" then
 				_G.GameClient:HandleCharacterRespawn(character)
 			end
@@ -38,7 +37,6 @@ local function SetupErrorHandling()
 
 	-- Handle disconnection/reconnection scenarios
 	local heartbeatConnection = RunService.Heartbeat:Connect(function()
-		-- FIXED: Add proper type checking
 		if not _G.GameClient or type(_G.GameClient) ~= "table" then
 			warn("ClientLoader: GameClient lost from global scope!")
 			heartbeatConnection:Disconnect()
@@ -68,6 +66,7 @@ local function CleanupErrorHandling()
 		end
 	end
 end
+
 -- Wait for character to load
 if not LocalPlayer.Character then
 	LocalPlayer.CharacterAdded:Wait()
@@ -106,7 +105,6 @@ end
 local function LoadGameClient()
 	print("ClientLoader: Loading GameClient module...")
 
-	-- FIXED: Add timeout and better error handling
 	local gameClientModule = ReplicatedStorage:WaitForChild("GameClient", 30)
 	if not gameClientModule then
 		error("ClientLoader: GameClient module not found in ReplicatedStorage after 30 seconds")
@@ -141,7 +139,7 @@ local function LoadGameClient()
 end
 
 -- Initialize the client system
-local function InitializeClient()
+function InitializeClient()
 	print("ClientLoader: Starting client initialization...")
 
 	-- Wait for server to be ready
@@ -174,7 +172,6 @@ local function InitializeClient()
 
 	return GameClient
 end
-
 
 -- Setup development tools (studio only)
 local function SetupDevTools()
@@ -258,30 +255,35 @@ local function CreateHelpSystem()
 	end)
 end
 
--- Main initialization function
-local GameClient = InitializeClient()
+-- FIXED: Main initialization function with proper structure
+local function Main()
+	print("ClientLoader: Starting main initialization sequence...")
 
--- FIXED: Enhanced validation
-if not _G.GameClient then
-	error("CRITICAL: GameClient not available in global scope after initialization")
+	-- Initialize all systems
+	local GameClient = InitializeClient()
+
+	-- FIXED: Enhanced validation
+	if not _G.GameClient then
+		error("CRITICAL: GameClient not available in global scope after initialization")
+	end
+
+	if type(_G.GameClient) ~= "table" then
+		error("CRITICAL: GameClient is not a table: " .. type(_G.GameClient))
+	end
+
+	-- Setup additional systems
+	SetupErrorHandling()
+	SetupDevTools()
+	SetupClientMonitoring()
+	CreateHelpSystem()
+
+	print("=== Pet Palace Client Loader Complete ===")
+	print("Client is ready! GameClient available globally as _G.GameClient")
+
+	return GameClient
 end
 
-if type(_G.GameClient) ~= "table" then
-	error("CRITICAL: GameClient is not a table: " .. type(_G.GameClient))
-end
-
--- Setup additional systems
-SetupErrorHandling()
-SetupDevTools()
-SetupClientMonitoring()
-CreateHelpSystem()
-
-print("=== Pet Palace Client Loader Complete ===")
-print("Client is ready! GameClient available globally as _G.GameClient")
-
-return GameClient
-end
- with comprehensive error handling
+-- FIXED: Run with comprehensive error handling
 local success, result = pcall(Main)
 
 if not success then

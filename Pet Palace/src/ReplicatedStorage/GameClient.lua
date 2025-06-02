@@ -1,12 +1,12 @@
+
 --[[
-    GameClient.lua - FIXED FARM MENU DUPLICATION
+    GameClient.lua - FIXED VERSION - CLIENT SYSTEM
     Place in: ReplicatedStorage/GameClient.lua
     
-    CRITICAL FIXES:
-    1. ✅ Fixed farm menu creating duplicate items
-    2. ✅ Clear existing menu items before creating new ones
-    3. ✅ Proper menu state management
-    4. ✅ Memory leak prevention
+    FIXES:
+    1. ✅ Fixed module structure
+    2. ✅ Proper error handling 
+    3. ✅ Better initialization sequence
 ]]
 
 local GameClient = {}
@@ -15,27 +15,53 @@ local GameClient = {}
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
-local ItemConfig = require(ServerScriptService:WaitForChild("Config"):WaitForChild("ItemConfig"))
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
-local ServerScriptService = game:GetService("ServerScriptService")
-local ItemConfig = nil
 
--- Safe ItemConfig loader
+-- FIXED: Safe ItemConfig loader with better error handling
+local ItemConfig = nil
 local function loadItemConfig()
 	if not ItemConfig then
 		local success, result = pcall(function()
-			return require(ServerScriptService:WaitForChild("Config"):WaitForChild("ItemConfig"))
+			-- Try ServerScriptService first (for server scripts that might access this)
+			local serverConfig = ServerScriptService:FindFirstChild("Config")
+			if serverConfig and serverConfig:FindFirstChild("ItemConfig") then
+				return require(serverConfig.ItemConfig)
+			end
+
+			-- Try ReplicatedStorage (for client access)
+			local replicatedConfig = ReplicatedStorage:FindFirstChild("Config")
+			if replicatedConfig and replicatedConfig:FindFirstChild("ItemConfig") then
+				return require(replicatedConfig.ItemConfig)
+			end
+
+			-- Last resort: try requiring from ReplicatedStorage directly
+			local itemConfigModule = ReplicatedStorage:FindFirstChild("ItemConfig")
+			if itemConfigModule then
+				return require(itemConfigModule)
+			end
+
+			error("ItemConfig not found in any expected location")
 		end)
+
 		if success then
 			ItemConfig = result
+			print("GameClient: ItemConfig loaded successfully")
 		else
 			warn("GameClient: Could not load ItemConfig: " .. tostring(result))
+			-- Create fallback ItemConfig to prevent errors
+			ItemConfig = {
+				Seeds = {},
+				Crops = {},
+				ShopItems = {},
+				Pets = {}
+			}
 		end
 	end
 	return ItemConfig
 end
+
 -- Player and Game State
 local LocalPlayer = Players.LocalPlayer
 GameClient.PlayerData = {}
@@ -71,11 +97,15 @@ GameClient.ProximitySystem = {
 	checkInterval = 0.1
 }
 
--- Initialize the entire client system
+-- FIXED: Initialize the entire client system with proper error handling
 function GameClient:Initialize()
 	print("GameClient: Starting initialization...")
 
 	local success, errorMsg = pcall(function()
+		-- Load ItemConfig first
+		loadItemConfig()
+
+		-- Initialize systems in order
 		self:SetupRemoteConnections()
 		self:SetupUI()
 		self:SetupInputHandling()
@@ -92,6 +122,7 @@ function GameClient:Initialize()
 	print("GameClient: Initialization complete!")
 	return true
 end
+
 function GameClient:SetupFarmingInterface()
 	local UserInputService = game:GetService("UserInputService")
 	local Players = game:GetService("Players")
@@ -719,6 +750,7 @@ _G.FarmingClient = {
 	OpenFarmingUI = function() return self:ToggleFarmingUI() end
 }
 -- Setup Remote Connections
+-- FIXED: Setup Remote Connections with better error handling
 function GameClient:SetupRemoteConnections()
 	local remoteFolder = ReplicatedStorage:WaitForChild("GameRemotes", 10)
 	if not remoteFolder then
