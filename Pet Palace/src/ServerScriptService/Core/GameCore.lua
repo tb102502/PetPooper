@@ -541,6 +541,7 @@ function GameCore:SetupRemoteEvents()
 		remoteFolder.Parent = ReplicatedStorage
 	end
 
+
 	local remoteEvents = {
 		-- Livestock System
 		"CollectMilk", "FeedPig",
@@ -549,18 +550,18 @@ function GameCore:SetupRemoteEvents()
 		"PurchaseItem", "ItemPurchased", "CurrencyUpdated",
 
 		-- Farming System
-		"PlantSeed", "HarvestCrop", "SellCrop",
+		"PlantSeed", "HarvestCrop", "SellCrop", "SellMilk", -- Added SellMilk
 
 		-- General
 		"PlayerDataUpdated", "ShowNotification",
-		
-		-- Chicken System Events
-		"PurchaseChicken", "FeedChicken", "CollectEgg",
+
+		-- Chicken System Events (FIXED - Added missing events)
+		"PurchaseChicken", "FeedChicken", "CollectEgg", "ChickenPlaced", "ChickenMoved",
+		"FeedAllChickens", "FeedChickensWithType", -- Added these missing events
 
 		-- Pest Control Events  
 		"UsePesticide", "ChickenPlaced", "ChickenMoved"
 	}
-
 	local remoteFunctions = {
 		"GetPlayerData", "GetShopItems", "GetFarmingData"
 	}
@@ -675,9 +676,80 @@ function GameCore:SetupEventHandlers()
 			return ItemConfig.ShopItems
 		end
 	end
+	-- Chicken Feeding System Events (ADDED)
+	if self.RemoteEvents.FeedAllChickens then
+		self.RemoteEvents.FeedAllChickens.OnServerEvent:Connect(function(player)
+			pcall(function()
+				self:HandleFeedAllChickens(player)
+			end)
+		end)
+	end
+
+	if self.RemoteEvents.FeedChickensWithType then
+		self.RemoteEvents.FeedChickensWithType.OnServerEvent:Connect(function(player, feedType)
+			pcall(function()
+				self:HandleFeedChickensWithType(player, feedType)
+			end)
+		end)
+	end
+
+	-- Milk Selling Event (ADDED)
+	if self.RemoteEvents.SellMilk then
+		self.RemoteEvents.SellMilk.OnServerEvent:Connect(function(player, amount)
+			pcall(function()
+				self:SellMilk(player, amount or 1)
+			end)
+		end)
+	end
 
 	print("GameCore: Event handlers setup complete")
 end
+
+function GameCore:SellMilk(player, amount)
+	amount = amount or 1
+	local playerData = self:GetPlayerData(player)
+	if not playerData or not playerData.livestock or not playerData.livestock.inventory then
+		self:SendNotification(player, "No Milk", "You don't have any milk to sell!", "error")
+		return false
+	end
+
+	local milkCount = playerData.livestock.inventory.fresh_milk or 0
+	if milkCount < amount then
+		self:SendNotification(player, "Not Enough Milk", 
+			"You only have " .. milkCount .. " milk!", "error")
+		return false
+	end
+
+	-- Get milk price (better than old direct coin system)
+	local milkPrice = 15 -- 15 coins per milk (was 10 coins direct)
+
+	-- Calculate total earnings
+	local totalEarnings = milkPrice * amount
+
+	-- Process sale
+	playerData.livestock.inventory.fresh_milk = playerData.livestock.inventory.fresh_milk - amount
+	playerData.coins = (playerData.coins or 0) + totalEarnings
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.milkSold = (playerData.stats.milkSold or 0) + amount
+	playerData.stats.coinsEarned = (playerData.stats.coinsEarned or 0) + totalEarnings
+
+	-- Save and update
+	self:UpdatePlayerLeaderstats(player)
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	self:SendNotification(player, "Milk Sold!", 
+		"Sold " .. amount .. " milk for " .. totalEarnings .. " coins!", "success")
+
+	print("GameCore: " .. player.Name .. " sold " .. amount .. " milk for " .. totalEarnings .. " coins")
+	return true
+end
+
 function GameCore:SetupPestChickenEventHandlers()
 	print("GameCore: Setting up pest and chicken event handlers...")
 
@@ -747,84 +819,48 @@ function GameCore:InitializeLivestockSystem()
 
 	print("GameCore: Livestock system initialized")
 end
-function GameCore:GetDefaultPlayerData()
-	return {
-		-- Core Currency
-		coins = 100,
-		farmTokens = 0,
+function GameCore:LoadPlayerData(player)
+	local defaultData = self:GetDefaultPlayerData()
+	local loadedData = defaultData
 
-		-- Progression
-		upgrades = {},
-		purchaseHistory = {},
+	if self.PlayerDataStore then
+		local success, data = pcall(function()
+			return self.PlayerDataStore:GetAsync("Player_" .. player.UserId)
+		end)
 
-		-- Farming System (UNIFIED)
-		farming = {
-			plots = 0,
-			inventory = {},
-			activeCrops = {}, -- Track growing crops
-			harvestHistory = {}
-		},
+		if success and data then
+			-- Deep merge to ensure all fields exist
+			loadedData = self:DeepMerge(defaultData, data)
 
-		-- Livestock System (UNIFIED)
-		livestock = {
-			cow = {
-				lastMilkCollection = 0,
-				totalMilkCollected = 0
-			},
-			pig = {
-				size = 1.0,
-				cropPoints = 0,
-				transformationCount = 0,
-				totalFed = 0,
-				lastFeedTime = 0
-			}
-		},
+			-- MIGRATION: Convert old milk system to new system
+			if not loadedData.livestock.inventory then
+				loadedData.livestock.inventory = {fresh_milk = 0}
+			end
+			if not loadedData.stats.milkSold then
+				loadedData.stats.milkSold = 0
+			end
 
-		-- NEW: Pest & Chicken System (UNIFIED)
-		defense = {
-			chickens = {
-				owned = {},
-				deployed = {},
-				feed = {
-					basic_feed = 0,
-					premium_feed = 0,
-					grain_feed = 0
-				}
-			},
-			pestControl = {
-				organic_pesticide = 0,
-				pest_detector = false,
-				pestsEliminated = 0
-			},
-			roofs = {} -- Roof protection systems
-		},
+			print("GameCore: Loaded existing data for " .. player.Name)
+		else
+			print("GameCore: Using default data for " .. player.Name)
+		end
+	end
 
-		-- Statistics (COMPREHENSIVE)
-		stats = {
-			-- Existing
-			milkCollected = 0,
-			coinsEarned = 100,
-			cropsHarvested = 0,
-			pigFed = 0,
-			megaTransformations = 0,
-			-- NEW
-			seedsPlanted = 0,
-			pestsEncountered = 0,
-			pestsEliminated = 0,
-			chickensDeployed = 0,
-			roofsBuilt = 0,
-			farmTokensEarned = 0
-		},
+	self.PlayerData[player.UserId] = loadedData
+	self:InitializePlayerSystems(player, loadedData)
+	self:UpdatePlayerLeaderstats(player)
 
-		-- Session Data
-		firstJoin = os.time(),
-		lastSave = os.time(),
-		sessionData = {
-			loginStreak = 1,
-			dailyBonusClaimed = false
-		}
-	}
+	return loadedData
 end
+
+print("GameCore: ✅ Chicken feeding fixes and milk storage system implemented!")
+print("Changes:")
+print("  🐔 Fixed missing chicken feeding remote events")
+print("  🥛 Milk collection now gives milk items instead of direct coins")
+print("  💰 Players can sell milk at the shop for better prices")
+print("  📊 Updated stats tracking for milk sold")
+print("  🔄 Migration system for existing players")
+
 function GameCore:InitializePlayerSystems(player, playerData)
 	print("GameCore: Initializing player systems for " .. player.Name)
 
@@ -1002,7 +1038,7 @@ function GameCore:SetupCowIndicator()
 	print("GameCore: Cow indicator and click detector setup complete")
 end
 
--- Handle milk collection (updated to return success status for sound system)
+
 function GameCore:HandleMilkCollection(player)
 	local playerData = self:GetPlayerData(player)
 	if not playerData then return false end
@@ -1016,20 +1052,29 @@ function GameCore:HandleMilkCollection(player)
 		local timeLeft = cooldown - (currentTime - lastCollection)
 		self:SendNotification(player, "Cow Not Ready", 
 			"Cow needs " .. math.ceil(timeLeft) .. " more seconds to produce milk!", "warning")
-		return false -- Return false for failed collection
+		return false
 	end
 
-	-- Collect milk
-	local milkValue = ItemConfig.GetMilkValue(playerData.upgrades or {})
-	playerData.coins = (playerData.coins or 0) + milkValue
+	-- NEW: Collect milk as items instead of direct coins
+	local milkAmount = self:GetMilkYield(playerData.upgrades or {}) -- Get yield instead of value
+
+	-- Initialize livestock inventory if needed
+	if not playerData.livestock then
+		playerData.livestock = {inventory = {}}
+	end
+	if not playerData.livestock.inventory then
+		playerData.livestock.inventory = {}
+	end
+
+	-- Add milk to inventory
+	playerData.livestock.inventory.fresh_milk = (playerData.livestock.inventory.fresh_milk or 0) + milkAmount
 
 	-- Update cooldown
 	self.Systems.Livestock.CowCooldowns[player.UserId] = currentTime
 
 	-- Update stats
 	playerData.stats = playerData.stats or {}
-	playerData.stats.milkCollected = (playerData.stats.milkCollected or 0) + 1
-	playerData.stats.coinsEarned = (playerData.stats.coinsEarned or 0) + milkValue
+	playerData.stats.milkCollected = (playerData.stats.milkCollected or 0) + milkAmount
 
 	-- Save and notify
 	self:UpdatePlayerLeaderstats(player)
@@ -1040,11 +1085,34 @@ function GameCore:HandleMilkCollection(player)
 	end
 
 	self:SendNotification(player, "Milk Collected!", 
-		"🐄 MOO! Collected milk for " .. milkValue .. " coins!", "success")
+		"🐄 MOO! Collected " .. milkAmount .. " fresh milk! Sell it at the shop for coins.", "success")
 
-	print("GameCore: " .. player.Name .. " collected milk for " .. milkValue .. " coins")
-	return true -- Return true for successful collection
+	print("GameCore: " .. player.Name .. " collected " .. milkAmount .. " milk (stored in inventory)")
+	return true
 end
+
+-- ADD new milk yield calculation function:
+
+function GameCore:GetMilkYield(playerUpgrades)
+	local baseYield = 1 -- 1 milk per collection
+	local bonus = 0
+
+	-- Upgrades can increase milk yield
+	if playerUpgrades.milk_efficiency_1 then
+		bonus = bonus + 1 -- +1 milk per collection
+	end
+
+	if playerUpgrades.milk_efficiency_2 then
+		bonus = bonus + 2 -- Additional +2 milk per collection
+	end
+
+	if playerUpgrades.mega_milk_boost then
+		bonus = bonus + 5 -- Mega upgrade gives +5 milk
+	end
+
+	return baseYield + bonus
+end
+
 
 -- Handle pig feeding
 function GameCore:HandlePigFeeding(player, cropId)
@@ -1831,7 +1899,8 @@ function GameCore:HandleFeedAllChickens(player)
 	self:FeedAllChickensWithType(player, bestFeed.type)
 end
 
--- Handle feeding chickens with specific feed type
+-- REPLACE the existing HandleFeedChickensWithType function:
+
 function GameCore:HandleFeedChickensWithType(player, feedType)
 	print("GameCore: Feed chickens with " .. feedType .. " request from " .. player.Name)
 
@@ -1848,7 +1917,7 @@ function GameCore:HandleFeedChickensWithType(player, feedType)
 	-- Feed all chickens
 	self:FeedAllChickensWithType(player, feedType)
 end
-
+	-- Feed all chickens
 -- Feed all chickens with specific type
 function GameCore:FeedAllChickensWithType(player, feedType)
 	local playerData = self:GetPlayerData(player)

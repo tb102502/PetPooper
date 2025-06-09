@@ -760,6 +760,18 @@ function GameClient:RefreshStatsMenu()
 	}, Color3.fromRGB(60, 120, 60), 1)
 	currencyFrame.Parent = contentArea
 
+	-- Livestock Stats (ADDED)
+	if playerData and playerData.livestock then
+		local livestockStats = {
+			{"Milk Collected", playerData.stats and playerData.stats.milkCollected or 0},
+			{"Milk Sold", playerData.stats and playerData.stats.milkSold or 0}, -- ADDED
+			{"Fresh Milk in Storage", playerData.livestock.inventory and playerData.livestock.inventory.fresh_milk or 0}
+		}
+
+		local livestockFrame = self:CreateStatsSection("🥛 Livestock Stats", livestockStats, Color3.fromRGB(60, 100, 150), 2)
+		livestockFrame.Parent = contentArea
+	end
+
 	-- Farming Stats  
 	if playerData and playerData.farming then
 		local farmingStats = {
@@ -768,7 +780,7 @@ function GameClient:RefreshStatsMenu()
 			{"Crops in Inventory", self:CountCrops(playerData.farming.inventory or {})}
 		}
 
-		local farmingFrame = self:CreateStatsSection("🌾 Farming Stats", farmingStats, Color3.fromRGB(80, 140, 60), 2)
+		local farmingFrame = self:CreateStatsSection("🌾 Farming Stats", farmingStats, Color3.fromRGB(80, 140, 60), 3)
 		farmingFrame.Parent = contentArea
 	end
 
@@ -776,7 +788,6 @@ function GameClient:RefreshStatsMenu()
 	local gameStats = {}
 	if playerData and playerData.stats then
 		gameStats = {
-			{"Milk Collected", playerData.stats.milkCollected or 0},
 			{"Coins Earned", playerData.stats.coinsEarned or 0},
 			{"Crops Harvested", playerData.stats.cropsHarvested or 0},
 			{"Pig Fed Times", playerData.stats.pigFed or 0}
@@ -787,7 +798,7 @@ function GameClient:RefreshStatsMenu()
 		}
 	end
 
-	local gameFrame = self:CreateStatsSection("📊 Game Stats", gameStats, Color3.fromRGB(60, 80, 140), 3)
+	local gameFrame = self:CreateStatsSection("📊 Game Stats", gameStats, Color3.fromRGB(60, 80, 140), 4)
 	gameFrame.Parent = contentArea
 
 	-- Update canvas size
@@ -798,7 +809,6 @@ function GameClient:RefreshStatsMenu()
 		end
 	end)
 end
-
 function GameClient:CreateStatsSection(title, stats, color, layoutOrder)
 	local sectionFrame = Instance.new("Frame")
 	sectionFrame.Name = title:gsub(" ", "") .. "Section"
@@ -1716,6 +1726,7 @@ function GameClient:RefreshFarmMenu()
 end
 
 -- NEW: Complete Inventory Section showing ALL items
+
 function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 	local playerData = self:GetPlayerData()
 
@@ -1758,6 +1769,7 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 	local itemCategories = {
 		{name = "🌱 Seeds", items = {}, color = Color3.fromRGB(60, 120, 60)},
 		{name = "🌾 Crops", items = {}, color = Color3.fromRGB(100, 150, 60)},
+		{name = "🥛 Livestock Products", items = {}, color = Color3.fromRGB(60, 100, 150)}, -- ADDED
 		{name = "🌾 Chicken Feed", items = {}, color = Color3.fromRGB(150, 120, 60)},
 		{name = "🧪 Pest Control", items = {}, color = Color3.fromRGB(120, 80, 80)},
 		{name = "🥚 Other Items", items = {}, color = Color3.fromRGB(80, 80, 120)}
@@ -1770,15 +1782,24 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 				if itemId:find("_seeds") then
 					table.insert(itemCategories[1].items, {id = itemId, quantity = quantity})
 				elseif itemId:find("_feed") then
-					table.insert(itemCategories[3].items, {id = itemId, quantity = quantity})
-				elseif itemId == "organic_pesticide" or itemId == "super_pesticide" then
 					table.insert(itemCategories[4].items, {id = itemId, quantity = quantity})
-				elseif itemId:find("egg") then
+				elseif itemId == "organic_pesticide" or itemId == "super_pesticide" then
 					table.insert(itemCategories[5].items, {id = itemId, quantity = quantity})
+				elseif itemId:find("egg") then
+					table.insert(itemCategories[6].items, {id = itemId, quantity = quantity})
 				else
 					-- Regular crops
 					table.insert(itemCategories[2].items, {id = itemId, quantity = quantity})
 				end
+			end
+		end
+	end
+
+	-- ADDED: Categorize items from livestock inventory
+	if playerData.livestock and playerData.livestock.inventory then
+		for itemId, quantity in pairs(playerData.livestock.inventory) do
+			if quantity > 0 then
+				table.insert(itemCategories[3].items, {id = itemId, quantity = quantity})
 			end
 		end
 	end
@@ -1788,7 +1809,7 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 		if playerData.defense.chickens and playerData.defense.chickens.feed then
 			for feedType, quantity in pairs(playerData.defense.chickens.feed) do
 				if quantity > 0 then
-					table.insert(itemCategories[3].items, {id = feedType, quantity = quantity})
+					table.insert(itemCategories[4].items, {id = feedType, quantity = quantity})
 				end
 			end
 		end
@@ -1796,7 +1817,7 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 		if playerData.defense.pestControl then
 			for toolType, quantity in pairs(playerData.defense.pestControl) do
 				if type(quantity) == "number" and quantity > 0 then
-					table.insert(itemCategories[4].items, {id = toolType, quantity = quantity})
+					table.insert(itemCategories[5].items, {id = toolType, quantity = quantity})
 				end
 			end
 		end
@@ -1829,37 +1850,8 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 	end)
 end
 
--- Create inventory category display
-function GameClient:CreateInventoryCategory(parent, category, layoutOrder)
-	-- Category header
-	local categoryHeader = Instance.new("Frame")
-	categoryHeader.Name = category.name:gsub(" ", "")
-	categoryHeader.Size = UDim2.new(1, 0, 0, 30)
-	categoryHeader.BackgroundColor3 = category.color
-	categoryHeader.BorderSizePixel = 0
-	categoryHeader.LayoutOrder = layoutOrder * 10
-	categoryHeader.Parent = parent
+-- UPDATE CreateInventoryItem to handle milk selling:
 
-	local headerCorner = Instance.new("UICorner")
-	headerCorner.CornerRadius = UDim.new(0.1, 0)
-	headerCorner.Parent = categoryHeader
-
-	local headerLabel = Instance.new("TextLabel")
-	headerLabel.Size = UDim2.new(1, 0, 1, 0)
-	headerLabel.BackgroundTransparency = 1
-	headerLabel.Text = category.name .. " (" .. #category.items .. " types)"
-	headerLabel.TextColor3 = Color3.new(1, 1, 1)
-	headerLabel.TextScaled = true
-	headerLabel.Font = Enum.Font.GothamBold
-	headerLabel.Parent = categoryHeader
-
-	-- Category items
-	for i, itemData in ipairs(category.items) do
-		self:CreateInventoryItem(parent, itemData, layoutOrder * 10 + i)
-	end
-end
-
--- Create individual inventory item
 function GameClient:CreateInventoryItem(parent, itemData, layoutOrder)
 	local itemFrame = Instance.new("Frame")
 	itemFrame.Name = itemData.id .. "_Item"
@@ -1919,6 +1911,16 @@ function GameClient:CreateInventoryItem(parent, itemData, layoutOrder)
 			self:ShowChickenFeedingInterface(itemData.id)
 		end)
 
+	elseif itemData.id == "fresh_milk" or itemData.id == "processed_milk" or itemData.id == "cheese" then
+		-- ADDED: Sell milk products button
+		actionButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
+		actionButton.Text = "💰 Sell"
+		actionButton.TextColor3 = Color3.new(1, 1, 1)
+
+		actionButton.MouseButton1Click:Connect(function()
+			self:SellMilkProduct(itemData.id, 1)
+		end)
+
 	elseif itemData.id == "organic_pesticide" or itemData.id == "super_pesticide" then
 		-- Use pesticide button
 		actionButton.BackgroundColor3 = Color3.fromRGB(150, 100, 100)
@@ -1950,6 +1952,20 @@ function GameClient:CreateInventoryItem(parent, itemData, layoutOrder)
 		actionButton.MouseButton1Click:Connect(function()
 			self:ShowNotification("Seed Info", "Go to your farm plots to plant these seeds!", "info")
 		end)
+	end
+end
+
+-- ADD new milk selling function:
+
+function GameClient:SellMilkProduct(milkType, amount)
+	print("GameClient: Selling " .. amount .. "x " .. milkType)
+
+	if self.RemoteEvents.SellMilk then
+		self.RemoteEvents.SellMilk:FireServer(amount)
+		self:ShowNotification("Selling Milk", "Selling " .. amount .. "x " .. self:GetItemDisplayName(milkType) .. "!", "info")
+	else
+		warn("GameClient: SellMilk remote event not available")
+		self:ShowNotification("Error", "Milk selling system not available!", "error")
 	end
 end
 
@@ -2261,6 +2277,11 @@ function GameClient:GetItemIcon(itemId)
 		strawberry = "🍓",
 		golden_fruit = "✨",
 
+		-- Livestock Products (ADDED)
+		fresh_milk = "🥛",
+		processed_milk = "🧈",
+		cheese = "🧀",
+
 		-- Feed
 		basic_feed = "🌾",
 		premium_feed = "⭐",
@@ -2278,7 +2299,6 @@ function GameClient:GetItemIcon(itemId)
 	}
 	return icons[itemId] or "📦"
 end
-
 -- Get item display name
 function GameClient:GetItemDisplayName(itemId)
 	local names = {
@@ -2293,6 +2313,11 @@ function GameClient:GetItemDisplayName(itemId)
 		corn = "Corn",
 		strawberry = "Strawberry",
 		golden_fruit = "Golden Fruit",
+
+		-- Livestock Products (ADDED)
+		fresh_milk = "Fresh Milk",
+		processed_milk = "Processed Milk",
+		cheese = "Artisan Cheese",
 
 		-- Feed
 		basic_feed = "Basic Chicken Feed",
@@ -4218,5 +4243,11 @@ print("Debug Commands:")
 print("  _G.TestFarm() - Open farm menu")
 print("  _G.TestStats() - Open stats menu")
 print("  _G.DebugGameClient() - Show system status")
-
+print("GameClient: ✅ Milk system UI updates applied!")
+print("Changes:")
+print("  🥛 Added livestock products inventory section")
+print("  💰 Milk selling buttons and functionality")
+print("  📊 Updated stats display with milk collection/selling")
+print("  🎨 New icons and display names for milk products")
+print("  🔄 Updated inventory categorization")
 return GameClient

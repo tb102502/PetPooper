@@ -179,9 +179,53 @@ ItemConfig.ChickenSystem = {
 			craftable = true,
 			recipe = {corn = 2, wheat = 1}
 		}
+	},
+
+	-- ========== MILK PRODUCTS ==========
+	fresh_milk = {
+		id = "fresh_milk",
+		name = "🥛 Fresh Milk",
+		type = "product",
+		category = "livestock", 
+		description = "Fresh milk from your cow. Nutritious and valuable!",
+		sellValue = 15, -- Better price than old direct system (was 10)
+		sellCurrency = "coins",
+		icon = "🥛",
+		stackable = true,
+		maxStack = 100,
+		source = "cow_milking"
+	},
+
+	processed_milk = {
+		id = "processed_milk",
+		name = "🧈 Processed Milk",
+		type = "product", 
+		category = "livestock",
+		description = "Processed milk products. Worth more than fresh milk!",
+		sellValue = 25,
+		sellCurrency = "coins",
+		icon = "🧈",
+		stackable = true,
+		maxStack = 50,
+		craftable = true,
+		recipe = {fresh_milk = 2} -- 2 fresh milk = 1 processed milk
+	},
+
+	cheese = {
+		id = "cheese",
+		name = "🧀 Artisan Cheese", 
+		type = "product",
+		category = "livestock",
+		description = "High-quality cheese made from fresh milk. Premium product!",
+		sellValue = 50,
+		sellCurrency = "coins", 
+		icon = "🧀",
+		stackable = true,
+		maxStack = 25,
+		craftable = true,
+		recipe = {fresh_milk = 5} -- 5 fresh milk = 1 cheese
 	}
 }
-
 -- ========== CURRENCY SYSTEM ==========
 
 ItemConfig.Currencies = {
@@ -527,44 +571,56 @@ ItemConfig.ShopItems = {
 	},
 
 	-- ========== LIVESTOCK UPGRADES ==========
+	-- ========== UPDATED LIVESTOCK UPGRADES ==========
+
+	-- UPDATE the existing milk upgrades to give milk yield instead of just value:
+
 	milk_efficiency_1 = {
 		id = "milk_efficiency_1",
-		name = "🥛 Faster Milking I",
+		name = "🥛 Enhanced Milking I",
 		type = "upgrade",
 		category = "farm",
 		price = 100,
 		currency = "coins",
-		description = "Reduce milk collection cooldown by 2 seconds.",
+		description = "Reduce milk collection cooldown by 2 seconds and +1 milk per collection.",
 		maxQuantity = 1,
 		icon = "🥛",
-		effects = { cooldownReduction = 2 }
+		effects = { 
+			cooldownReduction = 2,
+			milkYieldBonus = 1 -- ADDED
+		}
 	},
 
 	milk_efficiency_2 = {
 		id = "milk_efficiency_2",
-		name = "🥛 Faster Milking II",
+		name = "🥛 Enhanced Milking II",
 		type = "upgrade",
 		category = "farm",
 		price = 250,
 		currency = "coins",
-		description = "Reduce milk collection cooldown by 5 seconds total.",
+		description = "Reduce milk collection cooldown by 5 seconds total and +3 milk per collection.",
 		maxQuantity = 1,
 		requiresPurchase = "milk_efficiency_1",
 		icon = "🥛",
-		effects = { cooldownReduction = 3 }
+		effects = { 
+			cooldownReduction = 3,
+			milkYieldBonus = 2 -- ADDED (total +3 with first upgrade)
+		}
 	},
 
 	milk_value_boost = {
-		id = "milk_value_boost",
-		name = "💰 Milk Value Boost",
+		id = "milk_value_boost", 
+		name = "💰 Premium Milk Quality",
 		type = "upgrade",
 		category = "farm",
 		price = 300,
 		currency = "coins",
-		description = "Increase coins earned per milk collection by 5.",
+		description = "Increase milk sell value by 5 coins per milk.",
 		maxQuantity = 1,
 		icon = "💰",
-		effects = { milkValueBonus = 5 }
+		effects = { 
+			milkValueBonus = 5 -- Increases sell price from 15 to 20 coins
+		}
 	},
 
 	-- ========== CROP PRODUCTS (FOR REFERENCE) ==========
@@ -662,9 +718,61 @@ ItemConfig.ShopItems = {
 		icon = "🥚",
 		stackable = true,
 		maxStack = 25
+	},
+	-- ADD dairy building shop items (future expansion):
+
+	dairy_processor = {
+		id = "dairy_processor",
+		name = "🏭 Dairy Processor",
+		type = "building", 
+		category = "farm",
+		price = 1000,
+		currency = "coins",
+		description = "Process fresh milk into more valuable products!",
+		icon = "🏭",
+		maxQuantity = 1,
+		requiresPurchase = "farm_plot_starter",
+		buildingData = {
+			size = Vector3.new(8, 6, 8),
+			processingCapacity = 3 -- Can process 3 recipes simultaneously
+		}
+	},
+
+	cheese_maker = {
+		id = "cheese_maker", 
+		name = "🧀 Artisan Cheese Maker",
+		type = "building",
+		category = "farm", 
+		price = 2500,
+		currency = "coins",
+		description = "Create premium cheese from fresh milk for high profits!",
+		icon = "🧀",
+		maxQuantity = 1,
+		requiresPurchase = "dairy_processor",
+		buildingData = {
+			size = Vector3.new(6, 8, 6),
+			processingCapacity = 1,
+			specialtyProduct = "cheese"
+		}
 	}
 }
+ItemConfig.ProcessingRecipes = {
+	processed_milk = {
+		ingredients = {fresh_milk = 2},
+		result = "processed_milk",
+		quantity = 1,
+		processingTime = 300, -- 5 minutes
+		requiredBuilding = "dairy_processor"
+	},
 
+	cheese = {
+		ingredients = {fresh_milk = 5},
+		result = "cheese", 
+		quantity = 1,
+		processingTime = 1800, -- 30 minutes
+		requiredBuilding = "cheese_maker"
+	}
+}
 -- ========== UTILITY FUNCTIONS ==========
 
 -- Get item by ID
@@ -682,7 +790,6 @@ function ItemConfig.GetItemsByCategory(category)
 	end
 	return items
 end
-
 -- Get pest data
 function ItemConfig.GetPestData(pestType)
 	return ItemConfig.PestSystem.pestData[pestType]
@@ -762,23 +869,24 @@ function ItemConfig.GetMilkCooldown(playerUpgrades)
 end
 
 -- Calculate milk value based on upgrades
-function ItemConfig.GetMilkValue(playerUpgrades)
-	local baseValue = ItemConfig.CowSystem.milkValue
+function ItemConfig.GetMilkSellValue(playerUpgrades)
+	local baseValue = 15 -- Base sell value for fresh milk
 	local bonus = 0
 
-	if playerUpgrades.milk_value_boost then
+	if playerUpgrades and playerUpgrades.milk_value_boost then
 		local upgrade = ItemConfig.ShopItems.milk_value_boost
 		if upgrade and upgrade.effects and upgrade.effects.milkValueBonus then
 			bonus = bonus + upgrade.effects.milkValueBonus
 		end
 	end
 
-	if playerUpgrades.mega_milk_boost then
-		bonus = bonus + 15
+	if playerUpgrades and playerUpgrades.mega_milk_boost then
+		bonus = bonus + 10 -- Mega upgrade adds +10 to sell value
 	end
 
 	return baseValue + bonus
 end
+
 
 -- Check if player can buy an item
 function ItemConfig.CanPlayerBuy(itemId, playerData)
@@ -869,5 +977,16 @@ print("  🚜 Farm: farm_plot_starter, farm_plot_expansion, roofs, milk_upgrades
 print("  🐔 Defense: basic_chicken, guinea_fowl, rooster, chicken_feeds")
 print("  🧪 Tools: organic_pesticide, pest_detector, super_pesticide")
 print("  🏆 Premium: golden_seeds, mega_dome")
-
+print("ItemConfig: ✅ Added milk products and processing system!")
+print("New Items:")
+print("  🥛 Fresh Milk - Base product from cow milking")
+print("  🧈 Processed Milk - Crafted from 2 fresh milk")
+print("  🧀 Artisan Cheese - Crafted from 5 fresh milk")
+print("  🏭 Dairy Processor - Building for milk processing")
+print("  🧀 Cheese Maker - Specialized cheese production")
+print("")
+print("Updated Features:")
+print("  💰 Better milk sell prices (15 coins vs old 10)")
+print("  📈 Upgrades affect milk yield instead of just cooldown")
+print("  🏪 Processing recipes for value-added products")
 return ItemConfig
