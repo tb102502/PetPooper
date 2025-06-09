@@ -12,6 +12,88 @@
 
 local ItemConfig = {}
 
+
+ItemConfig.RaritySystem = {
+	rarities = {
+		common = {
+			name = "Common",
+			color = "normal", -- Uses crop's natural color
+			sizeMultiplier = 1.0,
+			valueMultiplier = 1.0,
+			dropChance = 0.70, -- 70% chance
+			effects = {},
+			tier = 1
+		},
+		uncommon = {
+			name = "Uncommon", 
+			color = Color3.fromRGB(192, 192, 192), -- Silver
+			sizeMultiplier = 1.1,
+			valueMultiplier = 1.2,
+			dropChance = 0.20, -- 20% chance
+			effects = {"silver_gleam"},
+			tier = 2
+		},
+		rare = {
+			name = "Rare",
+			color = Color3.fromRGB(255, 215, 0), -- Gold
+			sizeMultiplier = 1.2,
+			valueMultiplier = 1.5,
+			dropChance = 0.07, -- 7% chance
+			effects = {"golden_shine"},
+			tier = 3
+		},
+		epic = {
+			name = "Epic",
+			color = Color3.fromRGB(128, 0, 128), -- Purple
+			sizeMultiplier = 1.8,
+			valueMultiplier = 2.0,
+			dropChance = 0.025, -- 2.5% chance
+			effects = {"size_boost", "purple_aura"},
+			tier = 4
+		},
+		legendary = {
+			name = "Legendary",
+			color = Color3.fromRGB(255, 100, 100), -- Bright red
+			sizeMultiplier = 2.0,
+			valueMultiplier = 3.0,
+			dropChance = 0.005, -- 0.5% chance
+			effects = {"legendary_glow", "particle_effects"},
+			tier = 5
+		}
+	},
+
+	-- Special visual effects for different rarities
+	visualEffects = {
+		silver_gleam = {
+			material = "Enum.Material.Metal",
+			transparency = 0.1,
+			reflectance = 0.8
+		},
+		golden_shine = {
+			material = "Enum.Material.Neon",
+			transparency = 0.2,
+			brightness = 1.2
+		},
+		size_boost = {
+			scaleAnimation = true,
+			pulseSpeed = 2
+		},
+		purple_aura = {
+			auraColor = Color3.fromRGB(128, 0, 128),
+			auraSize = 1.5
+		},
+		legendary_glow = {
+			material = "Enum.Material.Neon",
+			glowIntensity = 2.0,
+			colorShift = true
+		},
+		particle_effects = {
+			sparkles = true,
+			fireEffect = true
+		}
+	}
+}
+
 -- ========== LIVESTOCK SYSTEM (EXISTING) ==========
 
 -- Cow milk collection system
@@ -246,6 +328,119 @@ ItemConfig.Currencies = {
 -- ========== SHOP ITEMS (COMPLETE AND FIXED) ==========
 
 ItemConfig.ShopItems = {
+	-- Mining Equipment
+	wooden_pickaxe = {
+		id = "wooden_pickaxe",
+		name = "⛏️ Wooden Pickaxe",
+		type = "tool",
+		category = "mining",
+		price = 50,
+		currency = "coins",
+		description = "Basic mining tool. Can mine copper ore.",
+		icon = "⛏️",
+		maxQuantity = 1,
+		toolData = {
+			power = 1,
+			durability = 50,
+			speed = 1.0,
+			canMine = {"copper_ore"}
+			}
+	},
+
+	cave_access_pass = {
+		id = "cave_access_pass",
+		name = "🕳️ Cave Access Pass",
+		type = "access",
+		category = "mining", 
+		price = 200,
+		currency = "coins",
+		description = "Grants access to the mysterious mining caves!",
+		icon = "🕳️",
+		maxQuantity = 1,
+		effects = {
+			unlockArea = "mining_caves"
+		}
+	},
+
+	-- Crafting Stations
+	workbench = {
+		id = "workbench",
+		name = "🔨 Workbench",
+		type = "building",
+		category = "crafting",
+		price = 500,
+		currency = "coins",
+		description = "Basic crafting station for making tools and equipment.",
+		icon = "🔨",
+		maxQuantity = 1,
+		buildingData = {
+			size = Vector3.new(6, 4, 6),
+			craftingType = "workbench"
+		}
+	},
+
+	forge = {
+		id = "forge",
+		name = "🔥 Forge",
+		type = "building", 
+		category = "crafting",
+		price = 2000,
+		currency = "coins",
+		description = "Advanced metalworking station for creating powerful tools.",
+		icon = "🔥",
+		maxQuantity = 1,
+		requiresPurchase = "workbench",
+		buildingData = {
+			size = Vector3.new(8, 6, 8),
+			craftingType = "forge"
+		}
+	},
+
+	mystical_altar = {
+		id = "mystical_altar",
+		name = "🔮 Mystical Altar",
+		type = "building",
+		category = "premium",
+		price = 100,
+		currency = "farmTokens",
+		description = "🏆 LEGENDARY CRAFTING STATION 🏆\nCraft the most powerful items in the game!",
+		icon = "🔮",
+		maxQuantity = 1,
+		requiresPurchase = "forge"
+	},
+
+	-- Crop Enhancement Items
+	super_fertilizer = {
+		id = "super_fertilizer",
+		name = "🌱 Super Fertilizer",
+		type = "enhancement",
+		category = "farming",
+		price = 100,
+		currency = "coins",
+		description = "Increases crop rarity chance by 20% for next harvest!",
+		icon = "🌱",
+		maxQuantity = 10,
+		effects = {
+			rarityBoost = 0.20,
+			duration = 600 -- 10 minutes
+		}
+	},
+
+	rarity_booster = {
+		id = "rarity_booster", 
+		name = "✨ Rarity Booster",
+		type = "enhancement",
+		category = "premium",
+		price = 25,
+		currency = "farmTokens",
+		description = "🏆 PREMIUM ITEM 🏆\nGuarantees at least Rare rarity for next 3 harvests!",
+		icon = "✨",
+		maxQuantity = 5,
+		effects = {
+			guaranteedRarity = "rare",
+			uses = 3
+		}
+	},
 
 	-- ========== SEEDS CATEGORY ==========
 	carrot_seeds = {
@@ -343,6 +538,198 @@ ItemConfig.ShopItems = {
 			pestVulnerability = {
 				aphids = 0.3,
 				locusts = 0.2,
+				fungal_blight = 0.1
+			}
+		}
+	},
+		-- Wheat Seeds
+		wheat_seeds = {
+			id = "wheat_seeds",
+			name = "🌾 Wheat Seeds",
+			type = "seed",
+			category = "seeds",
+			price = 30,
+			currency = "coins",
+			description = "Hardy wheat that grows in all conditions. Perfect for making bread!",
+			requiresFarmPlot = true,
+			icon = "🌾",
+			maxQuantity = 100,
+			farmingData = {
+				growTime = 45, -- 45 seconds
+				baseYieldAmount = 3,
+				resultCropId = "wheat",
+				cropPoints = 2,
+				stages = {"planted", "sprouting", "growing", "ready"},
+				naturalColor = Color3.fromRGB(218, 165, 32), -- Golden wheat
+				pestVulnerability = {
+					aphids = 0.8,
+					locusts = 1.2,
+					fungal_blight = 0.9
+				}
+			}
+		},
+
+		-- Potato Seeds
+		potato_seeds = {
+			id = "potato_seeds",
+			name = "🥔 Potato Seeds",
+			type = "seed", 
+			category = "seeds",
+			price = 40,
+			currency = "coins",
+			description = "Versatile potatoes that grow underground. Great for cooking!",
+			requiresFarmPlot = true,
+			icon = "🥔",
+			maxQuantity = 100,
+			farmingData = {
+				growTime = 60, -- 1 minute
+				baseYieldAmount = 4,
+				resultCropId = "potato",
+				cropPoints = 2,
+				stages = {"planted", "sprouting", "growing", "ready"},
+				naturalColor = Color3.fromRGB(160, 82, 45), -- Brown potato
+				pestVulnerability = {
+					aphids = 0.6,
+					locusts = 0.7,
+					fungal_blight = 1.4
+				}
+			}
+		},
+
+		-- Cabbage Seeds
+		cabbage_seeds = {
+			id = "cabbage_seeds",
+			name = "🥬 Cabbage Seeds", 
+			type = "seed",
+			category = "seeds",
+			price = 35,
+			currency = "coins",
+			description = "Leafy green cabbages packed with nutrients. Animals love them!",
+			requiresFarmPlot = true,
+			icon = "🥬",
+			maxQuantity = 100,
+			farmingData = {
+				growTime = 50,
+				baseYieldAmount = 2,
+				resultCropId = "cabbage",
+				cropPoints = 3,
+				stages = {"planted", "sprouting", "growing", "ready"},
+				naturalColor = Color3.fromRGB(34, 139, 34), -- Green cabbage
+				pestVulnerability = {
+					aphids = 1.3,
+					locusts = 1.1,
+					fungal_blight = 0.8
+				}
+			}
+		},
+
+		-- Radish Seeds
+		radish_seeds = {
+			id = "radish_seeds",
+			name = "🌶️ Radish Seeds",
+			type = "seed",
+			category = "seeds", 
+			price = 25,
+			currency = "coins",
+			description = "Quick-growing spicy radishes. Ready in no time!",
+			requiresFarmPlot = true,
+			icon = "🌶️",
+			maxQuantity = 100,
+			farmingData = {
+				growTime = 30, -- Fastest growing
+				baseYieldAmount = 2,
+				resultCropId = "radish",
+				cropPoints = 1,
+				stages = {"planted", "sprouting", "growing", "ready"},
+				naturalColor = Color3.fromRGB(220, 20, 60), -- Red radish
+				pestVulnerability = {
+					aphids = 0.9,
+					locusts = 0.8,
+					fungal_blight = 1.0
+				}
+			}
+		},
+
+		-- Broccoli Seeds
+		broccoli_seeds = {
+			id = "broccoli_seeds",
+			name = "🥦 Broccoli Seeds",
+			type = "seed",
+			category = "seeds",
+			price = 45,
+			currency = "coins", 
+			description = "Nutritious green broccoli. Takes time but worth the wait!",
+			requiresFarmPlot = true,
+			icon = "🥦",
+			maxQuantity = 100,
+			farmingData = {
+				growTime = 75,
+				baseYieldAmount = 2,
+				resultCropId = "broccoli", 
+				cropPoints = 4,
+				stages = {"planted", "sprouting", "growing", "ready"},
+				naturalColor = Color3.fromRGB(34, 139, 34), -- Dark green
+				pestVulnerability = {
+					aphids = 1.1,
+					locusts = 0.9,
+					fungal_blight = 1.2
+				}
+			}
+		},
+
+		-- Tomato Seeds
+		tomato_seeds = {
+			id = "tomato_seeds",
+			name = "🍅 Tomato Seeds",
+			type = "seed",
+			category = "seeds",
+			price = 55,
+			currency = "coins",
+			description = "Juicy red tomatoes perfect for cooking. High value crop!",
+			requiresFarmPlot = true,
+			icon = "🍅", 
+			maxQuantity = 100,
+			farmingData = {
+				growTime = 90,
+				baseYieldAmount = 3,
+				resultCropId = "tomato",
+				cropPoints = 5,
+				stages = {"planted", "sprouting", "growing", "ready"},
+				naturalColor = Color3.fromRGB(255, 99, 71), -- Tomato red
+				pestVulnerability = {
+					aphids = 1.2,
+					locusts = 1.0,
+					fungal_blight = 1.3
+				}
+			}
+		},
+	glorious_sunflower_seeds = {
+		id = "glorious_sunflower_seeds",
+		name = "🌻 Glorious Sunflower Seeds",
+		type = "seed",
+		category = "premium",
+		price = 150,
+		currency = "farmTokens",
+		description = "🏆 PREMIUM LEGENDARY SEED 🏆\nThe rarest and most beautiful crop! Massive size with brilliant glow!",
+		requiresFarmPlot = true,
+		icon = "🌻",
+		maxQuantity = 10,
+		isPremium = true,
+		farmingData = {
+			growTime = 180, -- 3 minutes
+			baseYieldAmount = 1,
+			resultCropId = "glorious_sunflower",
+			cropPoints = 25, -- Massive pig food value
+			stages = {"planted", "sprouting", "growing", "flowering", "glorious"},
+			naturalColor = Color3.fromRGB(255, 215, 0), -- Bright gold
+			sizeMultiplier = 4.0, -- Absolutely massive
+			alwaysLegendary = true, -- Always legendary rarity
+			specialEffects = {
+				"sunflower_rays", "golden_particles", "divine_glow"
+			},
+			pestVulnerability = {
+				aphids = 0.1, -- Almost immune to pests
+				locusts = 0.1,
 				fungal_blight = 0.1
 			}
 		}
@@ -665,7 +1052,105 @@ ItemConfig.ShopItems = {
 		icon = "🍓",
 		pestDamageMultiplier = 1.0
 	},
+	wheat = {
+		id = "wheat",
+		name = "🌾 Wheat",
+		type = "crop",
+		category = "crops",
+		description = "Golden wheat grain. Essential for baking and crafting.",
+		sellValue = 8,
+		sellCurrency = "farmTokens",
+		feedValue = 2,
+		cropPoints = 2,
+		icon = "🌾",
+		craftingMaterial = true
+	},
 
+	potato = {
+		id = "potato",
+		name = "🥔 Potato",
+		type = "crop",
+		category = "crops", 
+		description = "Hearty potato. Great for cooking and long-term storage.",
+		sellValue = 10,
+		sellCurrency = "farmTokens",
+		feedValue = 2,
+		cropPoints = 2,
+		icon = "🥔",
+		craftingMaterial = true
+	},
+
+	cabbage = {
+		id = "cabbage",
+		name = "🥬 Cabbage",
+		type = "crop",
+		category = "crops",
+		description = "Fresh leafy cabbage. Nutritious and valuable.",
+		sellValue = 12,
+		sellCurrency = "farmTokens", 
+		feedValue = 3,
+		cropPoints = 3,
+		icon = "🥬",
+		craftingMaterial = true
+	},
+
+	radish = {
+		id = "radish", 
+		name = "🌶️ Radish",
+		type = "crop",
+		category = "crops",
+		description = "Spicy red radish. Quick to grow, decent value.",
+		sellValue = 6,
+		sellCurrency = "farmTokens",
+		feedValue = 1,
+		cropPoints = 1,
+		icon = "🌶️",
+		craftingMaterial = true
+	},
+
+	broccoli = {
+		id = "broccoli",
+		name = "🥦 Broccoli",
+		type = "crop",
+		category = "crops",
+		description = "Nutritious green broccoli. High value and nutrition.",
+		sellValue = 18,
+		sellCurrency = "farmTokens",
+		feedValue = 4,
+		cropPoints = 4,
+		icon = "🥦",
+		craftingMaterial = true
+	},
+
+	tomato = {
+		id = "tomato",
+		name = "🍅 Tomato",
+		type = "crop", 
+		category = "crops",
+		description = "Juicy ripe tomato. Perfect for cooking and high value sales.",
+		sellValue = 25,
+		sellCurrency = "farmTokens",
+		feedValue = 5,
+		cropPoints = 5,
+		icon = "🍅",
+		craftingMaterial = true
+	},
+
+	glorious_sunflower = {
+		id = "glorious_sunflower",
+		name = "🌻 Glorious Sunflower",
+		type = "crop",
+		category = "premium",
+		description = "🏆 LEGENDARY PREMIUM CROP 🏆\nThe most valuable and beautiful crop in existence!",
+		sellValue = 500,
+		sellCurrency = "farmTokens",
+		feedValue = 25,
+		cropPoints = 25,
+		icon = "🌻",
+		isPremium = true,
+		specialEffects = true
+	},
+	
 	golden_fruit = {
 		id = "golden_fruit",
 		name = "✨ Golden Fruit",
@@ -773,23 +1258,276 @@ ItemConfig.ProcessingRecipes = {
 		requiredBuilding = "cheese_maker"
 	}
 }
+
+
+ItemConfig.MiningSystem = {
+	-- Mining skill progression
+	skillLevels = {
+		{level = 1, xpRequired = 0, name = "Novice Miner"},
+		{level = 2, xpRequired = 100, name = "Apprentice Miner"},
+		{level = 3, xpRequired = 250, name = "Skilled Miner"},
+		{level = 4, xpRequired = 500, name = "Expert Miner"},
+		{level = 5, xpRequired = 1000, name = "Master Miner"},
+		{level = 6, xpRequired = 2000, name = "Legendary Miner"}
+	},
+
+	-- Different ore types
+	ores = {
+		copper_ore = {
+			name = "Copper Ore",
+			icon = "🟤",
+			color = Color3.fromRGB(184, 115, 51),
+			hardness = 1,
+			xpReward = 10,
+			respawnTime = 60, -- 1 minute
+			sellValue = 5,
+			requiredLevel = 1,
+			spawnChance = 0.4
+		},
+
+		iron_ore = {
+			name = "Iron Ore", 
+			icon = "⚫",
+			color = Color3.fromRGB(105, 105, 105),
+			hardness = 2,
+			xpReward = 15,
+			respawnTime = 90,
+			sellValue = 10,
+			requiredLevel = 2,
+			spawnChance = 0.3
+		},
+
+		silver_ore = {
+			name = "Silver Ore",
+			icon = "⚪",
+			color = Color3.fromRGB(192, 192, 192),
+			hardness = 3,
+			xpReward = 25,
+			respawnTime = 120,
+			sellValue = 20,
+			requiredLevel = 3,
+			spawnChance = 0.2
+		},
+
+		gold_ore = {
+			name = "Gold Ore",
+			icon = "🟡",
+			color = Color3.fromRGB(255, 215, 0),
+			hardness = 4,
+			xpReward = 40,
+			respawnTime = 180,
+			sellValue = 40,
+			requiredLevel = 4,
+			spawnChance = 0.08
+		},
+
+		diamond_ore = {
+			name = "Diamond Ore",
+			icon = "💎",
+			color = Color3.fromRGB(185, 242, 255),
+			hardness = 5,
+			xpReward = 75,
+			respawnTime = 300,
+			sellValue = 100,
+			requiredLevel = 5,
+			spawnChance = 0.02
+		},
+
+		obsidian_ore = {
+			name = "Obsidian Ore",
+			icon = "⬛",
+			color = Color3.fromRGB(20, 20, 20),
+			hardness = 6,
+			xpReward = 150,
+			respawnTime = 600,
+			sellValue = 250,
+			requiredLevel = 6,
+			spawnChance = 0.005
+		}
+	},
+
+	-- Mining tools
+	tools = {
+		wooden_pickaxe = {
+			name = "Wooden Pickaxe",
+			power = 1,
+			durability = 50,
+			speed = 1.0,
+			canMine = {"copper_ore"}
+		},
+
+		stone_pickaxe = {
+			name = "Stone Pickaxe",
+			power = 2,
+			durability = 100, 
+			speed = 1.2,
+			canMine = {"copper_ore", "iron_ore"}
+		},
+
+		iron_pickaxe = {
+			name = "Iron Pickaxe",
+			power = 3,
+			durability = 200,
+			speed = 1.5,
+			canMine = {"copper_ore", "iron_ore", "silver_ore"}
+		},
+
+		diamond_pickaxe = {
+			name = "Diamond Pickaxe",
+			power = 5,
+			durability = 500,
+			speed = 2.0,
+			canMine = {"copper_ore", "iron_ore", "silver_ore", "gold_ore", "diamond_ore"}
+		},
+
+		obsidian_pickaxe = {
+			name = "Obsidian Pickaxe",
+			power = 6,
+			durability = 1000,
+			speed = 2.5,
+			canMine = {"copper_ore", "iron_ore", "silver_ore", "gold_ore", "diamond_ore", "obsidian_ore"}
+		}
+	}
+}
+
+-- ========== CRAFTING SYSTEM ==========
+
+ItemConfig.CraftingSystem = {
+	-- Crafting stations
+	stations = {
+		workbench = {
+			name = "Workbench",
+			description = "Basic crafting station for tools and equipment",
+			recipes = {"wooden_pickaxe", "stone_pickaxe", "farming_tools"}
+		},
+
+		forge = {
+			name = "Forge", 
+			description = "Advanced metalworking station for metal tools",
+			recipes = {"iron_pickaxe", "diamond_pickaxe", "metal_tools"}
+		},
+
+		mystical_altar = {
+			name = "Mystical Altar",
+			description = "Legendary crafting station for the most powerful items",
+			recipes = {"obsidian_pickaxe", "legendary_tools", "magical_items"}
+		}
+	},
+
+	-- Crafting recipes
+	recipes = {
+		-- Basic Tools
+		wooden_pickaxe = {
+			station = "workbench",
+			ingredients = {
+				{id = "wood", amount = 5},
+				{id = "stone", amount = 2}
+			},
+			result = {id = "wooden_pickaxe", amount = 1},
+			craftTime = 30,
+			requiredLevel = 1
+		},
+
+		stone_pickaxe = {
+			station = "workbench", 
+			ingredients = {
+				{id = "stone", amount = 8},
+				{id = "wood", amount = 3}
+			},
+			result = {id = "stone_pickaxe", amount = 1},
+			craftTime = 45,
+			requiredLevel = 1
+		},
+
+		iron_pickaxe = {
+			station = "forge",
+			ingredients = {
+				{id = "iron_ore", amount = 5},
+				{id = "wood", amount = 2},
+				{id = "coal", amount = 3}
+			},
+			result = {id = "iron_pickaxe", amount = 1},
+			craftTime = 90,
+			requiredLevel = 2
+		},
+
+		diamond_pickaxe = {
+			station = "forge",
+			ingredients = {
+				{id = "diamond_ore", amount = 3},
+				{id = "iron_ore", amount = 5},
+				{id = "wood", amount = 2}
+			},
+			result = {id = "diamond_pickaxe", amount = 1},
+			craftTime = 180,
+			requiredLevel = 4
+		},
+
+		obsidian_pickaxe = {
+			station = "mystical_altar",
+			ingredients = {
+				{id = "obsidian_ore", amount = 5},
+				{id = "diamond_ore", amount = 3},
+				{id = "magical_essence", amount = 1}
+			},
+			result = {id = "obsidian_pickaxe", amount = 1},
+			craftTime = 300,
+			requiredLevel = 6
+		},
+
+		-- Farming Tools
+		super_fertilizer = {
+			station = "workbench",
+			ingredients = {
+				{id = "wheat", amount = 10},
+				{id = "potato", amount = 5},
+				{id = "cabbage", amount = 3}
+			},
+			result = {id = "super_fertilizer", amount = 5},
+			craftTime = 60,
+			requiredLevel = 1
+		},
+
+		growth_accelerator = {
+			station = "forge",
+			ingredients = {
+				{id = "gold_ore", amount = 2},
+				{id = "super_fertilizer", amount = 3},
+				{id = "magical_water", amount = 1}
+			},
+			result = {id = "growth_accelerator", amount = 1},
+			craftTime = 120,
+			requiredLevel = 3
+		},
+
+		-- Decorative Items
+		golden_statue = {
+			station = "forge",
+			ingredients = {
+				{id = "gold_ore", amount = 10},
+				{id = "silver_ore", amount = 5}
+			},
+			result = {id = "golden_statue", amount = 1},
+			craftTime = 240,
+			requiredLevel = 4
+		},
+
+		rainbow_crystal = {
+			station = "mystical_altar",
+			ingredients = {
+				{id = "diamond_ore", amount = 5},
+				{id = "glorious_sunflower", amount = 1},
+				{id = "rainbow_essence", amount = 3}
+			},
+			result = {id = "rainbow_crystal", amount = 1},
+			craftTime = 600,
+			requiredLevel = 6
+		}
+	}
+}
+
 -- ========== UTILITY FUNCTIONS ==========
 
--- Get item by ID
-function ItemConfig.GetItem(itemId)
-	return ItemConfig.ShopItems[itemId]
-end
-
--- Get items by category
-function ItemConfig.GetItemsByCategory(category)
-	local items = {}
-	for itemId, item in pairs(ItemConfig.ShopItems) do
-		if item.category == category then
-			items[itemId] = item
-		end
-	end
-	return items
-end
 -- Get pest data
 function ItemConfig.GetPestData(pestType)
 	return ItemConfig.PestSystem.pestData[pestType]
@@ -970,6 +1708,138 @@ function ItemConfig.GetCropPointsForMegaPig(transformationCount)
 	return 100 + (transformationCount * 50)
 end
 
+
+-- Get rarity for a crop based on chance and modifiers
+function ItemConfig.DetermineRarity(baseChances, modifiers)
+	modifiers = modifiers or {}
+
+	local roll = math.random()
+	local rarityBoost = modifiers.rarityBoost or 0
+	local guaranteedRarity = modifiers.guaranteedRarity
+
+	-- Apply guaranteed rarity first
+	if guaranteedRarity then
+		return guaranteedRarity
+	end
+
+	-- Adjust chances with boosts
+	local adjustedChances = {}
+	for rarity, chance in pairs(ItemConfig.RaritySystem.rarities) do
+		adjustedChances[rarity] = chance.dropChance + (rarityBoost * chance.tier * 0.1)
+	end
+
+	-- Determine rarity (check from highest to lowest)
+	local rarityOrder = {"legendary", "epic", "rare", "uncommon", "common"}
+
+	for _, rarity in ipairs(rarityOrder) do
+		if roll <= adjustedChances[rarity] then
+			return rarity
+		end
+	end
+
+	return "common"
+end
+
+-- Calculate final crop value with rarity modifiers
+function ItemConfig.CalculateCropValue(baseCrop, rarity)
+	local rarityData = ItemConfig.RaritySystem.rarities[rarity]
+	if not rarityData then return baseCrop.sellValue end
+
+	return math.floor(baseCrop.sellValue * rarityData.valueMultiplier)
+end
+
+-- Get mining XP for ore type
+function ItemConfig.GetMiningXP(oreType, playerLevel, toolPower)
+	local oreData = ItemConfig.MiningSystem.ores[oreType]
+	if not oreData then return 0 end
+
+	local baseXP = oreData.xpReward
+	local levelBonus = math.min(playerLevel * 0.1, 0.5) -- Max 50% bonus
+	local toolBonus = (toolPower - 1) * 0.2 -- 20% per tool power level
+
+	return math.floor(baseXP * (1 + levelBonus + toolBonus))
+end
+
+-- Check if player can craft an item
+function ItemConfig.CanPlayerCraft(recipeId, playerData)
+	local recipe = ItemConfig.CraftingSystem.recipes[recipeId]
+	if not recipe then return false, "Recipe not found" end
+
+	-- Check mining level requirement
+	local playerMiningLevel = playerData.mining and playerData.mining.level or 1
+	if playerMiningLevel < recipe.requiredLevel then
+		return false, "Mining level " .. recipe.requiredLevel .. " required"
+	end
+
+	-- Check station availability
+	if not playerData.crafting or not playerData.crafting.stations[recipe.station] then
+		return false, "Requires " .. recipe.station
+	end
+
+	-- Check ingredients
+	local inventory = playerData.mining and playerData.mining.inventory or {}
+	for _, ingredient in ipairs(recipe.ingredients) do
+		local available = inventory[ingredient.id] or 0
+		if available < ingredient.amount then
+			return false, "Need " .. ingredient.amount .. "x " .. ingredient.id
+		end
+	end
+
+	return true, "Can craft"
+end
+
+-- Enhanced get item function with new categories
+function ItemConfig.GetItem(itemId)
+	-- Check existing shop items first
+	local existing = ItemConfig.ShopItems and ItemConfig.ShopItems[itemId]
+	if existing then return existing end
+
+	-- Check new items
+	local newItem = ItemConfig.NewShopItems and ItemConfig.NewShopItems[itemId]
+	if newItem then return newItem end
+
+	-- Check new seeds
+	local seed = ItemConfig.NewSeeds[itemId]
+	if seed then return seed end
+
+	-- Check new crops
+	local crop = ItemConfig.NewCrops[itemId]
+	if crop then return crop end
+
+	return nil
+end
+
+-- Get items by category (enhanced)
+function ItemConfig.GetItemsByCategory(category)
+	local items = {}
+
+	-- Check all item sources
+	local sources = {
+		ItemConfig.ShopItems or {},
+		ItemConfig.NewShopItems or {},
+		ItemConfig.NewSeeds or {},
+		ItemConfig.NewCrops or {}
+	}
+
+	for _, source in ipairs(sources) do
+		for itemId, item in pairs(source) do
+			if item.category == category then
+				items[itemId] = item
+			end
+		end
+	end
+
+	return items
+end
+
+print("Enhanced ItemConfig: ✅ New seeds, mining, and crafting systems loaded!")
+print("New Features:")
+print("  🌱 6 new seed types with 5 rarity levels each")
+print("  🌻 Glorious Sunflower premium seed")
+print("  ⛏️ Complete mining system with 6 ore types")
+print("  🔨 Crafting system with 3 station types")
+print("  ✨ Rarity system with visual effects")
+print("  🏆 Premium enhancements and boosters")
 print("ItemConfig: ✅ Complete shop system loaded with all items!")
 print("Categories available:")
 print("  🌱 Seeds: carrot_seeds, corn_seeds, strawberry_seeds, golden_seeds")

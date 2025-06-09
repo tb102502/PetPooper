@@ -3915,7 +3915,938 @@ function GameClient:CreateFeedManagementSection(parent, feedData)
 
 	feedInfo.Text = feedText
 end
+--[[
+    ENHANCED GameClient.lua - MINING, CRAFTING & RARITY UI
+    Add these sections to your existing GameClient.lua
+    
+    NEW FEATURES:
+    ✅ Mining interface with skill progression
+    ✅ Crafting interface with recipe browser
+    ✅ Enhanced shop with new categories
+    ✅ Rarity display system
+    ✅ Cave access and mining tools UI
+]]
 
+-- Add these new UI sections to your existing GameClient.lua
+
+-- ========== NEW UI STATE ADDITIONS ==========
+
+-- Add to existing GameClient.UIState:
+GameClient.UIState.ActiveCraftingStation = nil
+GameClient.UIState.MiningInterface = nil
+GameClient.UIState.RarityEffects = {}
+
+-- Add to existing GameClient.FarmingState:
+GameClient.FarmingState.activeBoosters = {}
+GameClient.FarmingState.rarityPreview = nil
+
+-- ========== MINING INTERFACE ==========
+
+-- Create mining skill interface
+function GameClient:CreateMiningInterface()
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Remove existing mining UI
+	local existingUI = playerGui:FindFirstChild("MiningUI")
+	if existingUI then existingUI:Destroy() end
+
+	local miningUI = Instance.new("ScreenGui")
+	miningUI.Name = "MiningUI"
+	miningUI.ResetOnSpawn = false
+	miningUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	miningUI.Parent = playerGui
+
+	-- Mining button (left side, below farming)
+	local miningButton = Instance.new("TextButton")
+	miningButton.Name = "MiningButton"
+	miningButton.Size = UDim2.new(0, 120, 0, 50)
+	miningButton.Position = UDim2.new(0, 20, 0.4, 120) -- Below farm button
+	miningButton.BackgroundColor3 = Color3.fromRGB(80, 60, 120)
+	miningButton.BorderSizePixel = 0
+	miningButton.Text = "⛏️ Mining"
+	miningButton.TextColor3 = Color3.new(1, 1, 1)
+	miningButton.TextScaled = true
+	miningButton.Font = Enum.Font.GothamBold
+	miningButton.Parent = miningUI
+
+	local miningCorner = Instance.new("UICorner")
+	miningCorner.CornerRadius = UDim.new(0.1, 0)
+	miningCorner.Parent = miningButton
+
+	-- Crafting button (below mining)
+	local craftingButton = Instance.new("TextButton")
+	craftingButton.Name = "CraftingButton"
+	craftingButton.Size = UDim2.new(0, 120, 0, 50)
+	craftingButton.Position = UDim2.new(0, 20, 0.4, 180) -- Below mining button
+	craftingButton.BackgroundColor3 = Color3.fromRGB(120, 80, 60)
+	craftingButton.BorderSizePixel = 0
+	craftingButton.Text = "🔨 Crafting"
+	craftingButton.TextColor3 = Color3.new(1, 1, 1)
+	craftingButton.TextScaled = true
+	craftingButton.Font = Enum.Font.GothamBold
+	craftingButton.Parent = miningUI
+
+	local craftingCorner = Instance.new("UICorner")
+	craftingCorner.CornerRadius = UDim.new(0.1, 0)
+	craftingCorner.Parent = craftingButton
+
+	-- Connect events
+	miningButton.MouseButton1Click:Connect(function()
+		self:OpenMenu("Mining")
+	end)
+
+	craftingButton.MouseButton1Click:Connect(function()
+		self:OpenMenu("Crafting")
+	end)
+
+	-- Hover effects
+	miningButton.MouseEnter:Connect(function()
+		TweenService:Create(miningButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(100, 80, 140)}):Play()
+	end)
+
+	miningButton.MouseLeave:Connect(function()
+		TweenService:Create(miningButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(80, 60, 120)}):Play()
+	end)
+
+	craftingButton.MouseEnter:Connect(function()
+		TweenService:Create(craftingButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(140, 100, 80)}):Play()
+	end)
+
+	craftingButton.MouseLeave:Connect(function()
+		TweenService:Create(craftingButton, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(120, 80, 60)}):Play()
+	end)
+
+	self.UI.MiningUI = miningUI
+	print("GameClient: Mining and crafting UI created")
+end
+
+-- Refresh mining menu
+function GameClient:RefreshMiningMenu()
+	local menu = self.UI.Menus.Mining
+	if not menu then return end
+
+	local contentArea = menu:FindFirstChild("ContentArea")
+	if not contentArea then return end
+
+	-- Clear existing content
+	for _, child in ipairs(contentArea:GetChildren()) do
+		if child:IsA("Frame") or child:IsA("UIListLayout") then
+			child:Destroy()
+		end
+	end
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 10)
+	layout.Parent = contentArea
+
+	local playerData = self:GetPlayerData()
+
+	-- Mining skill section
+	self:CreateMiningSkillSection(contentArea, layout, 1)
+
+	-- Cave access section
+	self:CreateCaveAccessSection(contentArea, layout, 2)
+
+	-- Tool management section
+	self:CreateToolManagementSection(contentArea, layout, 3)
+
+	-- Ore inventory section
+	self:CreateOreInventorySection(contentArea, layout, 4)
+
+	-- Update canvas size
+	spawn(function()
+		wait(0.1)
+		if layout and layout.Parent and contentArea then
+			contentArea.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+		end
+	end)
+end
+
+-- Create mining skill section
+function GameClient:CreateMiningSkillSection(parent, layout, layoutOrder)
+	local playerData = self:GetPlayerData()
+
+	local skillFrame = Instance.new("Frame")
+	skillFrame.Name = "MiningSkill"
+	skillFrame.Size = UDim2.new(1, 0, 0, 120)
+	skillFrame.BackgroundColor3 = Color3.fromRGB(80, 60, 120)
+	skillFrame.BorderSizePixel = 0
+	skillFrame.LayoutOrder = layoutOrder
+	skillFrame.Parent = parent
+
+	local skillCorner = Instance.new("UICorner")
+	skillCorner.CornerRadius = UDim.new(0.02, 0)
+	skillCorner.Parent = skillFrame
+
+	-- Title
+	local skillTitle = Instance.new("TextLabel")
+	skillTitle.Size = UDim2.new(1, 0, 0, 35)
+	skillTitle.BackgroundTransparency = 1
+	skillTitle.Text = "⛏️ Mining Skill"
+	skillTitle.TextColor3 = Color3.new(1, 1, 1)
+	skillTitle.TextScaled = true
+	skillTitle.Font = Enum.Font.GothamBold
+	skillTitle.Parent = skillFrame
+
+	-- Skill info
+	local miningLevel = playerData and playerData.mining and playerData.mining.level or 1
+	local miningXP = playerData and playerData.mining and playerData.mining.xp or 0
+
+	local skillInfo = Instance.new("TextLabel")
+	skillInfo.Size = UDim2.new(1, -20, 0, 25)
+	skillInfo.Position = UDim2.new(0, 10, 0, 40)
+	skillInfo.BackgroundTransparency = 1
+	skillInfo.Text = "Level: " .. miningLevel .. " | XP: " .. miningXP
+	skillInfo.TextColor3 = Color3.new(0.9, 0.9, 0.9)
+	skillInfo.TextScaled = true
+	skillInfo.Font = Enum.Font.Gotham
+	skillInfo.TextXAlignment = Enum.TextXAlignment.Left
+	skillInfo.Parent = skillFrame
+
+	-- XP Progress bar
+	local progressFrame = Instance.new("Frame")
+	progressFrame.Size = UDim2.new(1, -20, 0, 20)
+	progressFrame.Position = UDim2.new(0, 10, 0, 70)
+	progressFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	progressFrame.BorderSizePixel = 0
+	progressFrame.Parent = skillFrame
+
+	local progressBar = Instance.new("Frame")
+	progressBar.Size = UDim2.new(0.3, 0, 1, 0) -- Example progress
+	progressBar.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+	progressBar.BorderSizePixel = 0
+	progressBar.Parent = progressFrame
+
+	local progressCorner = Instance.new("UICorner")
+	progressCorner.CornerRadius = UDim.new(0.1, 0)
+	progressCorner.Parent = progressFrame
+
+	local progressBarCorner = Instance.new("UICorner")
+	progressBarCorner.CornerRadius = UDim.new(0.1, 0)
+	progressBarCorner.Parent = progressBar
+end
+
+-- Create cave access section
+function GameClient:CreateCaveAccessSection(parent, layout, layoutOrder)
+	local playerData = self:GetPlayerData()
+
+	local caveFrame = Instance.new("Frame")
+	caveFrame.Name = "CaveAccess"
+	caveFrame.Size = UDim2.new(1, 0, 0, 100)
+	caveFrame.BackgroundColor3 = Color3.fromRGB(60, 40, 80)
+	caveFrame.BorderSizePixel = 0
+	caveFrame.LayoutOrder = layoutOrder
+	caveFrame.Parent = parent
+
+	local caveCorner = Instance.new("UICorner")
+	caveCorner.CornerRadius = UDim.new(0.02, 0)
+	caveCorner.Parent = caveFrame
+
+	-- Title
+	local caveTitle = Instance.new("TextLabel")
+	caveTitle.Size = UDim2.new(1, 0, 0, 35)
+	caveTitle.BackgroundTransparency = 1
+	caveTitle.Text = "🕳️ Mining Caves"
+	caveTitle.TextColor3 = Color3.new(1, 1, 1)
+	caveTitle.TextScaled = true
+	caveTitle.Font = Enum.Font.GothamBold
+	caveTitle.Parent = caveFrame
+
+	local hasAccess = playerData and playerData.mining and playerData.mining.caveAccess
+
+	if hasAccess then
+		-- Access granted - show teleport button
+		local teleportButton = Instance.new("TextButton")
+		teleportButton.Size = UDim2.new(0.8, 0, 0, 40)
+		teleportButton.Position = UDim2.new(0.1, 0, 0, 50)
+		teleportButton.BackgroundColor3 = Color3.fromRGB(100, 150, 100)
+		teleportButton.BorderSizePixel = 0
+		teleportButton.Text = "🚀 Enter Mining Caves"
+		teleportButton.TextColor3 = Color3.new(1, 1, 1)
+		teleportButton.TextScaled = true
+		teleportButton.Font = Enum.Font.GothamBold
+		teleportButton.Parent = caveFrame
+
+		local teleportCorner = Instance.new("UICorner")
+		teleportCorner.CornerRadius = UDim.new(0.1, 0)
+		teleportCorner.Parent = teleportButton
+
+		teleportButton.MouseButton1Click:Connect(function()
+			self:RequestCaveTeleport()
+		end)
+	else
+		-- Access needed - show purchase info
+		local accessInfo = Instance.new("TextLabel")
+		accessInfo.Size = UDim2.new(1, -20, 0, 50)
+		accessInfo.Position = UDim2.new(0, 10, 0, 40)
+		accessInfo.BackgroundTransparency = 1
+		accessInfo.Text = "🔒 Cave Access Required\nPurchase from shop to unlock mining!"
+		accessInfo.TextColor3 = Color3.fromRGB(255, 200, 200)
+		accessInfo.TextScaled = true
+		accessInfo.Font = Enum.Font.Gotham
+		accessInfo.Parent = caveFrame
+	end
+end
+
+-- Create tool management section
+function GameClient:CreateToolManagementSection(parent, layout, layoutOrder)
+	local playerData = self:GetPlayerData()
+
+	local toolFrame = Instance.new("Frame")
+	toolFrame.Name = "ToolManagement"
+	toolFrame.Size = UDim2.new(1, 0, 0, 150)
+	toolFrame.BackgroundColor3 = Color3.fromRGB(100, 80, 60)
+	toolFrame.BorderSizePixel = 0
+	toolFrame.LayoutOrder = layoutOrder
+	toolFrame.Parent = parent
+
+	local toolCorner = Instance.new("UICorner")
+	toolCorner.CornerRadius = UDim.new(0.02, 0)
+	toolCorner.Parent = toolFrame
+
+	-- Title
+	local toolTitle = Instance.new("TextLabel")
+	toolTitle.Size = UDim2.new(1, 0, 0, 35)
+	toolTitle.BackgroundTransparency = 1
+	toolTitle.Text = "⛏️ Mining Tools"
+	toolTitle.TextColor3 = Color3.new(1, 1, 1)
+	toolTitle.TextScaled = true
+	toolTitle.Font = Enum.Font.GothamBold
+	toolTitle.Parent = toolFrame
+
+	-- Current tool display
+	local currentTool = playerData and playerData.mining and playerData.mining.currentTool
+
+	if currentTool then
+		local toolInfo = Instance.new("TextLabel")
+		toolInfo.Size = UDim2.new(1, -20, 0, 30)
+		toolInfo.Position = UDim2.new(0, 10, 0, 40)
+		toolInfo.BackgroundTransparency = 1
+		toolInfo.Text = "🔧 Equipped: " .. currentTool:gsub("_", " ")
+		toolInfo.TextColor3 = Color3.fromRGB(100, 255, 100)
+		toolInfo.TextScaled = true
+		toolInfo.Font = Enum.Font.Gotham
+		toolInfo.TextXAlignment = Enum.TextXAlignment.Left
+		toolInfo.Parent = toolFrame
+
+		-- Durability display
+		local durability = playerData.mining.toolDurability and playerData.mining.toolDurability[currentTool] or 0
+		local durabilityInfo = Instance.new("TextLabel")
+		durabilityInfo.Size = UDim2.new(1, -20, 0, 25)
+		durabilityInfo.Position = UDim2.new(0, 10, 0, 75)
+		durabilityInfo.BackgroundTransparency = 1
+		durabilityInfo.Text = "Durability: " .. durability .. " uses remaining"
+		durabilityInfo.TextColor3 = durability > 20 and Color3.new(0.9, 0.9, 0.9) or Color3.fromRGB(255, 100, 100)
+		durabilityInfo.TextScaled = true
+		durabilityInfo.Font = Enum.Font.Gotham
+		durabilityInfo.TextXAlignment = Enum.TextXAlignment.Left
+		durabilityInfo.Parent = toolFrame
+
+		-- Upgrade tool button
+		local upgradeButton = Instance.new("TextButton")
+		upgradeButton.Size = UDim2.new(0.8, 0, 0, 30)
+		upgradeButton.Position = UDim2.new(0.1, 0, 0, 110)
+		upgradeButton.BackgroundColor3 = Color3.fromRGB(150, 120, 100)
+		upgradeButton.BorderSizePixel = 0
+		upgradeButton.Text = "⬆️ Upgrade Tool (Shop)"
+		upgradeButton.TextColor3 = Color3.new(1, 1, 1)
+		upgradeButton.TextScaled = true
+		upgradeButton.Font = Enum.Font.Gotham
+		upgradeButton.Parent = toolFrame
+
+		local upgradeCorner = Instance.new("UICorner")
+		upgradeCorner.CornerRadius = UDim.new(0.1, 0)
+		upgradeCorner.Parent = upgradeButton
+
+		upgradeButton.MouseButton1Click:Connect(function()
+			self:OpenMenu("Shop")
+		end)
+	else
+		local noToolInfo = Instance.new("TextLabel")
+		noToolInfo.Size = UDim2.new(1, -20, 1, -40)
+		noToolInfo.Position = UDim2.new(0, 10, 0, 40)
+		noToolInfo.BackgroundTransparency = 1
+		noToolInfo.Text = "❌ No Mining Tool Equipped\nPurchase a pickaxe from the shop!"
+		noToolInfo.TextColor3 = Color3.fromRGB(255, 200, 200)
+		noToolInfo.TextScaled = true
+		noToolInfo.Font = Enum.Font.Gotham
+		noToolInfo.Parent = toolFrame
+	end
+end
+
+-- Create ore inventory section
+function GameClient:CreateOreInventorySection(parent, layout, layoutOrder)
+	local playerData = self:GetPlayerData()
+
+	local oreFrame = Instance.new("Frame")
+	oreFrame.Name = "OreInventory"
+	oreFrame.Size = UDim2.new(1, 0, 0, 200)
+	oreFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
+	oreFrame.BorderSizePixel = 0
+	oreFrame.LayoutOrder = layoutOrder
+	oreFrame.Parent = parent
+
+	local oreCorner = Instance.new("UICorner")
+	oreCorner.CornerRadius = UDim.new(0.02, 0)
+	oreCorner.Parent = oreFrame
+
+	-- Title
+	local oreTitle = Instance.new("TextLabel")
+	oreTitle.Size = UDim2.new(1, 0, 0, 35)
+	oreTitle.BackgroundTransparency = 1
+	oreTitle.Text = "💎 Ore Inventory"
+	oreTitle.TextColor3 = Color3.new(1, 1, 1)
+	oreTitle.TextScaled = true
+	oreTitle.Font = Enum.Font.GothamBold
+	oreTitle.Parent = oreFrame
+
+	-- Ore scroll
+	local oreScroll = Instance.new("ScrollingFrame")
+	oreScroll.Size = UDim2.new(1, -20, 1, -45)
+	oreScroll.Position = UDim2.new(0, 10, 0, 40)
+	oreScroll.BackgroundTransparency = 1
+	oreScroll.ScrollBarThickness = 6
+	oreScroll.Parent = oreFrame
+
+	local oreLayout = Instance.new("UIListLayout")
+	oreLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	oreLayout.Padding = UDim.new(0, 5)
+	oreLayout.Parent = oreScroll
+
+	-- Display ores
+	local oreCount = 0
+	if playerData and playerData.mining and playerData.mining.inventory then
+		for oreType, amount in pairs(playerData.mining.inventory) do
+			if amount > 0 then
+				self:CreateOreInventoryItem(oreScroll, oreType, amount)
+				oreCount = oreCount + 1
+			end
+		end
+	end
+
+	if oreCount == 0 then
+		local noOresLabel = Instance.new("TextLabel")
+		noOresLabel.Size = UDim2.new(1, 0, 1, 0)
+		noOresLabel.BackgroundTransparency = 1
+		noOresLabel.Text = "No ores mined yet.\nAccess the caves and start mining!"
+		noOresLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		noOresLabel.TextScaled = true
+		noOresLabel.Font = Enum.Font.Gotham
+		noOresLabel.Parent = oreScroll
+	end
+
+	-- Update canvas size
+	oreLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+		oreScroll.CanvasSize = UDim2.new(0, 0, 0, oreLayout.AbsoluteContentSize.Y + 10)
+	end)
+end
+
+-- Create ore inventory item
+function GameClient:CreateOreInventoryItem(parent, oreType, amount)
+	local oreItem = Instance.new("Frame")
+	oreItem.Name = oreType .. "_Item"
+	oreItem.Size = UDim2.new(1, 0, 0, 50)
+	oreItem.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+	oreItem.BorderSizePixel = 0
+	oreItem.Parent = parent
+
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0.1, 0)
+	itemCorner.Parent = oreItem
+
+	-- Ore icon
+	local oreIcon = Instance.new("TextLabel")
+	oreIcon.Size = UDim2.new(0, 35, 0, 35)
+	oreIcon.Position = UDim2.new(0, 8, 0, 7)
+	oreIcon.BackgroundTransparency = 1
+	oreIcon.Text = self:GetOreIcon(oreType)
+	oreIcon.TextScaled = true
+	oreIcon.Font = Enum.Font.SourceSansSemibold
+	oreIcon.Parent = oreItem
+
+	-- Ore info
+	local oreInfo = Instance.new("TextLabel")
+	oreInfo.Size = UDim2.new(0.5, 0, 1, 0)
+	oreInfo.Position = UDim2.new(0, 50, 0, 0)
+	oreInfo.BackgroundTransparency = 1
+	oreInfo.Text = self:GetOreDisplayName(oreType) .. "\nAmount: " .. amount
+	oreInfo.TextColor3 = Color3.new(1, 1, 1)
+	oreInfo.TextScaled = true
+	oreInfo.Font = Enum.Font.Gotham
+	oreInfo.TextXAlignment = Enum.TextXAlignment.Left
+	oreInfo.Parent = oreItem
+
+	-- Sell button
+	local sellButton = Instance.new("TextButton")
+	sellButton.Size = UDim2.new(0, 80, 0, 35)
+	sellButton.Position = UDim2.new(1, -90, 0, 7)
+	sellButton.BackgroundColor3 = Color3.fromRGB(100, 150, 100)
+	sellButton.BorderSizePixel = 0
+	sellButton.Text = "💰 Sell"
+	sellButton.TextColor3 = Color3.new(1, 1, 1)
+	sellButton.TextScaled = true
+	sellButton.Font = Enum.Font.Gotham
+	sellButton.Parent = oreItem
+
+	local sellCorner = Instance.new("UICorner")
+	sellCorner.CornerRadius = UDim.new(0.2, 0)
+	sellCorner.Parent = sellButton
+
+	sellButton.MouseButton1Click:Connect(function()
+		self:SellOre(oreType, 1)
+	end)
+end
+
+-- ========== CRAFTING INTERFACE ==========
+
+-- Refresh crafting menu
+function GameClient:RefreshCraftingMenu()
+	local menu = self.UI.Menus.Crafting
+	if not menu then return end
+
+	local contentArea = menu:FindFirstChild("ContentArea")
+	if not contentArea then return end
+
+	-- Clear existing content
+	for _, child in ipairs(contentArea:GetChildren()) do
+		if child:IsA("Frame") or child:IsA("UIListLayout") then
+			child:Destroy()
+		end
+	end
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 10)
+	layout.Parent = contentArea
+
+	local playerData = self:GetPlayerData()
+
+	-- Crafting stations section
+	self:CreateCraftingStationsSection(contentArea, layout, 1)
+
+	-- Recipe browser section
+	self:CreateRecipeBrowserSection(contentArea, layout, 2)
+
+	-- Active recipes section
+	self:CreateActiveRecipesSection(contentArea, layout, 3)
+
+	-- Update canvas size
+	spawn(function()
+		wait(0.1)
+		if layout and layout.Parent and contentArea then
+			contentArea.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+		end
+	end)
+end
+
+-- Create crafting stations section
+function GameClient:CreateCraftingStationsSection(parent, layout, layoutOrder)
+	local playerData = self:GetPlayerData()
+
+	local stationsFrame = Instance.new("Frame")
+	stationsFrame.Name = "CraftingStations"
+	stationsFrame.Size = UDim2.new(1, 0, 0, 150)
+	stationsFrame.BackgroundColor3 = Color3.fromRGB(120, 80, 60)
+	stationsFrame.BorderSizePixel = 0
+	stationsFrame.LayoutOrder = layoutOrder
+	stationsFrame.Parent = parent
+
+	local stationsCorner = Instance.new("UICorner")
+	stationsCorner.CornerRadius = UDim.new(0.02, 0)
+	stationsCorner.Parent = stationsFrame
+
+	-- Title
+	local stationsTitle = Instance.new("TextLabel")
+	stationsTitle.Size = UDim2.new(1, 0, 0, 35)
+	stationsTitle.BackgroundTransparency = 1
+	stationsTitle.Text = "🔨 Your Crafting Stations"
+	stationsTitle.TextColor3 = Color3.new(1, 1, 1)
+	stationsTitle.TextScaled = true
+	stationsTitle.Font = Enum.Font.GothamBold
+	stationsTitle.Parent = stationsFrame
+
+	-- Station list
+	local stationList = Instance.new("Frame")
+	stationList.Size = UDim2.new(1, -20, 1, -45)
+	stationList.Position = UDim2.new(0, 10, 0, 40)
+	stationList.BackgroundTransparency = 1
+	stationList.Parent = stationsFrame
+
+	local stationLayout = Instance.new("UIListLayout")
+	stationLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	stationLayout.Padding = UDim.new(0, 5)
+	stationLayout.Parent = stationList
+
+	local hasStations = false
+	if playerData and playerData.crafting and playerData.crafting.stations then
+		local stationCount = 0
+		for stationId, owned in pairs(playerData.crafting.stations) do
+			if owned then
+				stationCount = stationCount + 1
+				hasStations = true
+				self:CreateStationItem(stationList, stationId, stationCount)
+			end
+		end
+	end
+
+	if not hasStations then
+		local noStationsLabel = Instance.new("TextLabel")
+		noStationsLabel.Size = UDim2.new(1, 0, 1, 0)
+		noStationsLabel.BackgroundTransparency = 1
+		noStationsLabel.Text = "🛒 No Crafting Stations Yet\nPurchase stations from the shop!"
+		noStationsLabel.TextColor3 = Color3.fromRGB(255, 200, 200)
+		noStationsLabel.TextScaled = true
+		noStationsLabel.Font = Enum.Font.Gotham
+		noStationsLabel.Parent = stationList
+	end
+end
+
+-- Create station item
+function GameClient:CreateStationItem(parent, stationId, layoutOrder)
+	local stationItem = Instance.new("Frame")
+	stationItem.Name = stationId .. "_Station"
+	stationItem.Size = UDim2.new(1, 0, 0, 30)
+	stationItem.BackgroundColor3 = Color3.fromRGB(140, 100, 80)
+	stationItem.BorderSizePixel = 0
+	stationItem.LayoutOrder = layoutOrder
+	stationItem.Parent = parent
+
+	local itemCorner = Instance.new("UICorner")
+	itemCorner.CornerRadius = UDim.new(0.1, 0)
+	itemCorner.Parent = stationItem
+
+	-- Station icon and name
+	local stationInfo = Instance.new("TextLabel")
+	stationInfo.Size = UDim2.new(0.7, 0, 1, 0)
+	stationInfo.BackgroundTransparency = 1
+	stationInfo.Text = self:GetStationIcon(stationId) .. " " .. self:GetStationDisplayName(stationId)
+	stationInfo.TextColor3 = Color3.new(1, 1, 1)
+	stationInfo.TextScaled = true
+	stationInfo.Font = Enum.Font.Gotham
+	stationInfo.TextXAlignment = Enum.TextXAlignment.Left
+	stationInfo.Parent = stationItem
+
+	-- Use button
+	local useButton = Instance.new("TextButton")
+	useButton.Size = UDim2.new(0, 80, 0, 25)
+	useButton.Position = UDim2.new(1, -85, 0, 2)
+	useButton.BackgroundColor3 = Color3.fromRGB(100, 150, 100)
+	useButton.BorderSizePixel = 0
+	useButton.Text = "🔧 Use"
+	useButton.TextColor3 = Color3.new(1, 1, 1)
+	useButton.TextScaled = true
+	useButton.Font = Enum.Font.Gotham
+	useButton.Parent = stationItem
+
+	local useCorner = Instance.new("UICorner")
+	useCorner.CornerRadius = UDim.new(0.2, 0)
+	useCorner.Parent = useButton
+
+	useButton.MouseButton1Click:Connect(function()
+		self:OpenCraftingStation(stationId)
+	end)
+end
+
+-- ========== ENHANCED SHOP SYSTEM ==========
+
+-- Enhanced shop with new categories
+function GameClient:RefreshEnhancedShopMenu()
+	local menu = self.UI.Menus.Shop
+	if not menu then return end
+
+	local contentArea = menu:FindFirstChild("ContentArea")
+	if not contentArea then return end
+
+	-- Clear existing content
+	for _, child in ipairs(contentArea:GetChildren()) do
+		if child:IsA("Frame") or child:IsA("UIListLayout") then
+			child:Destroy()
+		end
+	end
+
+	local layout = Instance.new("UIListLayout")
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, 10)
+	layout.Parent = contentArea
+
+	-- Enhanced categories with new items
+	local categories = {
+		{name = "🌱 Seeds", key = "seeds", color = Color3.fromRGB(60, 120, 60)},
+		{name = "🚜 Farm Upgrades", key = "farm", color = Color3.fromRGB(120, 90, 60)},
+		{name = "⛏️ Mining Equipment", key = "mining", color = Color3.fromRGB(80, 60, 120)},
+		{name = "🔨 Crafting Stations", key = "crafting", color = Color3.fromRGB(120, 80, 60)},
+		{name = "🐔 Chicken Defense", key = "defense", color = Color3.fromRGB(100, 80, 120)},
+		{name = "🧪 Pest Control", key = "tools", color = Color3.fromRGB(120, 80, 80)},
+		{name = "✨ Enhancements", key = "farming", color = Color3.fromRGB(100, 100, 150)},
+		{name = "🏆 Premium Items", key = "premium", color = Color3.fromRGB(120, 60, 120)}
+	}
+
+	local layoutOrder = 1
+
+	-- Get shop items (now includes new items)
+	local shopItems = self:GetEnhancedShopItems()
+	local parent = contentArea
+	for _, category in ipairs(categories) do
+		local categoryItems = {}
+		for _, item in ipairs(shopItems) do
+			if item.category == category.key then
+				table.insert(categoryItems, item)
+			end
+		end
+
+		if #categoryItems > 0 then
+			self:CreateEnhancedShopCategory(parent, category, categoryItems, layoutOrder)
+			layoutOrder = layoutOrder + 1
+		end
+	end
+
+	-- Update canvas size
+	spawn(function()
+		wait(0.1)
+		if layout and layout.Parent and contentArea then
+			contentArea.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+		end
+	end)
+end
+
+-- Get enhanced shop items (combine existing + new)
+function GameClient:GetEnhancedShopItems()
+	-- This would call your server to get the complete item list
+	-- For now, return the basic structure
+	if self.RemoteFunctions.GetShopItems then
+		local success, items = pcall(function()
+			return self.RemoteFunctions.GetShopItems:InvokeServer()
+		end)
+
+		if success and items then
+			return items
+		end
+	end
+
+	-- Fallback to basic items
+	return self:GetDefaultShopItems()
+end
+
+-- ========== RARITY DISPLAY SYSTEM ==========
+
+-- Show rarity preview when hovering over crops
+function GameClient:CreateRarityPreviewSystem()
+	-- Monitor mouse hover over crop models
+	local mouse = LocalPlayer:GetMouse()
+
+	mouse.Move:Connect(function()
+		local target = mouse.Target
+		if target and target.Parent and target.Parent.Name == "CropModel" then
+			local plotModel = target.Parent.Parent
+			local rarity = plotModel:GetAttribute("CropRarity")
+			if rarity and rarity ~= "common" then
+				self:ShowRarityTooltip(target, rarity)
+			end
+		else
+			self:HideRarityTooltip()
+		end
+	end)
+end
+
+-- Show rarity tooltip
+function GameClient:ShowRarityTooltip(target, rarity)
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Remove existing tooltip
+	local existing = playerGui:FindFirstChild("RarityTooltip")
+	if existing then existing:Destroy() end
+
+	local tooltip = Instance.new("ScreenGui")
+	tooltip.Name = "RarityTooltip"
+	tooltip.Parent = playerGui
+
+	local tooltipFrame = Instance.new("Frame")
+	tooltipFrame.Size = UDim2.new(0, 200, 0, 80)
+	tooltipFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	tooltipFrame.BorderSizePixel = 0
+	tooltipFrame.Parent = tooltip
+
+	-- Position near mouse
+	local mouse = LocalPlayer:GetMouse()
+	tooltipFrame.Position = UDim2.new(0, mouse.X + 10, 0, mouse.Y - 40)
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.1, 0)
+	corner.Parent = tooltipFrame
+
+	local rarityText = Instance.new("TextLabel")
+	rarityText.Size = UDim2.new(1, 0, 1, 0)
+	rarityText.BackgroundTransparency = 1
+	rarityText.Text = "✨ " .. rarity:upper() .. " CROP ✨\n" .. self:GetRarityDescription(rarity)
+	rarityText.TextColor3 = self:GetRarityColor(rarity)
+	rarityText.TextScaled = true
+	rarityText.Font = Enum.Font.GothamBold
+	rarityText.TextStrokeTransparency = 0
+	rarityText.TextStrokeColor3 = Color3.new(0, 0, 0)
+	rarityText.Parent = tooltipFrame
+end
+
+-- Hide rarity tooltip
+function GameClient:HideRarityTooltip()
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+	local tooltip = playerGui:FindFirstChild("RarityTooltip")
+	if tooltip then tooltip:Destroy() end
+end
+
+-- ========== UTILITY FUNCTIONS ==========
+
+-- Get ore icon
+function GameClient:GetOreIcon(oreType)
+	local icons = {
+		copper_ore = "🟤",
+		iron_ore = "⚫",
+		silver_ore = "⚪",
+		gold_ore = "🟡",
+		diamond_ore = "💎",
+		obsidian_ore = "⬛"
+	}
+	return icons[oreType] or "⛏️"
+end
+
+-- Get ore display name
+function GameClient:GetOreDisplayName(oreType)
+	local names = {
+		copper_ore = "Copper Ore",
+		iron_ore = "Iron Ore", 
+		silver_ore = "Silver Ore",
+		gold_ore = "Gold Ore",
+		diamond_ore = "Diamond Ore",
+		obsidian_ore = "Obsidian Ore"
+	}
+	return names[oreType] or oreType:gsub("_", " ")
+end
+
+-- Get station icon
+function GameClient:GetStationIcon(stationId)
+	local icons = {
+		workbench = "🔨",
+		forge = "🔥",
+		mystical_altar = "🔮"
+	}
+	return icons[stationId] or "🔧"
+end
+
+-- Get station display name
+function GameClient:GetStationDisplayName(stationId)
+	local names = {
+		workbench = "Workbench",
+		forge = "Forge",
+		mystical_altar = "Mystical Altar"
+	}
+	return names[stationId] or stationId:gsub("_", " ")
+end
+
+-- Get rarity color
+function GameClient:GetRarityColor(rarity)
+	local colors = {
+		common = Color3.new(1, 1, 1),
+		uncommon = Color3.fromRGB(192, 192, 192),
+		rare = Color3.fromRGB(255, 215, 0),
+		epic = Color3.fromRGB(128, 0, 128), 
+		legendary = Color3.fromRGB(255, 100, 100)
+	}
+	return colors[rarity] or Color3.new(1, 1, 1)
+end
+
+-- Get rarity description
+function GameClient:GetRarityDescription(rarity)
+	local descriptions = {
+		common = "Standard quality",
+		uncommon = "+20% value, silver shine",
+		rare = "+50% value, golden glow",
+		epic = "+100% value, large size",
+		legendary = "+200% value, magical effects"
+	}
+	return descriptions[rarity] or "Special crop"
+end
+
+-- Request cave teleport
+function GameClient:RequestCaveTeleport()
+	if self.RemoteEvents.TeleportToCave then
+		self.RemoteEvents.TeleportToCave:FireServer()
+		self:ShowNotification("🚀 Teleporting", "Heading to the mining caves!", "info")
+	end
+end
+
+-- Sell ore
+function GameClient:SellOre(oreType, amount)
+	if self.RemoteEvents.SellOre then
+		self.RemoteEvents.SellOre:FireServer(oreType, amount)
+		self:ShowNotification("💰 Selling Ore", "Selling " .. amount .. "x " .. self:GetOreDisplayName(oreType), "info")
+	end
+end
+
+-- Open crafting station interface
+function GameClient:OpenCraftingStation(stationId)
+	self.UIState.ActiveCraftingStation = stationId
+	self:ShowNotification("🔨 Crafting Station", "Opening " .. self:GetStationDisplayName(stationId) .. " interface!", "info")
+
+	-- This would open a detailed crafting interface
+	-- Implementation depends on your specific crafting UI needs
+end
+
+-- Enhanced setup to include new systems
+function GameClient:SetupEnhancedSystems()
+	-- Call existing setup
+	self:SetupFarmingSystem()
+
+	-- Add new systems
+	self:CreateMiningInterface()
+	self:CreateRarityPreviewSystem()
+
+	print("GameClient: Enhanced systems initialized")
+end
+
+-- Override the OpenMenu function to handle new menu types
+function GameClient:OpenEnhancedMenu(menuName)
+	if menuName == "Mining" then
+		local menu = self:GetOrCreateMenu("Mining")
+		if menu then
+			self:RefreshMiningMenu()
+			-- Continue with existing opening logic
+		end
+	elseif menuName == "Crafting" then
+		local menu = self:GetOrCreateMenu("Crafting") 
+		if menu then
+			self:RefreshCraftingMenu()
+			-- Continue with existing opening logic
+		end
+	elseif menuName == "Shop" then
+		local menu = self:GetOrCreateMenu("Shop")
+		if menu then
+			self:RefreshEnhancedShopMenu()
+			-- Continue with existing opening logic
+		end
+	else
+		-- Call existing OpenMenu for other types
+		self:OpenMenu(menuName)
+	end
+end
+
+-- Get enhanced menu title
+function GameClient:GetEnhancedMenuTitle(menuName)
+	local titles = {
+		Mining = "⛏️ Mining Operations - Caves & Ores",
+		Crafting = "🔨 Crafting Workshop - Tools & Recipes",
+		Shop = "🛒 Enhanced Pet Palace Shop - Everything You Need!"
+	}
+	return titles[menuName] or self:GetMenuTitle(menuName)
+end
+
+print("Enhanced GameClient: ✅ Mining, Crafting & Rarity UI systems loaded!")
+print("New Client Features:")
+print("  ⛏️ Mining interface with skill progression")
+print("  🔨 Crafting stations and recipe browser")
+print("  ✨ Rarity tooltip and preview system")
+print("  🛒 Enhanced shop with new categories")
+print("  🎮 Tool management and ore inventory")
+print("  🌟 Visual effects for rare crops")
 print("GameClient: Enhanced with pest and chicken management UI!")
 print("New Features:")
 print("  ✅ Chicken deployment interface")
