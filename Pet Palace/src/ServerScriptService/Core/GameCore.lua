@@ -892,53 +892,6 @@ function GameCore:InitializePlayerSystems(player, playerData)
 end
 -- REPLACE LoadPlayerData method
 
-function GameCore:LoadPlayerData(player)
-	local defaultData = {
-		coins = 100,
-		farmTokens = 0,
-		upgrades = {},
-		purchaseHistory = {},
-		farming = {
-			plots = 0,
-			inventory = {}
-		},
-		livestock = {
-			pig = {
-				size = 1.0,
-				cropPoints = 0,
-				transformationCount = 0,
-				totalFed = 0
-			}
-		},
-		defense = {
-			chickens = {
-				owned = {},
-				feed = {
-					basic_feed = 0,
-					premium_feed = 0,
-					grain_feed = 0
-				}
-			},
-			pestControl = {
-				organic_pesticide = 0,
-				pest_detector = false
-			},
-			roofs = {}
-		},
-		stats = {
-			milkCollected = 0,
-			coinsEarned = 100,
-			cropsHarvested = 0,
-			pigFed = 0,
-			megaTransformations = 0,
-			seedsPlanted = 0,
-			pestsEliminated = 0
-		},
-		firstJoin = os.time(),
-		lastSave = os.time()
-	}
-
-	local loadedData = defaultData
 
 	if self.PlayerDataStore then
 		local success, data = pcall(function()
@@ -1495,7 +1448,33 @@ function GameCore:HandlePurchase(player, itemId, quantity)
 		return false
 	end
 end
+function GameCore:GetItemDisplayName(itemId)
+	local names = {
+		-- Milk products
+		fresh_milk = "Fresh Milk",
+		processed_milk = "Processed Milk", 
+		cheese = "Artisan Cheese",
 
+		-- Eggs
+		chicken_egg = "Chicken Egg",
+		guinea_egg = "Guinea Fowl Egg",
+		rooster_egg = "Rooster Egg",
+
+		-- Seeds
+		carrot_seeds = "Carrot Seeds",
+		corn_seeds = "Corn Seeds",
+		strawberry_seeds = "Strawberry Seeds",
+		golden_seeds = "Golden Seeds",
+
+		-- Crops
+		carrot = "Carrot",
+		corn = "Corn", 
+		strawberry = "Strawberry",
+		golden_fruit = "Golden Fruit"
+	}
+
+	return names[itemId] or itemId:gsub("_", " ")
+end
 -- ========== ADD MISSING PURCHASE HANDLERS ==========
 
 -- Enhanced roof purchase handler (ADD THIS IF MISSING)

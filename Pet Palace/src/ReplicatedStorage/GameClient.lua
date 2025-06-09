@@ -370,7 +370,7 @@ function GameClient:SetupRemoteConnections()
 		"ShowPigFeedingUI", "HidePigFeedingUI", "FeedPig",
 
 		-- Farming System
-		"PlantSeed", "HarvestCrop", "SellCrop",
+		"PlantSeed", "HarvestCrop", "SellCrop", "SellMilk", "SellEgg",
 
 		-- General
 		"PlayerDataUpdated", "ShowNotification",
@@ -456,6 +456,22 @@ function GameClient:SetupAllEventHandlers()
 			end
 		end
 	end
+	
+	if self.RemoteEvents.SellEgg then
+		self.RemoteEvents.SellEgg.OnServerEvent:Connect(function(player, eggType, amount)
+			pcall(function()
+				self:SellEgg(player, eggType, amount or 1)
+			end)
+		end)
+	end
+	if self.RemoteEvents.SellMilk then
+		self.RemoteEvents.SellMilk.OnServerEvent:Connect(function(player, milkType, amount)
+			pcall(function()
+				self:SellMilk(player, milkType or "fresh_milk", amount or 1)
+			end)
+		end)
+	end
+
 	self.ActiveConnections = {}
 
 	-- All event handlers in one place
@@ -1711,11 +1727,8 @@ function GameClient:RefreshFarmMenu()
 		self:CreateEnhancedChickenSection(contentArea, layout, 3)
 	end
 
-	-- SECTION 4: Pest Control Tools
-	if playerData and playerData.defense and playerData.defense.pestControl then
-		self:CreatePestControlSection(contentArea, layout, 4)
-	end
-
+	-- SECTION 4: Pest Control Tools (always show, even if no tools yet)
+	self:CreatePestControlSection(contentArea, layout, 4)
 	-- Update canvas size
 	spawn(function()
 		wait(0.1)
@@ -1780,16 +1793,16 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 		for itemId, quantity in pairs(playerData.farming.inventory) do
 			if quantity > 0 then
 				if itemId:find("_seeds") then
-					table.insert(itemCategories[1].items, {id = itemId, quantity = quantity})
+					table.insert(itemCategories[1].items, {id = itemId, quantity = quantity}) -- Seeds
 				elseif itemId:find("_feed") then
-					table.insert(itemCategories[4].items, {id = itemId, quantity = quantity})
+					table.insert(itemCategories[4].items, {id = itemId, quantity = quantity}) -- Chicken Feed
 				elseif itemId == "organic_pesticide" or itemId == "super_pesticide" then
-					table.insert(itemCategories[5].items, {id = itemId, quantity = quantity})
+					table.insert(itemCategories[5].items, {id = itemId, quantity = quantity}) -- Pest Control
 				elseif itemId:find("egg") then
-					table.insert(itemCategories[6].items, {id = itemId, quantity = quantity})
+					table.insert(itemCategories[6].items, {id = itemId, quantity = quantity}) -- Other Items (eggs)
 				else
 					-- Regular crops
-					table.insert(itemCategories[2].items, {id = itemId, quantity = quantity})
+					table.insert(itemCategories[2].items, {id = itemId, quantity = quantity}) -- Crops
 				end
 			end
 		end
@@ -1799,13 +1812,14 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 	if playerData.livestock and playerData.livestock.inventory then
 		for itemId, quantity in pairs(playerData.livestock.inventory) do
 			if quantity > 0 then
-				table.insert(itemCategories[3].items, {id = itemId, quantity = quantity})
+				table.insert(itemCategories[3].items, {id = itemId, quantity = quantity}) -- Livestock Products
 			end
 		end
 	end
 
 	-- Add items from defense inventory
 	if playerData.defense then
+		-- Chicken feed from defense
 		if playerData.defense.chickens and playerData.defense.chickens.feed then
 			for feedType, quantity in pairs(playerData.defense.chickens.feed) do
 				if quantity > 0 then
@@ -1814,6 +1828,16 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 			end
 		end
 
+		-- ADDED: Eggs from chicken system
+		if playerData.defense.chickens and playerData.defense.chickens.eggs then
+			for eggType, quantity in pairs(playerData.defense.chickens.eggs) do
+				if quantity > 0 then
+					table.insert(itemCategories[6].items, {id = eggType, quantity = quantity}) -- Other Items (eggs)
+				end
+			end
+		end
+
+		-- Pest control tools
 		if playerData.defense.pestControl then
 			for toolType, quantity in pairs(playerData.defense.pestControl) do
 				if type(quantity) == "number" and quantity > 0 then
@@ -1822,7 +1846,6 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 			end
 		end
 	end
-
 	-- Create category sections
 	local categoryOrder = 1
 	for _, category in ipairs(itemCategories) do
@@ -1849,7 +1872,37 @@ function GameClient:CreateCompleteInventorySection(parent, layout, layoutOrder)
 		inventoryScroll.CanvasSize = UDim2.new(0, 0, 0, inventoryLayout.AbsoluteContentSize.Y + 10)
 	end)
 end
+function GameClient:CreateInventoryCategory(parent, category, layoutOrder)
+	-- Create category header frame
+	local categoryFrame = Instance.new("Frame")
+	categoryFrame.Name = category.name:gsub(" ", "") .. "CategoryHeader"
+	categoryFrame.Size = UDim2.new(1, 0, 0, 35)
+	categoryFrame.BackgroundColor3 = category.color
+	categoryFrame.BorderSizePixel = 0
+	categoryFrame.LayoutOrder = layoutOrder
+	categoryFrame.Parent = parent
 
+	local categoryCorner = Instance.new("UICorner")
+	categoryCorner.CornerRadius = UDim.new(0.1, 0)
+	categoryCorner.Parent = categoryFrame
+
+	-- Category title
+	local categoryTitle = Instance.new("TextLabel")
+	categoryTitle.Size = UDim2.new(1, 0, 1, 0)
+	categoryTitle.BackgroundTransparency = 1
+	categoryTitle.Text = category.name
+	categoryTitle.TextColor3 = Color3.new(1, 1, 1)
+	categoryTitle.TextScaled = true
+	categoryTitle.Font = Enum.Font.GothamBold
+	categoryTitle.Parent = categoryFrame
+
+	-- Create individual items in this category
+	for i, item in ipairs(category.items) do
+		self:CreateInventoryItem(parent, item, layoutOrder + (i * 0.1))
+	end
+
+	return categoryFrame
+end
 -- UPDATE CreateInventoryItem to handle milk selling:
 
 function GameClient:CreateInventoryItem(parent, itemData, layoutOrder)
@@ -1912,13 +1965,24 @@ function GameClient:CreateInventoryItem(parent, itemData, layoutOrder)
 		end)
 
 	elseif itemData.id == "fresh_milk" or itemData.id == "processed_milk" or itemData.id == "cheese" then
-		-- ADDED: Sell milk products button
+		-- FIXED: Sell milk products button
 		actionButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
 		actionButton.Text = "💰 Sell"
 		actionButton.TextColor3 = Color3.new(1, 1, 1)
 
 		actionButton.MouseButton1Click:Connect(function()
-			self:SellMilkProduct(itemData.id, 1)
+			-- FIXED: Pass the actual milk type, not just amount
+			self:SellMilk(itemData.id, 1)
+		end)
+
+	elseif itemData.id:find("egg") then
+		-- ADDED: Sell egg products button
+		actionButton.BackgroundColor3 = Color3.fromRGB(255, 200, 100)
+		actionButton.Text = "💰 Sell"
+		actionButton.TextColor3 = Color3.new(1, 1, 1)
+
+		actionButton.MouseButton1Click:Connect(function()
+			self:SellEgg(itemData.id, 1)
 		end)
 
 	elseif itemData.id == "organic_pesticide" or itemData.id == "super_pesticide" then
@@ -1957,16 +2021,144 @@ end
 
 -- ADD new milk selling function:
 
-function GameClient:SellMilkProduct(milkType, amount)
-	print("GameClient: Selling " .. amount .. "x " .. milkType)
+function GameCore:SellMilk(player, milkType, amount)
+	milkType = milkType or "fresh_milk" -- Default to fresh_milk if not specified
+	amount = amount or 1
 
-	if self.RemoteEvents.SellMilk then
-		self.RemoteEvents.SellMilk:FireServer(amount)
-		self:ShowNotification("Selling Milk", "Selling " .. amount .. "x " .. self:GetItemDisplayName(milkType) .. "!", "info")
-	else
-		warn("GameClient: SellMilk remote event not available")
-		self:ShowNotification("Error", "Milk selling system not available!", "error")
+	local playerData = self:GetPlayerData(player)
+	if not playerData then
+		self:SendNotification(player, "Error", "Player data not found!", "error")
+		return false
 	end
+
+	-- Check both livestock inventory and farming inventory for milk products
+	local milkCount = 0
+	local inventoryLocation = nil
+
+	-- Check livestock inventory first
+	if playerData.livestock and playerData.livestock.inventory and playerData.livestock.inventory[milkType] then
+		milkCount = playerData.livestock.inventory[milkType]
+		inventoryLocation = "livestock"
+		-- Check farming inventory as backup
+	elseif playerData.farming and playerData.farming.inventory and playerData.farming.inventory[milkType] then
+		milkCount = playerData.farming.inventory[milkType]
+		inventoryLocation = "farming"
+	end
+
+	if milkCount < amount then
+		self:SendNotification(player, "Not Enough Milk", 
+			"You only have " .. milkCount .. " " .. self:GetItemDisplayName(milkType) .. "!", "error")
+		return false
+	end
+
+	-- Get milk prices based on type
+	local milkPrices = {
+		fresh_milk = 15,
+		processed_milk = 25,
+		cheese = 40
+	}
+
+	local milkPrice = milkPrices[milkType] or 15
+	local totalEarnings = milkPrice * amount
+
+	-- Remove milk from inventory
+	if inventoryLocation == "livestock" then
+		playerData.livestock.inventory[milkType] = playerData.livestock.inventory[milkType] - amount
+	else
+		playerData.farming.inventory[milkType] = playerData.farming.inventory[milkType] - amount
+	end
+
+	-- Add coins
+	playerData.coins = (playerData.coins or 0) + totalEarnings
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.milkSold = (playerData.stats.milkSold or 0) + amount
+	playerData.stats.coinsEarned = (playerData.stats.coinsEarned or 0) + totalEarnings
+
+	-- Save and update
+	self:UpdatePlayerLeaderstats(player)
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	self:SendNotification(player, "Milk Sold!", 
+		"Sold " .. amount .. "x " .. self:GetItemDisplayName(milkType) .. " for " .. totalEarnings .. " coins!", "success")
+
+	print("GameCore: " .. player.Name .. " sold " .. amount .. "x " .. milkType .. " for " .. totalEarnings .. " coins")
+	return true
+end
+-- ADD this new function for selling eggs in GameClient.lua:
+function GameCore:SellEgg(player, eggType, amount)
+	eggType = eggType or "chicken_egg" -- Default to chicken_egg if not specified
+	amount = amount or 1
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then
+		self:SendNotification(player, "Error", "Player data not found!", "error")
+		return false
+	end
+
+	-- Check both defense inventory and farming inventory for eggs
+	local eggCount = 0
+	local inventoryLocation = nil
+
+	-- Check defense/chicken inventory first
+	if playerData.defense and playerData.defense.chickens and playerData.defense.chickens.eggs and playerData.defense.chickens.eggs[eggType] then
+		eggCount = playerData.defense.chickens.eggs[eggType]
+		inventoryLocation = "defense"
+		-- Check farming inventory as backup
+	elseif playerData.farming and playerData.farming.inventory and playerData.farming.inventory[eggType] then
+		eggCount = playerData.farming.inventory[eggType]
+		inventoryLocation = "farming"
+	end
+
+	if eggCount < amount then
+		self:SendNotification(player, "Not Enough Eggs", 
+			"You only have " .. eggCount .. " " .. self:GetItemDisplayName(eggType) .. "!", "error")
+		return false
+	end
+
+	-- Get egg prices based on type
+	local eggPrices = {
+		chicken_egg = 5,
+		guinea_egg = 8,
+		rooster_egg = 12
+	}
+
+	local eggPrice = eggPrices[eggType] or 5
+	local totalEarnings = eggPrice * amount
+
+	-- Remove eggs from inventory
+	if inventoryLocation == "defense" then
+		playerData.defense.chickens.eggs[eggType] = playerData.defense.chickens.eggs[eggType] - amount
+	else
+		playerData.farming.inventory[eggType] = playerData.farming.inventory[eggType] - amount
+	end
+
+	-- Add coins
+	playerData.coins = (playerData.coins or 0) + totalEarnings
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.eggsSold = (playerData.stats.eggsSold or 0) + amount
+	playerData.stats.coinsEarned = (playerData.stats.coinsEarned or 0) + totalEarnings
+
+	-- Save and update
+	self:UpdatePlayerLeaderstats(player)
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	self:SendNotification(player, "Eggs Sold!", 
+		"Sold " .. amount .. "x " .. self:GetItemDisplayName(eggType) .. " for " .. totalEarnings .. " coins!", "success")
+
+	print("GameCore: " .. player.Name .. " sold " .. amount .. "x " .. eggType .. " for " .. totalEarnings .. " coins")
+	return true
 end
 
 -- NEW: Enhanced Chicken Section with Feeding
@@ -2630,14 +2822,38 @@ function GameClient:CreatePestControlSection(parent, layout, layoutOrder)
 
 	local playerData = self:GetPlayerData()
 
-	-- Pesticide inventory
-	if playerData.pestControl.organic_pesticide and playerData.pestControl.organic_pesticide > 0 then
-		self:CreatePestControlItem(pestContent, "organic_pesticide", playerData.pestControl.organic_pesticide)
-	end
+	-- FIXED: Check the correct data path (defense.pestControl instead of pestControl)
+	if playerData and playerData.defense and playerData.defense.pestControl then
+		-- Pesticide inventory
+		if playerData.defense.pestControl.organic_pesticide and playerData.defense.pestControl.organic_pesticide > 0 then
+			self:CreatePestControlItem(pestContent, "organic_pesticide", playerData.defense.pestControl.organic_pesticide)
+		end
 
-	-- Pest detector status
-	if playerData.pestControl.pest_detector then
-		self:CreatePestDetectorDisplay(pestContent)
+		-- Super pesticide inventory (if exists)
+		if playerData.defense.pestControl.super_pesticide and playerData.defense.pestControl.super_pesticide > 0 then
+			self:CreatePestControlItem(pestContent, "super_pesticide", playerData.defense.pestControl.super_pesticide)
+		end
+
+		-- Pest detector status
+		if playerData.defense.pestControl.pest_detector then
+			self:CreatePestDetectorDisplay(pestContent)
+		end
+	else
+		-- No pest control tools available
+		local noPestToolsLabel = Instance.new("TextLabel")
+		noPestToolsLabel.Size = UDim2.new(1, 0, 0, 40)
+		noPestToolsLabel.BackgroundColor3 = Color3.fromRGB(80, 60, 60)
+		noPestToolsLabel.BorderSizePixel = 0
+		noPestToolsLabel.Text = "No pest control tools available.\nBuy tools from the shop first!"
+		noPestToolsLabel.TextColor3 = Color3.fromRGB(255, 200, 200)
+		noPestToolsLabel.TextScaled = true
+		noPestToolsLabel.Font = Enum.Font.Gotham
+		noPestToolsLabel.LayoutOrder = 1
+		noPestToolsLabel.Parent = pestContent
+
+		local noToolsCorner = Instance.new("UICorner")
+		noToolsCorner.CornerRadius = UDim.new(0.1, 0)
+		noToolsCorner.Parent = noPestToolsLabel
 	end
 
 	-- Buy pest control tools button
@@ -2660,7 +2876,64 @@ function GameClient:CreatePestControlSection(parent, layout, layoutOrder)
 		self:OpenMenu("Shop")
 	end)
 end
+function GameClient:CreatePestDetectorDisplay(parent)
+	local detectorFrame = Instance.new("Frame")
+	detectorFrame.Name = "PestDetector"
+	detectorFrame.Size = UDim2.new(1, 0, 0, 50)
+	detectorFrame.BackgroundColor3 = Color3.fromRGB(90, 70, 70)
+	detectorFrame.BorderSizePixel = 0
+	detectorFrame.LayoutOrder = 2
+	detectorFrame.Parent = parent
 
+	local detectorCorner = Instance.new("UICorner")
+	detectorCorner.CornerRadius = UDim.new(0.1, 0)
+	detectorCorner.Parent = detectorFrame
+
+	-- Detector icon
+	local detectorIcon = Instance.new("TextLabel")
+	detectorIcon.Size = UDim2.new(0, 35, 0, 35)
+	detectorIcon.Position = UDim2.new(0, 10, 0, 7)
+	detectorIcon.BackgroundTransparency = 1
+	detectorIcon.Text = "📡"
+	detectorIcon.TextScaled = true
+	detectorIcon.Font = Enum.Font.SourceSansSemibold
+	detectorIcon.Parent = detectorFrame
+
+	-- Detector info
+	local detectorInfo = Instance.new("TextLabel")
+	detectorInfo.Size = UDim2.new(0.8, 0, 1, 0)
+	detectorInfo.Position = UDim2.new(0, 55, 0, 0)
+	detectorInfo.BackgroundTransparency = 1
+	detectorInfo.Text = "📡 Pest Detector Active\nEarly warning system operational"
+	detectorInfo.TextColor3 = Color3.fromRGB(100, 255, 100) -- Green for active
+	detectorInfo.TextScaled = true
+	detectorInfo.Font = Enum.Font.Gotham
+	detectorInfo.TextXAlignment = Enum.TextXAlignment.Left
+	detectorInfo.Parent = detectorFrame
+
+	-- Status indicator (pulsing green dot)
+	local statusDot = Instance.new("Frame")
+	statusDot.Size = UDim2.new(0, 12, 0, 12)
+	statusDot.Position = UDim2.new(1, -25, 0, 15)
+	statusDot.BackgroundColor3 = Color3.fromRGB(0, 255, 0)
+	statusDot.BorderSizePixel = 0
+	statusDot.Parent = detectorFrame
+
+	local dotCorner = Instance.new("UICorner")
+	dotCorner.CornerRadius = UDim.new(0.5, 0)
+	dotCorner.Parent = statusDot
+
+	-- Pulsing animation for status dot
+	spawn(function()
+		while statusDot and statusDot.Parent do
+			TweenService:Create(statusDot, TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true), {
+				BackgroundColor3 = Color3.fromRGB(150, 255, 150),
+				Size = UDim2.new(0, 16, 0, 16)
+			}):Play()
+			wait(0.1)
+		end
+	end)
+end
 -- Create pest control item display
 function GameClient:CreatePestControlItem(parent, itemType, quantity)
 	local itemFrame = Instance.new("Frame")
