@@ -14,86 +14,16 @@ local ItemConfig = {}
 
 
 ItemConfig.RaritySystem = {
-	rarities = {
-		common = {
-			name = "Common",
-			color = "normal", -- Uses crop's natural color
-			sizeMultiplier = 1.0,
-			valueMultiplier = 1.0,
-			dropChance = 0.70, -- 70% chance
-			effects = {},
-			tier = 1
-		},
-		uncommon = {
-			name = "Uncommon", 
-			color = Color3.fromRGB(192, 192, 192), -- Silver
-			sizeMultiplier = 1.1,
-			valueMultiplier = 1.2,
-			dropChance = 0.20, -- 20% chance
-			effects = {"silver_gleam"},
-			tier = 2
-		},
-		rare = {
-			name = "Rare",
-			color = Color3.fromRGB(255, 215, 0), -- Gold
-			sizeMultiplier = 1.2,
-			valueMultiplier = 1.5,
-			dropChance = 0.07, -- 7% chance
-			effects = {"golden_shine"},
-			tier = 3
-		},
-		epic = {
-			name = "Epic",
-			color = Color3.fromRGB(128, 0, 128), -- Purple
-			sizeMultiplier = 1.8,
-			valueMultiplier = 2.0,
-			dropChance = 0.025, -- 2.5% chance
-			effects = {"size_boost", "purple_aura"},
-			tier = 4
-		},
-		legendary = {
-			name = "Legendary",
-			color = Color3.fromRGB(255, 100, 100), -- Bright red
-			sizeMultiplier = 2.0,
-			valueMultiplier = 3.0,
-			dropChance = 0.005, -- 0.5% chance
-			effects = {"legendary_glow", "particle_effects"},
-			tier = 5
-		}
-	},
-
-	-- Special visual effects for different rarities
-	visualEffects = {
-		silver_gleam = {
-			material = "Enum.Material.Metal",
-			transparency = 0.1,
-			reflectance = 0.8
-		},
-		golden_shine = {
-			material = "Enum.Material.Neon",
-			transparency = 0.2,
-			brightness = 1.2
-		},
-		size_boost = {
-			scaleAnimation = true,
-			pulseSpeed = 2
-		},
-		purple_aura = {
-			auraColor = Color3.fromRGB(128, 0, 128),
-			auraSize = 1.5
-		},
-		legendary_glow = {
-			material = "Enum.Material.Neon",
-			glowIntensity = 2.0,
-			colorShift = true
-		},
-		particle_effects = {
-			sparkles = true,
-			fireEffect = true
-		}
-	}
+	common    = { name = "Common",    color = Color3.fromRGB(255,255,255), sizeMultiplier = 1.0, valueMultiplier = 1.0, dropChance = 0.5, effects = {}, tier = 1 },
+	uncommon  = { name = "Uncommon",  color = Color3.fromRGB(0,255,0),   sizeMultiplier = 1.1, valueMultiplier = 1.2, dropChance = 0.25, effects = {"sparkle"}, tier = 2 },
+	rare      = { name = "Rare",      color = Color3.fromRGB(255,215,0), sizeMultiplier = 1.2, valueMultiplier = 1.5, dropChance = 0.07, effects = {"golden_shine"}, tier = 3 },
+	epic      = { name = "Epic",      color = Color3.fromRGB(128,0,128), sizeMultiplier = 1.8, valueMultiplier = 2.0, dropChance = 0.025, effects = {"purple_aura"}, tier = 4 },
+	legendary = { name = "Legendary", color = Color3.fromRGB(255,100,100), sizeMultiplier = 2.0, valueMultiplier = 3.0, dropChance = 0.005, effects = {"legendary_glow"}, tier = 5 },
 }
-
+ItemConfig.Crops = {
+	cabbage = { id = "cabbage", name = "🥬 Cabbage", type = "crop", category = "crops", description = "Fresh leafy cabbage.", sellValue = 12, sellCurrency = "farmTokens", feedValue = 3, cropPoints = 3, icon = "🥬", craftingMaterial = true },
+	radish  = { id = "radish",  name = "🌶️ Radish",  type = "crop", category = "crops", description = "Spicy radish.",      sellValue = 15, sellCurrency = "farmTokens", feedValue = 4, cropPoints = 4, icon = "🌶️", craftingMaterial = true },
+}
 -- ========== LIVESTOCK SYSTEM (EXISTING) ==========
 
 -- Cow milk collection system

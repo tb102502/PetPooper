@@ -356,11 +356,22 @@ end
 -- Setup Remote Connections
 
 function GameClient:SetupRemoteConnections()
-	local remoteFolder = ReplicatedStorage:WaitForChild("GameRemotes", 10)
-	if not remoteFolder then
-		warn("GameClient: GameRemotes folder not found")
-		return
+	local remotes = ReplicatedStorage:WaitForChild("GameRemotes")
+	for _, obj in ipairs(remotes:GetChildren()) do
+		if obj:IsA("RemoteEvent") then
+			self.RemoteEvents[obj.Name] = obj
+		elseif obj:IsA("RemoteFunction") then
+			self.RemoteFunctions[obj.Name] = obj
+		end
 	end
+
+	-- Connect events
+	self.RemoteEvents.PlantSeed.OnClientEvent:Connect(function(plotModel)
+		self:ShowSeedSelectionForPlot(plotModel)
+	end)
+	self.RemoteEvents.ItemPurchased.OnClientEvent:Connect(function(itemId, quantity)
+		self:HandleItemPurchased(itemId, quantity)
+	end)
 
 	local remoteEvents = {
 		-- Shop System (proximity-based)
@@ -385,26 +396,6 @@ function GameClient:SetupRemoteConnections()
 	local remoteFunctions = {
 		"GetPlayerData", "GetShopItems", "GetFarmingData"
 	}
-
-	-- Connect remote events
-	for _, eventName in ipairs(remoteEvents) do
-		local event = remoteFolder:FindFirstChild(eventName)
-		if event then
-			self.RemoteEvents[eventName] = event
-		else
-			warn("GameClient: Missing remote event: " .. eventName)
-		end
-	end
-
-	-- Connect remote functions  
-	for _, funcName in ipairs(remoteFunctions) do
-		local func = remoteFolder:FindFirstChild(funcName)
-		if func then
-			self.RemoteFunctions[funcName] = func
-		else
-			warn("GameClient: Missing remote function: " .. funcName)
-		end
-	end
 
 	-- Setup all event handlers in one place (FIXED)
 	self:SetupAllEventHandlers()
