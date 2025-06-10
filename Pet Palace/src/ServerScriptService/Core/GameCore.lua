@@ -651,9 +651,60 @@ function GameCore:SetupEventHandlers()
 		end
 	end
 
+	-- REPLACE the GetShopItems remote function in GameCore.lua SetupEventHandlers():
+
 	if self.RemoteFunctions.GetShopItems then
 		self.RemoteFunctions.GetShopItems.OnServerInvoke = function(player)
-			return ItemConfig.ShopItems
+			local shopItemsArray = {}
+
+			for itemId, item in pairs(ItemConfig.ShopItems) do
+				-- Validate essential item properties before adding to array
+				if item.name and item.price and item.currency and item.category then
+					-- Create a complete copy of the item
+					local itemCopy = {
+						id = itemId,  -- Ensure ID is first
+						name = item.name,
+						price = item.price,
+						currency = item.currency,
+						category = item.category,
+						description = item.description or "No description available",
+						icon = item.icon or "📦",
+						maxQuantity = item.maxQuantity or 999,
+						type = item.type or "item"
+					}
+
+					-- Copy any additional properties
+					for key, value in pairs(item) do
+						if not itemCopy[key] then  -- Don't overwrite essential properties
+							itemCopy[key] = value
+						end
+					end
+
+					table.insert(shopItemsArray, itemCopy)
+				else
+					-- Log items with missing essential properties
+					warn("GameCore: Item " .. itemId .. " missing essential properties:")
+					warn("  name: " .. tostring(item.name))
+					warn("  price: " .. tostring(item.price))
+					warn("  currency: " .. tostring(item.currency))
+					warn("  category: " .. tostring(item.category))
+				end
+			end
+
+			print("GameCore: Validated and sending " .. #shopItemsArray .. " shop items to " .. player.Name)
+
+			-- Debug: Print category breakdown
+			local categoryCount = {}
+			for _, item in ipairs(shopItemsArray) do
+				categoryCount[item.category] = (categoryCount[item.category] or 0) + 1
+			end
+
+			print("GameCore: Category breakdown:")
+			for category, count in pairs(categoryCount) do
+				print("  " .. category .. ": " .. count .. " items")
+			end
+
+			return shopItemsArray
 		end
 	end
 	-- Chicken Feeding System Events (ADDED)
@@ -2452,7 +2503,397 @@ function GameCore:SetupFarmPlotTestingCommands()
 					-- ADD these admin commands to GameCore.lua in the existing admin commands section
 
 					-- In the player.Chatted:Connect section, add these commands:
+				elseif command == "/debugshopall" then
+					-- Debug all shop items by category
+					print("=== COMPLETE SHOP DEBUG ===")
 
+					local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					local allCategories = {}
+					local totalItems = 0
+
+					-- Collect all unique categories
+					for itemId, item in pairs(ItemConfig.ShopItems) do
+						totalItems = totalItems + 1
+						if not allCategories[item.category] then
+							allCategories[item.category] = {}
+						end
+						table.insert(allCategories[item.category], {id = itemId, name = item.name})
+					end
+
+					print("Total items in ItemConfig: " .. totalItems)
+					print("\nItems by category:")
+
+					for category, items in pairs(allCategories) do
+						print("📁 Category: " .. (category or "nil"))
+						print("   Items: " .. #items)
+						for i, item in ipairs(items) do
+							print("   " .. i .. ". " .. item.id .. " (" .. item.name .. ")")
+						end
+						print("")
+					end
+
+					-- Test server response
+					if GameCore.RemoteFunctions.GetShopItems then
+						local serverItems = GameCore.RemoteFunctions.GetShopItems.OnServerInvoke(player)
+						local serverCount = 0
+						for _ in pairs(serverItems) do
+							serverCount = serverCount + 1
+						end
+						print("Server returns " .. serverCount .. " items")
+					end
+
+					print("==========================")
+
+				elseif command == "/testshopremote" then
+					-- Test if client can receive shop items
+					if GameCore.RemoteEvents.PlayerDataUpdated then
+						-- Send a test shop items call
+						local testItems = {
+							test_item = {
+								id = "test_item",
+								name = "Test Item",
+								category = "test",
+								price = 1,
+								currency = "coins",
+								description = "Debug test item"
+							}
+						}
+
+						-- We can't directly test the remote function, but we can check if it exists
+						print("GetShopItems RemoteFunction exists: " .. tostring(GameCore.RemoteFunctions.GetShopItems ~= nil))
+
+						if GameCore.RemoteFunctions.GetShopItems then
+							local items = ItemConfig.ShopItems
+							local count = 0
+							for _ in pairs(items) do count = count + 1 end
+							print("ItemConfig.ShopItems contains " .. count .. " items")
+							print("First few items:")
+							local i = 1
+							for itemId, item in pairs(items) do
+								print("  " .. i .. ". " .. itemId .. " (" .. item.category .. ")")
+								i = i + 1
+								if i > 5 then break end
+							end
+						end
+					end
+
+				elseif command == "/fixshopcategories" then
+					-- Fix any items that might have wrong categories
+					print("Checking for category mismatches...")
+
+					local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					local expectedCategories = {
+						"seeds", "farm", "mining", "crafting", "defense", "tools", "farming", "premium"
+					}
+
+					local mismatches = {}
+
+					for itemId, item in pairs(ItemConfig.ShopItems) do
+						local found = false
+						for _, expectedCat in ipairs(expectedCategories) do
+							if item.category == expectedCat then
+								found = true
+								break
+							end
+						end
+
+						if not found then
+							table.insert(mismatches, {id = itemId, category = item.category})
+						end
+					end
+
+					if #mismatches > 0 then
+						print("Found " .. #mismatches .. " items with unexpected categories:")
+						for _, mismatch in ipairs(mismatches) do
+							print("  " .. mismatch.id .. " has category: " .. (mismatch.category or "nil"))
+						end
+					else
+						print("All items have valid categories!")
+					end
+
+				elseif command == "/countshopitems" then
+					-- Count items per category
+					print("=== SHOP ITEM COUNT BY CATEGORY ===")
+
+					local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					local categoryCounts = {}
+					local totalItems = 0
+
+					for itemId, item in pairs(ItemConfig.ShopItems) do
+						totalItems = totalItems + 1
+						local category = item.category or "no_category"
+						categoryCounts[category] = (categoryCounts[category] or 0) + 1
+					end
+
+					for category, count in pairs(categoryCounts) do
+						print(category .. ": " .. count .. " items")
+					end
+
+					print("Total: " .. totalItems .. " items")
+					print("=================================")
+
+				elseif command == "/forceshopupdate" then
+					-- Force complete shop update for player
+					local playerData = GameCore:GetPlayerData(player)
+					if playerData then
+						-- Give currency for testing
+						playerData.coins = 10000
+						playerData.farmTokens = 1000
+
+						-- Give prerequisites for locked items
+						playerData.purchaseHistory = playerData.purchaseHistory or {}
+						local prerequisites = {
+							"farm_plot_starter", "basic_chicken", "guinea_fowl", 
+							"basic_feed", "organic_pesticide", "basic_roof", 
+							"reinforced_roof", "milk_efficiency_1", "workbench", "forge"
+						}
+
+						for _, prereq in ipairs(prerequisites) do
+							playerData.purchaseHistory[prereq] = true
+						end
+
+						-- Ensure farm setup
+						playerData.farming = playerData.farming or {}
+						playerData.farming.plots = 5
+
+						GameCore:SavePlayerData(player)
+
+						-- Force client update
+						if GameCore.RemoteEvents.PlayerDataUpdated then
+							GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+						end
+
+						GameCore:SendNotification(player, "Shop Update", "Shop data refreshed with test conditions!", "success")
+						print("Admin: Forced complete shop update for " .. player.Name)
+					end
+					-- ADD this command to your GameCore.lua admin commands:
+
+				elseif command == "/quickshoptest" then
+					-- Quick test to see what's happening with shop
+					print("=== QUICK SHOP TEST ===")
+
+					-- Test 1: Check ItemConfig loading
+					local success, ItemConfig = pcall(function()
+						return require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					end)
+
+					if success then
+						print("✅ ItemConfig loads successfully")
+
+						-- Count total items
+						local totalItems = 0
+						local categoryBreakdown = {}
+
+						for itemId, item in pairs(ItemConfig.ShopItems) do
+							totalItems = totalItems + 1
+							local cat = item.category or "unknown"
+							categoryBreakdown[cat] = (categoryBreakdown[cat] or 0) + 1
+						end
+
+						print("📦 Total items in ItemConfig: " .. totalItems)
+						print("📊 Category breakdown:")
+						for category, count in pairs(categoryBreakdown) do
+							print("   " .. category .. ": " .. count .. " items")
+						end
+
+						-- Test 2: Check specific missing items
+						local testItems = {
+							"wooden_pickaxe", "cave_access_pass", "workbench", 
+							"super_fertilizer", "rarity_booster"
+						}
+
+						print("🔍 Testing specific items:")
+						for _, itemId in ipairs(testItems) do
+							local item = ItemConfig.ShopItems[itemId]
+							if item then
+								print("   ✅ " .. itemId .. " found (category: " .. item.category .. ")")
+							else
+								print("   ❌ " .. itemId .. " NOT FOUND")
+							end
+						end
+
+						-- Test 3: Check server remote function
+						if GameCore.RemoteFunctions.GetShopItems then
+							print("✅ GetShopItems RemoteFunction exists")
+
+							-- Test what server would return
+							local serverItems = ItemConfig.ShopItems
+							local serverCount = 0
+							for _ in pairs(serverItems) do
+								serverCount = serverCount + 1
+							end
+							print("📤 Server would return " .. serverCount .. " items")
+						else
+							print("❌ GetShopItems RemoteFunction NOT FOUND")
+						end
+
+					else
+						print("❌ ItemConfig failed to load: " .. tostring(ItemConfig))
+					end
+
+					print("======================")
+
+					-- ALSO ADD this to your GameClient debug commands:
+				elseif command == "/clientshoptest" then
+					-- Test client-side shop reception
+					if _G.GameClient then
+						print("=== CLIENT SHOP TEST ===")
+
+						-- Test getting shop items
+						local shopItems = _G.GameClient:GetShopItems()
+						if shopItems then
+							print("✅ Client received shop items")
+							print("📦 Total items: " .. #shopItems)
+
+							-- Group by category
+							local clientCategories = {}
+							for _, item in ipairs(shopItems) do
+								local cat = item.category or "unknown"
+								clientCategories[cat] = (clientCategories[cat] or 0) + 1
+							end
+
+							print("📊 Client categories:")
+							for category, count in pairs(clientCategories) do
+								print("   " .. category .. ": " .. count .. " items")
+							end
+						else
+							print("❌ Client failed to get shop items")
+						end
+
+						-- Test remote function
+						if _G.GameClient.RemoteFunctions and _G.GameClient.RemoteFunctions.GetShopItems then
+							print("✅ Client has GetShopItems remote")
+						else
+							print("❌ Client missing GetShopItems remote")
+						end
+
+						print("========================")
+					else
+						print("GameClient not available")
+					end
+					
+					-- ADD this debug command to your GameCore.lua admin commands:
+
+				elseif command == "/debugmissingcats" then
+					-- Debug the specific missing categories
+					print("=== DEBUGGING MISSING CATEGORIES ===")
+
+					local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+
+					-- Check specific items that should be in missing categories
+					local expectedItems = {
+						mining = {"wooden_pickaxe", "cave_access_pass"},
+						crafting = {"workbench", "forge"},
+						farming = {"super_fertilizer"}
+					}
+
+					for category, itemIds in pairs(expectedItems) do
+						print("📁 Checking category: " .. category)
+
+						for _, itemId in ipairs(itemIds) do
+							local item = ItemConfig.ShopItems[itemId]
+							if item then
+								print("  ✅ " .. itemId .. " found (category: " .. item.category .. ")")
+								if item.category ~= category then
+									print("    ⚠️  CATEGORY MISMATCH! Expected: " .. category .. ", Got: " .. item.category)
+								end
+							else
+								print("  ❌ " .. itemId .. " NOT FOUND")
+							end
+						end
+					end
+
+					-- Test the remote function directly
+					print("\n🔧 Testing RemoteFunction:")
+					if GameCore.RemoteFunctions.GetShopItems then
+						local testItems = GameCore.RemoteFunctions.GetShopItems.OnServerInvoke(player)
+
+						if type(testItems) == "table" then
+							local isArray = testItems[1] ~= nil
+							print("  Remote returns: " .. (isArray and "Array" or "Dictionary"))
+
+							if isArray then
+								print("  Array length: " .. #testItems)
+								-- Check for missing categories in array
+								local foundCategories = {}
+								for _, item in ipairs(testItems) do
+									foundCategories[item.category] = (foundCategories[item.category] or 0) + 1
+								end
+
+								print("  Categories found in remote response:")
+								for cat, count in pairs(foundCategories) do
+									print("    " .. cat .. ": " .. count)
+								end
+							else
+								print("  Dictionary keys count: " .. self:CountTable(testItems))
+							end
+						else
+							print("  Remote returns: " .. type(testItems))
+						end
+					else
+						print("  ❌ GetShopItems RemoteFunction not found!")
+					end
+
+					print("=====================================")
+
+					-- ALSO ADD this helper function to GameCore if it doesn't exist:
+					function GameCore:CountTable(t)
+						local count = 0
+						for _ in pairs(t) do
+							count = count + 1
+						end
+						return count
+					end
+
+					-- ADD this CLIENT-SIDE debug command to test what client receives:
+					-- (Add this to your GameClient debug commands or create a separate local script)
+
+				elseif command == "/clientcattest" then
+					-- Test what categories the client actually receives
+					if _G.GameClient then
+						print("=== CLIENT CATEGORY TEST ===")
+
+						local shopItems = _G.GameClient:GetShopItems()
+						if shopItems then
+							print("Client received items: " .. (type(shopItems) == "table" and #shopItems or "not array"))
+
+							if type(shopItems) == "table" then
+								local categories = {}
+								for _, item in ipairs(shopItems) do
+									if item and item.category then
+										categories[item.category] = (categories[item.category] or 0) + 1
+									else
+										print("⚠️  Found item without category: " .. tostring(item and item.id or "unknown"))
+									end
+								end
+
+								print("Categories received by client:")
+								for category, count in pairs(categories) do
+									print("  " .. category .. ": " .. count .. " items")
+								end
+
+								-- Check for specific missing items
+								local missingItems = {"wooden_pickaxe", "workbench", "super_fertilizer"}
+								print("\nChecking for specific items:")
+								for _, searchId in ipairs(missingItems) do
+									local found = false
+									for _, item in ipairs(shopItems) do
+										if item.id == searchId then
+											found = true
+											print("  ✅ " .. searchId .. " found (category: " .. item.category .. ")")
+											break
+										end
+									end
+									if not found then
+										print("  ❌ " .. searchId .. " NOT FOUND")
+									end
+								end
+							end
+						else
+							print("❌ Client GetShopItems returned nil")
+						end
+						print("===========================")
+					end
 				elseif command == "/debugplanting" then
 					-- Debug the planting system
 					GameCore:DebugPlantingSystem(player)
@@ -2638,7 +3079,101 @@ function GameCore:SetupFarmPlotTestingCommands()
 						GameCore:SendNotification(player, "Shop Fixed", "You can now see all shop items!", "success")
 						print("Admin: Fixed shop for " .. player.Name)
 					end
+					-- ADD this command to your GameCore.lua admin commands for immediate testing:
 
+				elseif command == "/fixshopnow" then
+					-- Temporarily fix the GetShopItems remote for testing
+					print("🔧 Applying temporary shop fix...")
+
+					if GameCore.RemoteFunctions.GetShopItems then
+						-- Replace the current function with the fixed version
+						GameCore.RemoteFunctions.GetShopItems.OnServerInvoke = function(testPlayer)
+							local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+
+							-- Convert dictionary to array
+							local shopItemsArray = {}
+
+							for itemId, item in pairs(ItemConfig.ShopItems) do
+								local itemCopy = {}
+								for key, value in pairs(item) do
+									itemCopy[key] = value
+								end
+								itemCopy.id = itemId
+								table.insert(shopItemsArray, itemCopy)
+							end
+
+							print("Fixed remote: Sending " .. #shopItemsArray .. " items to " .. testPlayer.Name)
+
+							-- Show category breakdown
+							local categories = {}
+							for _, item in ipairs(shopItemsArray) do
+								categories[item.category] = (categories[item.category] or 0) + 1
+							end
+
+							print("Categories in fixed response:")
+							for cat, count in pairs(categories) do
+								print("  " .. cat .. ": " .. count)
+							end
+
+							return shopItemsArray
+						end
+
+						print("✅ Shop remote function updated!")
+						print("Now try opening the shop in-game to test.")
+
+						GameCore:SendNotification(player, "Shop Fixed", "Try opening the shop now - it should show all categories!", "success")
+					else
+						print("❌ GetShopItems remote not found!")
+					end
+
+					-- ALSO ADD a command to check current ItemConfig state:
+				elseif command == "/checkitemconfig" then
+					-- Check if ItemConfig has the expected items
+					print("=== ITEMCONFIG VERIFICATION ===")
+
+					local success, ItemConfig = pcall(function()
+						return require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					end)
+
+					if success then
+						print("✅ ItemConfig loaded successfully")
+
+						-- Check specific items
+						local testItems = {
+							{id = "wooden_pickaxe", expectedCategory = "mining"},
+							{id = "cave_access_pass", expectedCategory = "mining"},
+							{id = "workbench", expectedCategory = "crafting"},
+							{id = "forge", expectedCategory = "crafting"},
+							{id = "super_fertilizer", expectedCategory = "farming"},
+							{id = "mystical_altar", expectedCategory = "premium"}
+						}
+
+						print("Checking specific items:")
+						for _, test in ipairs(testItems) do
+							local item = ItemConfig.ShopItems[test.id]
+							if item then
+								local match = item.category == test.expectedCategory
+								print("  " .. test.id .. ": " .. (match and "✅" or "⚠️") .. " " .. item.category)
+								if not match then
+									print("    Expected: " .. test.expectedCategory .. ", Got: " .. item.category)
+								end
+							else
+								print("  " .. test.id .. ": ❌ NOT FOUND")
+							end
+						end
+
+						-- Count total items
+						local total = 0
+						for _ in pairs(ItemConfig.ShopItems) do
+							total = total + 1
+						end
+						print("Total items in ItemConfig: " .. total)
+
+					else
+						print("❌ Failed to load ItemConfig: " .. tostring(ItemConfig))
+					end
+
+					print("===============================")
 				elseif command == "/listallitems" then
 					-- List every single item in the shop system
 					print("=== ALL SHOP ITEMS ===")
@@ -2674,41 +3209,159 @@ function GameCore:SetupFarmPlotTestingCommands()
 					-- Attempt purchase
 					local success = GameCore:HandlePurchase(player, itemId, 1)
 					print("Purchase result: " .. tostring(success))
+					-- ADD this debug command to your GameCore.lua admin commands:
 
-				elseif command == "/checkitemconfig" then
-					-- Check if ItemConfig is working properly
-					local success, ItemConfig = pcall(function()
-						return require(ReplicatedStorage:WaitForChild("ItemConfig"))
-					end)
+				elseif command == "/validateshopitems" then
+					-- Check all shop items for missing or invalid properties
+					print("=== SHOP ITEMS VALIDATION ===")
 
-					if success then
-						print("ItemConfig loaded successfully")
+					local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					local validItems = 0
+					local invalidItems = 0
+					local issues = {}
 
-						local itemCount = 0
-						for _ in pairs(ItemConfig.ShopItems) do
-							itemCount = itemCount + 1
+					for itemId, item in pairs(ItemConfig.ShopItems) do
+						local itemIssues = {}
+
+						-- Check essential properties
+						if not item.name or type(item.name) ~= "string" then
+							table.insert(itemIssues, "missing/invalid name: " .. tostring(item.name))
 						end
 
-						print("Items found: " .. itemCount)
+						if not item.price or type(item.price) ~= "number" then
+							table.insert(itemIssues, "missing/invalid price: " .. tostring(item.price))
+						end
 
-						-- Test a few key functions
-						local testItem = ItemConfig.GetItem("carrot_seeds")
-						if testItem then
-							print("GetItem function working: " .. testItem.name)
+						if not item.currency or type(item.currency) ~= "string" then
+							table.insert(itemIssues, "missing/invalid currency: " .. tostring(item.currency))
+						end
+
+						if not item.category or type(item.category) ~= "string" then
+							table.insert(itemIssues, "missing/invalid category: " .. tostring(item.category))
+						end
+
+						if #itemIssues > 0 then
+							invalidItems = invalidItems + 1
+							issues[itemId] = itemIssues
+							print("❌ " .. itemId .. ":")
+							for _, issue in ipairs(itemIssues) do
+								print("    " .. issue)
+							end
 						else
-							print("GetItem function failed")
+							validItems = validItems + 1
 						end
-
-						if ItemConfig.CanPlayerBuy then
-							print("CanPlayerBuy function exists")
-						else
-							print("CanPlayerBuy function missing")
-						end
-
-					else
-						print("Failed to load ItemConfig: " .. tostring(ItemConfig))
 					end
-					
+
+					print("\n📊 VALIDATION SUMMARY:")
+					print("✅ Valid items: " .. validItems)
+					print("❌ Invalid items: " .. invalidItems)
+
+					if invalidItems > 0 then
+						print("\n🔧 Items needing fixes:")
+						for itemId, itemIssues in pairs(issues) do
+							print("  " .. itemId .. " (" .. #itemIssues .. " issues)")
+						end
+					else
+						print("🎉 All items are valid!")
+					end
+
+					print("============================")
+
+				elseif command == "/testshoparray" then
+					-- Test the array conversion process
+					print("=== TESTING SHOP ARRAY CONVERSION ===")
+
+					local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+					local shopItemsArray = {}
+					local conversionErrors = {}
+
+					for itemId, item in pairs(ItemConfig.ShopItems) do
+						local success, errorMsg = pcall(function()
+							if item.name and item.price and item.currency and item.category then
+								local itemCopy = {
+									id = itemId,
+									name = item.name,
+									price = item.price,
+									currency = item.currency,
+									category = item.category,
+									description = item.description or "No description",
+									icon = item.icon or "📦"
+								}
+
+								-- Test the CanAffordItem logic on this item
+								local testAffordable = (type(itemCopy.price) == "number" and type(itemCopy.currency) == "string")
+
+								table.insert(shopItemsArray, itemCopy)
+								return true
+							else
+								error("Missing essential properties")
+							end
+						end)
+
+						if not success then
+							table.insert(conversionErrors, {id = itemId, error = errorMsg})
+						end
+					end
+
+					print("✅ Successfully converted: " .. #shopItemsArray .. " items")
+					print("❌ Conversion errors: " .. #conversionErrors)
+
+					if #conversionErrors > 0 then
+						print("\nItems with conversion errors:")
+						for _, error in ipairs(conversionErrors) do
+							print("  " .. error.id .. ": " .. error.error)
+						end
+					end
+
+					-- Test a few items with the affordability logic
+					print("\n🧪 Testing affordability logic on first 3 items:")
+					for i = 1, math.min(3, #shopItemsArray) do
+						local item = shopItemsArray[i]
+						local hasValidPrice = (type(item.price) == "number")
+						local hasValidCurrency = (type(item.currency) == "string")
+						print("  " .. item.id .. ": price=" .. tostring(item.price) .. " (" .. type(item.price) .. "), currency=" .. tostring(item.currency) .. " (" .. type(item.currency) .. ")")
+						print("    Can test affordability: " .. tostring(hasValidPrice and hasValidCurrency))
+					end
+
+					print("=====================================")
+
+					-- ADD this to client-side debug commands to test client reception:
+				elseif command == "/testclientarray" then
+					-- Test what the client actually receives
+					if _G.GameClient then
+						print("=== CLIENT ARRAY RECEPTION TEST ===")
+
+						local success, shopItems = pcall(function()
+							return _G.GameClient:GetShopItems()
+						end)
+
+						if success and shopItems then
+							print("✅ Client successfully received shop items")
+							print("📦 Type: " .. type(shopItems))
+							print("📊 Count: " .. (type(shopItems) == "table" and #shopItems or "N/A"))
+
+							if type(shopItems) == "table" and #shopItems > 0 then
+								print("\n🔍 Testing first few items:")
+								for i = 1, math.min(3, #shopItems) do
+									local item = shopItems[i]
+									print("Item " .. i .. ":")
+									print("  id: " .. tostring(item.id))
+									print("  name: " .. tostring(item.name))
+									print("  price: " .. tostring(item.price) .. " (" .. type(item.price) .. ")")
+									print("  currency: " .. tostring(item.currency) .. " (" .. type(item.currency) .. ")")
+									print("  category: " .. tostring(item.category))
+
+									-- Test affordability
+									local canTest = (type(item.price) == "number" and type(item.currency) == "string")
+									print("  Can test affordability: " .. tostring(canTest))
+								end
+							end
+						else
+							print("❌ Client failed to get shop items: " .. tostring(shopItems))
+						end
+
+						print("===================================")
+					end	
 				elseif command == "/teleportplot" then
 					-- Teleport to a specific plot position
 					local plotNumber = tonumber(args[2]) or 1

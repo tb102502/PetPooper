@@ -3196,14 +3196,15 @@ function GameClient:RefreshShopMenu()
 
 	-- Request shop items from server
 	spawn(function()
-		local shopItems = self:GetShopItems()
+		local shopItems = self:GetEnhancedShopItems()  -- CHANGED: Use enhanced version
 		if shopItems and #shopItems > 0 then
-			self:CreateShopContent(contentArea, shopItems)
+			self:CreateShopContent(contentArea, shopItems)  -- Use the FIXED version from above
 		else
 			self:CreateDefaultShopContent(contentArea)
 		end
 	end)
 end
+-- REPLACE the GetShopItems function in GameClient.lua:
 
 function GameClient:GetShopItems()
 	if self.RemoteFunctions.GetShopItems then
@@ -3445,6 +3446,8 @@ end
 -- Update the CreateShopContent function to include new categories:
 
 
+-- REPLACE the CreateShopContent function in GameClient.lua with this version:
+
 function GameClient:CreateShopContent(parent, shopItems)
 	-- Remove loading label
 	local loadingLabel = parent:FindFirstChild("LoadingLabel")
@@ -3456,12 +3459,15 @@ function GameClient:CreateShopContent(parent, shopItems)
 	layout.Padding = UDim.new(0, 10)
 	layout.Parent = parent
 
-	-- UPDATED categories with all new sections
+	-- FIXED: Complete categories list including all item types
 	local categories = {
 		{name = "🌱 Seeds", key = "seeds", color = Color3.fromRGB(60, 120, 60)},
 		{name = "🚜 Farm Upgrades", key = "farm", color = Color3.fromRGB(120, 90, 60)},
+		{name = "⛏️ Mining Equipment", key = "mining", color = Color3.fromRGB(80, 60, 120)},
+		{name = "🔨 Crafting Stations", key = "crafting", color = Color3.fromRGB(120, 80, 60)},
 		{name = "🐔 Chicken Defense", key = "defense", color = Color3.fromRGB(100, 80, 120)},
 		{name = "🧪 Pest Control", key = "tools", color = Color3.fromRGB(120, 80, 80)},
+		{name = "✨ Enhancements", key = "farming", color = Color3.fromRGB(100, 100, 150)},
 		{name = "🏆 Premium Items", key = "premium", color = Color3.fromRGB(120, 60, 120)}
 	}
 
@@ -3722,13 +3728,43 @@ function GameClient:FormatPrice(price, currency)
 end
 
 function GameClient:CanAffordItem(item)
+	-- Defensive checks for nil values
+	if not item then 
+		warn("GameClient: CanAffordItem called with nil item")
+		return false 
+	end
+
+	if not item.price or type(item.price) ~= "number" then
+		warn("GameClient: Item " .. (item.id or "unknown") .. " has invalid price: " .. tostring(item.price))
+		return false
+	end
+
+	if not item.currency or type(item.currency) ~= "string" then
+		warn("GameClient: Item " .. (item.id or "unknown") .. " has invalid currency: " .. tostring(item.currency))
+		return false
+	end
+
 	local playerData = self:GetPlayerData()
-	if not playerData then return false end
+	if not playerData then 
+		warn("GameClient: No player data available for affordability check")
+		return false 
+	end
 
-	local playerCurrency = playerData[item.currency] or 0
-	return playerCurrency >= item.price
+	-- Safe currency check with default value
+	local playerCurrency = playerData[item.currency]
+	if not playerCurrency or type(playerCurrency) ~= "number" then
+		playerCurrency = 0
+	end
+
+	local canAfford = playerCurrency >= item.price
+
+	-- Debug logging for shop issues
+	if not canAfford then
+		print("GameClient: Cannot afford " .. (item.id or "unknown") .. " - Need " .. item.price .. " " .. item.currency .. ", have " .. playerCurrency)
+	end
+
+	return canAfford
 end
-
 function GameClient:PurchaseItem(item)
 	if not self:CanAffordItem(item) then
 		self:ShowNotification("Insufficient Funds", "You don't have enough " .. item.currency .. "!", "error")
