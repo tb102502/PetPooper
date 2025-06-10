@@ -1812,24 +1812,27 @@ end
 -- Get items by category (enhanced)
 function ItemConfig.GetItemsByCategory(category)
 	local items = {}
+	for itemId, item in pairs(ItemConfig.ShopItems) do
+		if item.category == category then
+			items[itemId] = item
+		end
+	end
+	return items
+end
 
-	-- Check all item sources
-	local sources = {
-		ItemConfig.ShopItems or {},
-		ItemConfig.NewShopItems or {},
-		ItemConfig.NewSeeds or {},
-		ItemConfig.NewCrops or {}
-	}
+function ItemConfig.ValidateItem(itemId)
+	local item = ItemConfig.ShopItems[itemId]
+	if not item then return false, "Item not found" end
 
-	for _, source in ipairs(sources) do
-		for itemId, item in pairs(source) do
-			if item.category == category then
-				items[itemId] = item
-			end
+	-- Check required properties
+	local required = {"name", "price", "currency", "category"}
+	for _, prop in ipairs(required) do
+		if not item[prop] then
+			return false, "Missing property: " .. prop
 		end
 	end
 
-	return items
+	return true, "Valid item"
 end
 
 print("Enhanced ItemConfig: ✅ New seeds, mining, and crafting systems loaded!")

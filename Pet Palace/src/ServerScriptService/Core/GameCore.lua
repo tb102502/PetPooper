@@ -545,22 +545,17 @@ function GameCore:SetupRemoteEvents()
 	local remoteEvents = {
 		-- Livestock System
 		"CollectMilk", "FeedPig",
-
 		-- Shop System  
 		"PurchaseItem", "ItemPurchased", "CurrencyUpdated",
-
 		-- Farming System
-		"PlantSeed", "HarvestCrop", "SellCrop", "SellMilk", -- Added SellMilk
-
+		"PlantSeed", "HarvestCrop", "SellCrop", "SellMilk", "SellEgg", -- Added SellEgg
 		-- General
 		"PlayerDataUpdated", "ShowNotification",
-
-		-- Chicken System Events (FIXED - Added missing events)
-		"PurchaseChicken", "FeedChicken", "CollectEgg", "ChickenPlaced", "ChickenMoved",
-		"FeedAllChickens", "FeedChickensWithType", -- Added these missing events
-
+		-- Chicken System Events
+		"PurchaseChicken", "FeedChicken", "CollectEgg", "ChickenPlaced", 
+		"FeedAllChickens", "FeedChickensWithType", -- Fixed: removed duplicates
 		-- Pest Control Events  
-		"UsePesticide", "ChickenPlaced", "ChickenMoved"
+		"UsePesticide", "PestSpotted", "PestEliminated" -- Fixed names
 	}
 	local remoteFunctions = {
 		"GetPlayerData", "GetShopItems", "GetFarmingData"
@@ -609,7 +604,31 @@ end
 -- Setup Event Handlers
 function GameCore:SetupEventHandlers()
 	print("GameCore: Setting up event handlers...")
+	-- Egg Selling Event (MISSING)
+	if self.RemoteEvents.SellEgg then
+		self.RemoteEvents.SellEgg.OnServerEvent:Connect(function(player, eggType, amount)
+			pcall(function()
+				self:SellEgg(player, eggType, amount or 1)
+			end)
+		end)
+	end
 
+	-- Feed All Chickens Events (MISSING)
+	if self.RemoteEvents.FeedAllChickens then
+		self.RemoteEvents.FeedAllChickens.OnServerEvent:Connect(function(player)
+			pcall(function()
+				self:HandleFeedAllChickens(player)
+			end)
+		end)
+	end
+
+	if self.RemoteEvents.FeedChickensWithType then
+		self.RemoteEvents.FeedChickensWithType.OnServerEvent:Connect(function(player, feedType)
+			pcall(function()
+				self:HandleFeedChickensWithType(player, feedType)
+			end)
+		end)
+	end
 	-- Livestock System Events
 	if self.RemoteEvents.CollectMilk then
 		self.RemoteEvents.CollectMilk.OnServerEvent:Connect(function(player)
@@ -748,8 +767,53 @@ function GameCore:SellMilk(player, amount)
 
 	print("GameCore: " .. player.Name .. " sold " .. amount .. " milk for " .. totalEarnings .. " coins")
 	return true
-end
+end-- Add this function to GameCore.lua (after SellMilk function)
+function GameCore:SellEgg(player, eggType, amount)
+	amount = amount or 1
+	local playerData = self:GetPlayerData(player)
 
+	if not playerData or not playerData.farming or not playerData.farming.inventory then
+		self:SendNotification(player, "No Eggs", "You don't have any eggs to sell!", "error")
+		return false
+	end
+
+	local eggCount = playerData.farming.inventory[eggType] or 0
+	if eggCount < amount then
+		self:SendNotification(player, "Not Enough Eggs", 
+			"You only have " .. eggCount .. " " .. eggType .. "!", "error")
+		return false
+	end
+
+	-- Get egg price from ItemConfig
+	local ItemConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("ItemConfig"))
+	local eggData = ItemConfig.ShopItems[eggType]
+	local eggPrice = eggData and eggData.sellValue or 5 -- Default 5 coins
+
+	-- Calculate earnings
+	local totalEarnings = eggPrice * amount
+
+	-- Process sale
+	playerData.farming.inventory[eggType] = playerData.farming.inventory[eggType] - amount
+	playerData.coins = (playerData.coins or 0) + totalEarnings
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.eggseSold = (playerData.stats.eggsSold or 0) + amount
+	playerData.stats.coinsEarned = (playerData.stats.coinsEarned or 0) + totalEarnings
+
+	-- Save and update
+	self:UpdatePlayerLeaderstats(player)
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	self:SendNotification(player, "Eggs Sold!", 
+		"Sold " .. amount .. " " .. eggType .. " for " .. totalEarnings .. " coins!", "success")
+
+	return true
+end
 function GameCore:SetupPestChickenEventHandlers()
 	print("GameCore: Setting up pest and chicken event handlers...")
 
@@ -1458,35 +1522,18 @@ function GameCore:HandlePurchase(player, itemId, quantity)
 	print("🔧 SERVER: Processing purchase by type: " .. (item.type or "unknown"))
 
 	if item.type == "farmPlot" or item.id == "farm_plot_starter" or item.id == "farm_plot_expansion" then
-		print("🌾 SERVER: Processing farm plot purchase")
 		success = self:HandleFarmPlotPurchase(player, playerData, item, quantity)
-
-	elseif item.type == "seed" then
-		print("🌱 SERVER: Processing seed purchase")
+	elseif item.type == "seed" or item.id:find("_seeds") then -- FIXED: Added ID check
 		success = self:HandleSeedPurchase(player, playerData, item, quantity)
-
-	elseif item.type == "upgrade" then
-		print("⬆️ SERVER: Processing upgrade purchase")
-		success = self:HandleUpgradePurchase(player, playerData, item, quantity)
-
-	elseif item.type == "chicken" then
-		print("🐔 SERVER: Processing chicken purchase")
+	elseif item.type == "chicken" or item.category == "defense" and (item.id:find("chicken") or item.id:find("fowl") or item.id:find("rooster")) then -- FIXED
 		success = self:HandleChickenItemPurchase(player, playerData, item, quantity)
-
-	elseif item.type == "feed" then
-		print("🌾 SERVER: Processing feed purchase")
+	elseif item.type == "feed" or item.id:find("_feed") then -- FIXED: Added ID check
 		success = self:HandleFeedPurchase(player, playerData, item, quantity)
-
-	elseif item.type == "tool" then
-		print("🧪 SERVER: Processing tool purchase")
+	elseif item.type == "tool" or item.category == "tools" then -- FIXED: Added category check
 		success = self:HandlePestControlToolPurchase(player, playerData, item, quantity)
-
-	elseif item.type == "roof" then  -- MISSING HANDLER ADDED
-		print("🏠 SERVER: Processing roof purchase")
+	elseif item.type == "roof" or item.id:find("_roof") or item.id == "mega_dome" then -- FIXED
 		success = self:HandleRoofPurchase(player, playerData, item, quantity)
-
 	else
-		print("📦 SERVER: Processing generic purchase")
 		success = self:HandleGenericPurchase(player, playerData, item, quantity)
 	end
 
@@ -5044,7 +5091,29 @@ game.Players.PlayerAdded:Connect(function(player)
 					end
 					print("Admin: Gave all seeds to " .. player.Name)
 				end
+			elseif command == "/testshopall" then
+				-- Test all shop categories
+				local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+				print("=== TESTING ALL SHOP CATEGORIES ===")
 
+				local categories = {"seeds", "farm", "defense", "tools", "premium"}
+				for _, category in ipairs(categories) do
+					local items = ItemConfig.GetItemsByCategory(category)
+					local count = 0
+					for _ in pairs(items) do count = count + 1 end
+					print(category .. ": " .. count .. " items")
+				end
+
+			elseif command == "/testpurchaseflow" then
+				-- Test complete purchase flow
+				local testItems = {"carrot_seeds", "basic_chicken", "organic_pesticide", "basic_roof"}
+
+				for _, itemId in ipairs(testItems) do
+					print("Testing purchase: " .. itemId)
+					local success = GameCore:HandlePurchase(player, itemId, 1)
+					print("Result: " .. tostring(success))
+					wait(1)
+				end
 			elseif command == "/checkseeds" then
 				-- Check player's seed inventory
 				local playerData = GameCore:GetPlayerData(player)
