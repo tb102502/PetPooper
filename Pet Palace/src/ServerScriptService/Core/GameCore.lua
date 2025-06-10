@@ -673,11 +673,22 @@ function GameCore:SetupEventHandlers()
 		end)
 	end
 
-	-- Milk Selling Event (ADDED)
+	-- Milk Selling Event (FIXED)
 	if self.RemoteEvents.SellMilk then
-		self.RemoteEvents.SellMilk.OnServerEvent:Connect(function(player, amount)
+		self.RemoteEvents.SellMilk.OnServerEvent:Connect(function(player, milkType, amount)
 			pcall(function()
-				self:SellMilk(player, amount or 1)
+				-- Handle both old format (just amount) and new format (milkType, amount)
+				if type(milkType) == "number" and not amount then
+					-- Old format: only amount was sent
+					amount = milkType
+					milkType = "fresh_milk"
+				else
+					-- New format: milkType and amount
+					amount = amount or 1
+					milkType = milkType or "fresh_milk"
+				end
+
+				self:SellMilk(player, milkType, amount)
 			end)
 		end)
 	end
@@ -685,29 +696,36 @@ function GameCore:SetupEventHandlers()
 	print("GameCore: Event handlers setup complete")
 end
 
-function GameCore:SellMilk(player, amount)
+function GameCore:SellMilk(player, milkType, amount)
+	milkType = milkType or "fresh_milk"
 	amount = amount or 1
+
 	local playerData = self:GetPlayerData(player)
 	if not playerData or not playerData.livestock or not playerData.livestock.inventory then
 		self:SendNotification(player, "No Milk", "You don't have any milk to sell!", "error")
 		return false
 	end
 
-	local milkCount = playerData.livestock.inventory.fresh_milk or 0
+	local milkCount = playerData.livestock.inventory[milkType] or 0
 	if milkCount < amount then
 		self:SendNotification(player, "Not Enough Milk", 
-			"You only have " .. milkCount .. " milk!", "error")
+			"You only have " .. milkCount .. " " .. milkType .. "!", "error")
 		return false
 	end
 
-	-- Get milk price (better than old direct coin system)
-	local milkPrice = 15 -- 15 coins per milk (was 10 coins direct)
+	-- Get milk price based on type
+	local milkPrices = {
+		fresh_milk = 15,
+		processed_milk = 25,
+		cheese = 50
+	}
+	local milkPrice = milkPrices[milkType] or 15
 
 	-- Calculate total earnings
 	local totalEarnings = milkPrice * amount
 
 	-- Process sale
-	playerData.livestock.inventory.fresh_milk = playerData.livestock.inventory.fresh_milk - amount
+	playerData.livestock.inventory[milkType] = playerData.livestock.inventory[milkType] - amount
 	playerData.coins = (playerData.coins or 0) + totalEarnings
 
 	-- Update stats
@@ -723,11 +741,21 @@ function GameCore:SellMilk(player, amount)
 		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
 	end
 
+	local itemName = self:GetMilkDisplayName(milkType)
 	self:SendNotification(player, "Milk Sold!", 
-		"Sold " .. amount .. " milk for " .. totalEarnings .. " coins!", "success")
+		"Sold " .. amount .. "x " .. itemName .. " for " .. totalEarnings .. " coins!", "success")
 
-	print("GameCore: " .. player.Name .. " sold " .. amount .. " milk for " .. totalEarnings .. " coins")
+	print("GameCore: " .. player.Name .. " sold " .. amount .. "x " .. milkType .. " for " .. totalEarnings .. " coins")
 	return true
+end
+
+function GameCore:GetMilkDisplayName(milkType)
+	local names = {
+		fresh_milk = "Fresh Milk",
+		processed_milk = "Processed Milk", 
+		cheese = "Artisan Cheese"
+	}
+	return names[milkType] or milkType:gsub("_", " ")
 end
 
 function GameCore:SetupPestChickenEventHandlers()
@@ -4580,4 +4608,7 @@ print("  /resetfarming - Reset player's farming data")
 print("  /forceharvest - Force all crops to be ready")
 print("  /farmstatus - Show detailed farming status")
 
+_G.GameCore = GameCore
+
+print("GameCore: Made globally available as _G.GameCore")
 return GameCore

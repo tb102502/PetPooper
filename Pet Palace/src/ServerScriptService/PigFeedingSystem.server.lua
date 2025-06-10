@@ -32,8 +32,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerScriptService = game:GetService("ServerScriptService")
-local GameCore = require(ServerScriptService.Core:WaitForChild("Gam"):GameCore)
+
 -- Wait for GameCore
 local GameCore = WaitForGameCore("PigFeedingSystem")
 
