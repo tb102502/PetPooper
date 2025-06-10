@@ -1132,16 +1132,21 @@ end
 -- Enhanced purchase handler specifically for seeds
 function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
 	print("🎉 CLIENT: Received purchase confirmation!")
-	print("    Item: " .. itemId)
-	print("    Quantity: " .. quantity)
-	print("    Cost: " .. cost .. " " .. currency)
+	print("    Item: " .. tostring(itemId))
+	print("    Quantity: " .. tostring(quantity))
+
+	-- FIX: Safely handle nil cost and currency values
+	local safeCost = cost or 0
+	local safeCurrency = currency or "coins"
+
+	print("    Cost: " .. tostring(safeCost) .. " " .. tostring(safeCurrency))
 
 	-- Update local data
 	if self.PlayerData then
 		print("💳 CLIENT: Updating local currency data")
-		local oldAmount = self.PlayerData[currency] or 0
-		self.PlayerData[currency] = math.max(0, oldAmount - cost)
-		print("    " .. currency .. ": " .. oldAmount .. " -> " .. self.PlayerData[currency])
+		local oldAmount = self.PlayerData[safeCurrency] or 0
+		self.PlayerData[safeCurrency] = math.max(0, oldAmount - safeCost)
+		print("    " .. safeCurrency .. ": " .. oldAmount .. " -> " .. self.PlayerData[safeCurrency])
 
 		self:UpdateCurrencyDisplay()
 	end
@@ -1149,7 +1154,7 @@ function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
 	-- Show appropriate notification for seeds
 	if itemId:find("_seeds") then
 		self:ShowNotification("🌱 Seeds Purchased!", 
-			"Added " .. quantity .. "x " .. itemId:gsub("_", " ") .. " to your farming inventory!\nOpen Farm menu to plant them!", "success")
+			"Added " .. tostring(quantity) .. "x " .. itemId:gsub("_", " ") .. " to your farming inventory!\nOpen Farm menu to plant them!", "success")
 
 		-- Auto-refresh farm menu if it's open
 		if self.UIState.CurrentPage == "Farm" then
