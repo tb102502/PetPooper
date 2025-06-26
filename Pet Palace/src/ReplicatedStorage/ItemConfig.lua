@@ -1162,9 +1162,106 @@ ItemConfig.ShopItems = {
 		maxQuantity = 20,
 		type = "tool",
 		purchaseOrder = 17 -- Utility tool
-	}
-}
+	},
+ExpansionShopItems = {
+		farm_expansion_level_2 = {
+			id = "farm_expansion_level_2",
+			name = "Small Farm Expansion",
+			description = "Expand your farm to 5x5 grid (25 planting spots)",
+			price = 5000,
+			currency = "coins",
+			category = "Farm Expansions",
+			icon = "🌾",
+			purchaseLimit = 1,
+			requirements = {
+				expansionLevel = 1, -- Must be level 1 to buy level 2
+				farmPlotStarter = true -- Must have initial farm
+			},
+			effects = {
+				type = "farm_expansion",
+				targetLevel = 2,
+				unlocksSpots = 16 -- 25 - 9 = 16 new spots
+			},
+			shopDisplay = {
+				featured = true,
+				order = 1
+			}
+		},
 
+		farm_expansion_level_3 = {
+			id = "farm_expansion_level_3",
+			name = "Medium Farm Expansion",
+			description = "Expand your farm to 7x7 grid (49 planting spots)",
+			price = 15000,
+			currency = "coins",
+			category = "Farm Expansions", 
+			icon = "🏡",
+			purchaseLimit = 1,
+			requirements = {
+				expansionLevel = 2,
+				farmPlotStarter = true
+			},
+			effects = {
+				type = "farm_expansion",
+				targetLevel = 3,
+				unlocksSpots = 24 -- 49 - 25 = 24 new spots
+			},
+			shopDisplay = {
+				featured = true,
+				order = 2
+			}
+		},
+
+		farm_expansion_level_4 = {
+			id = "farm_expansion_level_4",
+			name = "Large Farm Expansion",
+			description = "Expand your farm to 9x9 grid (81 planting spots)",
+			price = 35000,
+			currency = "coins",
+			category = "Farm Expansions",
+			icon = "🏞️",
+			purchaseLimit = 1,
+			requirements = {
+				expansionLevel = 3,
+				farmPlotStarter = true
+			},
+			effects = {
+				type = "farm_expansion",
+				targetLevel = 4,
+				unlocksSpots = 32 // 81 - 49
+			},
+			shopDisplay = {
+				featured = true,
+				order = 3
+			}
+		},
+
+		farm_expansion_level_5 = {
+			id = "farm_expansion_level_5",
+			name = "Mega Farm Expansion",
+			description = "Expand your farm to ultimate 11x11 grid (121 planting spots)",
+			price = 75000,
+			currency = "coins",
+			category = "Farm Expansions",
+			icon = "🏰",
+			purchaseLimit = 1,
+			requirements = {
+				expansionLevel = 4,
+				farmPlotStarter = true
+			},
+			effects = {
+				type = "farm_expansion",
+				targetLevel = 5,
+				unlocksSpots = 40 // 121 - 81
+			},
+			shopDisplay = {
+				featured = true,
+				order = 4,
+				highlight = "ULTIMATE"
+			}
+		}
+	}
+	}
 -- ========== RARITY FUNCTIONS ==========
 
 function ItemConfig.GetCropRarity(seedId, playerBoosters)

@@ -12,10 +12,12 @@ local UIManager = {}
 
 -- Services ONLY - no external module requires
 local Players = game:GetService("Players")
+local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+local ShopSystem = require(ServerScriptService.Systems:WaitForChild("ShopSystem"))
 
 -- Player reference
 local LocalPlayer = Players.LocalPlayer
@@ -1024,6 +1026,58 @@ function UIManager:VerifyShopSeedsSetup()
 
 	print("=====================================")
 	return passed == total
+end
+
+
+function UIManager:UpdateFarmExpansionSection(player)
+	local expansions = ShopSystem:GetAvailableFarmExpansions(player)
+
+	-- Clear existing expansion items
+	local expansionFrame = self.ShopFrame:FindFirstChild("FarmExpansions")
+	if expansionFrame then
+		for _, child in pairs(expansionFrame:GetChildren()) do
+			if child:IsA("Frame") and child.Name:find("ExpansionItem") then
+				child:Destroy()
+			end
+		end
+	end
+
+	-- Create expansion items
+	for i, expansionInfo in ipairs(expansions) do
+		local displayInfo = ShopSystem:GetExpansionDisplayInfo(expansionInfo)
+		local itemFrame = self:CreateExpansionItemFrame(displayInfo, expansionInfo)
+
+		-- Position the frame
+		itemFrame.Position = UDim2.new(0, 10, 0, (i-1) * 120 + 10)
+		itemFrame.Parent = expansionFrame
+
+		-- Setup purchase button
+		local purchaseButton = itemFrame:FindFirstChild("PurchaseButton")
+		if purchaseButton then
+			purchaseButton.MouseButton1Click:Connect(function()
+				if expansionInfo.meetsRequirements and expansionInfo.isAffordable then
+					ShopSystem:ProcessItemPurchase(player, expansionInfo.item.id, 1)
+					-- Refresh the expansion section after purchase
+					self:UpdateFarmExpansionSection(player)
+				end
+			end)
+		end
+	end
+end
+
+function ShopSystem:ProcessUpgradePurchase(player, playerData, item, quantity)
+	playerData.upgrades = playerData.upgrades or {}
+
+	if item.maxQuantity == 1 then
+		playerData.upgrades[item.id] = true
+		print("⬆️ Activated upgrade: " .. item.id)
+	else
+		local currentLevel = playerData.upgrades[item.id] or 0
+		playerData.upgrades[item.id] = currentLevel + quantity
+		print("⬆️ Upgraded " .. item.id .. " to level " .. (currentLevel + quantity))
+	end
+
+	return true
 end
 function UIManager:CreateShopItemContent(parent)
 	local itemContent = Instance.new("ScrollingFrame")

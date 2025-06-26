@@ -14,9 +14,11 @@ local ShopSystem = {}
 -- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
 local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
-
+local GameCore = require(ServerScriptService.Core:WaitForChild("GameCore"))
+local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
 -- Module State
 ShopSystem.RemoteEvents = {}
 ShopSystem.RemoteFunctions = {}
@@ -540,61 +542,227 @@ function ShopSystem:ProcessSeedPurchase(player, playerData, item, quantity)
 	return true
 end
 
-function ShopSystem:ProcessFarmPlotPurchase(player, playerData, item, quantity)
-	if not self.GameCore then return false end
+function ShopSystem:HandleFarmExpansionPurchase(player, item)
+	print("🌾 ShopSystem: Processing farm expansion purchase for " .. player.Name)
 
-	if item.id == "farm_plot_starter" then
-		playerData.farming = playerData.farming or {}
-		playerData.farming.plots = 1
-		playerData.farming.inventory = playerData.farming.inventory or {}
-
-		if item.effects and item.effects.starterSeeds then
-			for seedId, amount in pairs(item.effects.starterSeeds) do
-				playerData.farming.inventory[seedId] = (playerData.farming.inventory[seedId] or 0) + amount
-				print("🎁 Added " .. amount .. "x " .. seedId .. " as starter bonus")
-			end
-		end
-
-		local success = self.GameCore:CreatePlayerFarmPlot(player, 1)
-		print("🌾 Created first farm plot: " .. tostring(success))
-		return success
-
-	elseif item.id == "farm_plot_expansion" then
-		local currentPlots = playerData.farming and playerData.farming.plots or 0
-		local newPlotNumber = currentPlots + quantity
-
-		if newPlotNumber > 10 then 
-			print("❌ Cannot exceed 10 farm plots")
-			return false 
-		end
-
-		playerData.farming = playerData.farming or {}
-		playerData.farming.plots = newPlotNumber
-
-		for i = currentPlots + 1, newPlotNumber do
-			self.GameCore:CreatePlayerFarmPlot(player, i)
-			print("🚜 Created farm plot " .. i)
-		end
-		return true
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData then
+		return false, "Player data not found"
 	end
 
-	return false
-end
+	-- Validate expansion requirements
+	local currentLevel = playerData.farming and playerData.farming.expansionLevel or 1
+	local targetLevel = item.effects.targetLevel
 
-function ShopSystem:ProcessUpgradePurchase(player, playerData, item, quantity)
-	playerData.upgrades = playerData.upgrades or {}
+	-- Check if player meets requirements
+	if not item.requirements then
+		return false, "Item has no requirements defined"
+	end
 
-	if item.maxQuantity == 1 then
-		playerData.upgrades[item.id] = true
-		print("⬆️ Activated upgrade: " .. item.id)
+	-- Check farm plot starter requirement
+	if item.requirements.farmPlotStarter then
+		local hasStarter = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+		if not hasStarter then
+			return false, "You need to purchase the starter farm plot first!"
+		end
+	end
+
+	-- Check expansion level requirement
+	if item.requirements.expansionLevel and currentLevel ~= item.requirements.expansionLevel then
+		local requiredConfig = GameCore:GetExpansionConfig(item.requirements.expansionLevel)
+		local requiredName = requiredConfig and requiredConfig.name or "Level " .. item.requirements.expansionLevel
+		return false, "You need " .. requiredName .. " before purchasing this expansion!"
+	end
+
+	-- Check if already at or above target level
+	if currentLevel >= targetLevel then
+		local currentConfig = GameCore:GetExpansionConfig(currentLevel)
+		return false, "You already have " .. (currentConfig and currentConfig.name or "this expansion level") .. " or higher!"
+	end
+
+	-- Check if can afford
+	if playerData.coins < item.price then
+		return false, "You need " .. item.price .. " coins for this expansion!"
+	end
+
+	-- Process the expansion
+	playerData.coins = playerData.coins - item.price
+	playerData.farming = playerData.farming or {}
+	playerData.farming.expansionLevel = targetLevel
+
+	-- Record purchase
+	playerData.purchaseHistory = playerData.purchaseHistory or {}
+	playerData.purchaseHistory[item.id] = {
+		purchaseTime = os.time(),
+		cost = item.price,
+		currency = item.currency
+	}
+
+	-- Update the physical farm
+	local success = GameCore:CreateExpandableFarmPlot(player)
+
+	if success then
+		-- Save data
+		GameCore:SavePlayerData(player)
+
+		-- Update player data
+		if GameCore.RemoteEvents and GameCore.RemoteEvents.PlayerDataUpdated then
+			GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+		end
+
+		-- Get expansion config for notification
+		local newConfig = GameCore:GetExpansionConfig(targetLevel)
+		local unlockedSpots = item.effects.unlocksSpots or 0
+
+		-- Send success notification
+		if GameCore.SendNotification then
+			GameCore:SendNotification(player, "🎉 Farm Expanded!", 
+				"Upgraded to " .. newConfig.name .. "!\nUnlocked " .. unlockedSpots .. " new planting spots!\nTotal: " .. newConfig.totalSpots .. " spots", "success")
+		end
+
+		print("🌾 ShopSystem: Successfully expanded " .. player.Name .. "'s farm to level " .. targetLevel)
+		return true, "Farm expansion successful!"
 	else
-		local currentLevel = playerData.upgrades[item.id] or 0
-		playerData.upgrades[item.id] = currentLevel + quantity
-		print("⬆️ Upgraded " .. item.id .. " to level " .. (currentLevel + quantity))
+		-- Refund on failure
+		playerData.coins = playerData.coins + item.price
+		playerData.farming.expansionLevel = currentLevel
+		playerData.purchaseHistory[item.id] = nil
+
+		return false, "Failed to create expanded farm. Purchase refunded."
+	end
+end
+
+-- ========== SHOPSYSTEM INTEGRATION ==========
+
+--[[
+Update your existing ShopSystem purchase method to handle farm expansions.
+Add this to your main purchase handler:
+]]
+
+function ShopSystem:ProcessItemPurchase(player, itemId, quantity)
+	local item = ItemConfig.ShopItems[itemId]
+	if not item then
+		return false, "Item not found"
 	end
 
-	return true
+	-- Check if this is a farm expansion
+	if item.effects and item.effects.type == "farm_expansion" then
+		return self:HandleFarmExpansionPurchase(player, item)
+	end
+
+	-- Handle other item types with your existing logic
+	-- ... rest of your purchase logic
 end
+
+-- ========== SHOP UI INTEGRATION ==========
+
+--[[
+Add this function to filter expansion items based on player's current level
+This should be used when displaying items in the shop UI
+]]
+
+function ShopSystem:GetAvailableFarmExpansions(player)
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData then return {} end
+
+	local currentLevel = playerData.farming and playerData.farming.expansionLevel or 0
+	local hasStarter = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+
+	local availableExpansions = {}
+
+	-- Check each expansion level
+	for level = 2, 5 do
+		local itemId = "farm_expansion_level_" .. level
+		local item = ItemConfig.ShopItems[itemId]
+
+		if item then
+			-- Check requirements
+			local meetsRequirements = true
+			local requirementIssues = {}
+
+			if item.requirements then
+				-- Check starter requirement
+				if item.requirements.farmPlotStarter and not hasStarter then
+					meetsRequirements = false
+					table.insert(requirementIssues, "Need starter farm plot")
+				end
+
+				-- Check level requirement
+				if item.requirements.expansionLevel and currentLevel ~= item.requirements.expansionLevel then
+					meetsRequirements = false
+					local requiredConfig = GameCore:GetExpansionConfig(item.requirements.expansionLevel)
+					local requiredName = requiredConfig and requiredConfig.name or "Level " .. item.requirements.expansionLevel
+					table.insert(requirementIssues, "Need " .. requiredName)
+				end
+
+				-- Check if already purchased/exceeded
+				if currentLevel >= item.effects.targetLevel then
+					meetsRequirements = false
+					table.insert(requirementIssues, "Already owned")
+				end
+
+				-- Check currency
+				if playerData.coins < item.price then
+					-- Don't exclude, but mark as unaffordable
+					table.insert(requirementIssues, "Need " .. item.price .. " coins")
+				end
+			end
+
+			-- Add to available items with requirement status
+			table.insert(availableExpansions, {
+				item = item,
+				meetsRequirements = meetsRequirements,
+				isAffordable = playerData.coins >= item.price,
+				requirementIssues = requirementIssues,
+				isNextLevel = (currentLevel + 1) == item.effects.targetLevel
+			})
+		end
+	end
+
+	return availableExpansions
+end
+
+-- ========== SHOP UI DISPLAY HELPER ==========
+
+--[[
+Helper function to create expansion item display text for shop UI
+]]
+
+function ShopSystem:GetExpansionDisplayInfo(expansionInfo)
+	local item = expansionInfo.item
+	local targetConfig = GameCore:GetExpansionConfig(item.effects.targetLevel)
+
+	local displayText = {
+		title = item.name,
+		description = item.description,
+		price = item.price .. " " .. item.currency,
+		details = {
+			"📏 Grid Size: " .. targetConfig.gridSize .. "x" .. targetConfig.gridSize,
+			"🌱 Total Spots: " .. targetConfig.totalSpots,
+			"✨ New Spots: +" .. item.effects.unlocksSpots
+		}
+	}
+
+	-- Add requirement status
+	if not expansionInfo.meetsRequirements then
+		displayText.status = "LOCKED"
+		displayText.statusColor = Color3.fromRGB(255, 100, 100)
+		displayText.requirements = expansionInfo.requirementIssues
+	elseif not expansionInfo.isAffordable then
+		displayText.status = "INSUFFICIENT FUNDS"
+		displayText.statusColor = Color3.fromRGB(255, 200, 100)
+	elseif expansionInfo.isNextLevel then
+		displayText.status = "AVAILABLE"
+		displayText.statusColor = Color3.fromRGB(100, 255, 100)
+	else
+		displayText.status = "FUTURE EXPANSION"
+		displayText.statusColor = Color3.fromRGB(200, 200, 200)
+	end
+
+	return displayText
+end
+
+
 
 function ShopSystem:ProcessCowPurchase(player, playerData, item, quantity)
 	print("🐄 ShopSystem: Processing enhanced cow purchase for " .. player.Name)
