@@ -1,12 +1,13 @@
 --[[
-    UPDATED UIManager.lua - Shop Button Removed for Proximity-Only Access
+    UPDATED UIManager.lua - Tabbed Shop System
     Place in: ReplicatedStorage/UIManager.lua
     
-    CHANGES:
-    ✅ Removed Shop button from left-side menu
-    ✅ Removed Shop hotkey (B key) from input handling
-    ✅ Shop now only accessible via ShopTouchPart proximity
-    ✅ Updated button positioning to fill the gap
+    NEW FEATURES:
+    ✅ Separate tabs for Seeds, Farming, Defense, Mining, Crafting, Premium
+    ✅ Category-based item filtering
+    ✅ Smooth tab switching animations
+    ✅ Visual category indicators
+    ✅ Purchase order respected within each tab
 ]]
 
 local UIManager = {}
@@ -29,8 +30,11 @@ UIManager.State = {
 	Layers = {},
 	NotificationQueue = {},
 	CurrencyLabels = {},
-	GameClient = nil,  -- Reference to GameClient (injected)
-	LeftSideButtons = {} -- Store left-side button references
+	GameClient = nil,
+	LeftSideButtons = {},
+	-- NEW: Shop tab state
+	ShopTabs = {},
+	ActiveShopTab = "seeds"
 }
 
 -- UI Configuration
@@ -44,31 +48,39 @@ UIManager.Config = {
 		Menus = 3,
 		Notifications = 4,
 		Error = 5
+	},
+	-- NEW: Shop tab configuration
+	ShopTabConfig = {
+		{id = "seeds", name = "🌱 Seeds", color = Color3.fromRGB(100, 200, 100)},
+		{id = "farm", name = "🌾 Farming", color = Color3.fromRGB(139, 90, 43)},
+		{id = "defense", name = "🛡️ Defense", color = Color3.fromRGB(120, 80, 200)},
+		{id = "mining", name = "⛏️ Mining", color = Color3.fromRGB(150, 150, 150)},
+		{id = "crafting", name = "🔨 Crafting", color = Color3.fromRGB(200, 120, 80)},
+		{id = "premium", name = "✨ Premium", color = Color3.fromRGB(255, 215, 0)}
 	}
 }
 
-print("UIManager: Enhanced module loaded with proximity-only shop access")
+print("UIManager: Enhanced module loaded with tabbed shop system")
 
 -- ========== INITIALIZATION ==========
 
 function UIManager:Initialize()
-	print("UIManager: Starting initialization with proximity-only shop...")
+	print("UIManager: Starting initialization with tabbed shop...")
 
-	-- Wait for PlayerGui
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui", 30)
 	if not playerGui then
 		error("UIManager: PlayerGui not found after 30 seconds")
 	end
 
-	-- Initialize state
 	self.State.ActiveMenus = {}
 	self.State.Layers = {}
 	self.State.NotificationQueue = {}
 	self.State.IsTransitioning = false
 	self.State.CurrentPage = "None"
 	self.State.LeftSideButtons = {}
+	self.State.ShopTabs = {}
+	self.State.ActiveShopTab = "seeds"
 
-	-- Create main UI structure
 	local success, errorMsg = pcall(function()
 		self:CreateMainUIStructure()
 	end)
@@ -78,22 +90,18 @@ function UIManager:Initialize()
 	end
 	print("UIManager: ✅ Main UI structure created")
 
-	-- Setup input handling (without shop hotkey)
 	self:SetupInputHandling()
 	print("UIManager: ✅ Input handling setup")
 
-	-- Setup notification system
 	self:SetupNotificationSystem()
 	print("UIManager: ✅ Notification system setup")
 
-	-- Setup left-side menu buttons (without shop button)
 	local buttonSuccess, buttonError = pcall(function()
 		self:SetupLeftSideButtons()
 	end)
 
 	if not buttonSuccess then
 		warn("UIManager: Failed to create left-side buttons: " .. tostring(buttonError))
-		-- Try again after a delay
 		spawn(function()
 			wait(1)
 			print("UIManager: Retrying left-side button creation...")
@@ -111,11 +119,10 @@ function UIManager:Initialize()
 		print("UIManager: ✅ Left-side buttons created successfully")
 	end
 
-	print("UIManager: 🎉 Initialization complete with proximity-only shop!")
+	print("UIManager: 🎉 Initialization complete with tabbed shop system!")
 	return true
 end
 
--- Set GameClient reference (called by GameClient during its initialization)
 function UIManager:SetGameClient(gameClient)
 	self.State.GameClient = gameClient
 	print("UIManager: GameClient reference established")
@@ -126,13 +133,11 @@ end
 function UIManager:CreateMainUIStructure()
 	local playerGui = LocalPlayer.PlayerGui
 
-	-- Remove existing UI
 	local existingUI = playerGui:FindFirstChild("MainGameUI")
 	if existingUI then
 		existingUI:Destroy()
 	end
 
-	-- Create main UI container
 	local mainUI = Instance.new("ScreenGui")
 	mainUI.Name = "MainGameUI"
 	mainUI.ResetOnSpawn = false
@@ -141,45 +146,37 @@ function UIManager:CreateMainUIStructure()
 
 	self.State.MainUI = mainUI
 
-	-- Create currency display
 	self:CreateCurrencyDisplay(mainUI)
-
-	-- Create menu containers
 	self:CreateMenuContainers(mainUI)
-
-	-- Create notification area
 	self:CreateNotificationArea(mainUI)
 
 	print("UIManager: Main UI structure created")
 end
 
--- ========== LEFT-SIDE MENU BUTTONS (WITHOUT SHOP) ==========
+-- ========== LEFT-SIDE MENU BUTTONS ==========
 
 function UIManager:SetupLeftSideButtons()
 	print("UIManager: Setting up left-side menu buttons (proximity-only shop)...")
 
 	local playerGui = LocalPlayer.PlayerGui
 
-	-- Remove existing button UI
 	local existingButtonUI = playerGui:FindFirstChild("LeftSideButtonsUI")
 	if existingButtonUI then
 		existingButtonUI:Destroy()
 		print("UIManager: Removed existing left-side buttons")
 	end
 
-	-- Create button UI container
 	local buttonUI = Instance.new("ScreenGui")
 	buttonUI.Name = "LeftSideButtonsUI"
 	buttonUI.ResetOnSpawn = false
 	buttonUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	buttonUI.Parent = playerGui
 
-	-- Button configuration (SHOP REMOVED)
 	local buttons = {
 		{
 			name = "Farm",
 			text = "🌾 Farm",
-			position = UDim2.new(0, 20, 0, 150), -- Moved up to fill shop position
+			position = UDim2.new(0, 20, 0, 150),
 			color = Color3.fromRGB(80, 120, 60),
 			hoverColor = Color3.fromRGB(100, 140, 80),
 			description = "Manage your farm and crops"
@@ -187,7 +184,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Mining", 
 			text = "⛏️ Mining",
-			position = UDim2.new(0, 20, 0, 220), -- Adjusted position
+			position = UDim2.new(0, 20, 0, 220),
 			color = Color3.fromRGB(80, 80, 120),
 			hoverColor = Color3.fromRGB(100, 100, 140),
 			description = "Mine ores and explore caves"
@@ -195,14 +192,13 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Crafting",
 			text = "🔨 Crafting", 
-			position = UDim2.new(0, 20, 0, 290), -- Adjusted position
+			position = UDim2.new(0, 20, 0, 290),
 			color = Color3.fromRGB(120, 80, 60),
 			hoverColor = Color3.fromRGB(140, 100, 80),
 			description = "Craft tools and equipment"
 		}
 	}
 
-	-- Create each button with enhanced error handling
 	for i, buttonConfig in ipairs(buttons) do
 		local success, error = pcall(function()
 			local button = self:CreateLeftSideButton(buttonUI, buttonConfig)
@@ -215,30 +211,26 @@ function UIManager:SetupLeftSideButtons()
 		end
 	end
 
-	-- Create proximity shop indicator
 	self:CreateProximityShopIndicator(buttonUI)
 
 	print("UIManager: ✅ Left-side buttons setup complete (shop removed)")
 end
 
 function UIManager:CreateProximityShopIndicator(parent)
-	-- Create a visual indicator that shows when shop is accessible via proximity
 	local indicator = Instance.new("Frame")
 	indicator.Name = "ShopProximityIndicator"
 	indicator.Size = UDim2.new(0, 140, 0, 60)
-	indicator.Position = UDim2.new(0, 20, 0, 360) -- Below other buttons
+	indicator.Position = UDim2.new(0, 20, 0, 360)
 	indicator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 	indicator.BorderSizePixel = 0
-	indicator.Visible = false -- Hidden by default
+	indicator.Visible = false
 	indicator.ZIndex = self.Config.UIOrder.Main
 	indicator.Parent = parent
 
-	-- Add corner radius
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.15, 0)
 	corner.Parent = indicator
 
-	-- Add text
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, -10, 1, -10)
 	label.Position = UDim2.new(0, 5, 0, 5)
@@ -249,7 +241,6 @@ function UIManager:CreateProximityShopIndicator(parent)
 	label.Font = Enum.Font.Gotham
 	label.Parent = indicator
 
-	-- Store reference for proximity system to control
 	self.State.ShopProximityIndicator = indicator
 
 	print("UIManager: ✅ Created proximity shop indicator")
@@ -259,7 +250,6 @@ function UIManager:ShowShopProximityIndicator()
 	if self.State.ShopProximityIndicator then
 		self.State.ShopProximityIndicator.Visible = true
 
-		-- Animate to green when accessible
 		local tween = TweenService:Create(self.State.ShopProximityIndicator,
 			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{BackgroundColor3 = Color3.fromRGB(60, 120, 80)}
@@ -270,7 +260,6 @@ end
 
 function UIManager:HideShopProximityIndicator()
 	if self.State.ShopProximityIndicator then
-		-- Animate back to gray
 		local tween = TweenService:Create(self.State.ShopProximityIndicator,
 			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{BackgroundColor3 = Color3.fromRGB(60, 60, 60)}
@@ -284,7 +273,6 @@ function UIManager:HideShopProximityIndicator()
 end
 
 function UIManager:CreateLeftSideButton(parent, config)
-	-- Create button frame
 	local button = Instance.new("TextButton")
 	button.Name = config.name .. "Button"
 	button.Size = UDim2.new(0, 140, 0, 60)
@@ -298,19 +286,16 @@ function UIManager:CreateLeftSideButton(parent, config)
 	button.ZIndex = self.Config.UIOrder.Main
 	button.Parent = parent
 
-	-- Add corner radius
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.15, 0)
 	corner.Parent = button
 
-	-- Add subtle shadow/stroke
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(0, 0, 0)
 	stroke.Thickness = 2
 	stroke.Transparency = 0.7
 	stroke.Parent = button
 
-	-- Hover effects
 	button.MouseEnter:Connect(function()
 		local hoverTween = TweenService:Create(button,
 			TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -321,7 +306,6 @@ function UIManager:CreateLeftSideButton(parent, config)
 		)
 		hoverTween:Play()
 
-		-- Show tooltip
 		self:ShowButtonTooltip(button, config.description)
 	end)
 
@@ -335,11 +319,9 @@ function UIManager:CreateLeftSideButton(parent, config)
 		)
 		leaveTween:Play()
 
-		-- Hide tooltip
 		self:HideButtonTooltip()
 	end)
 
-	-- Click handler
 	button.MouseButton1Click:Connect(function()
 		print("UIManager: Left-side button clicked: " .. config.name)
 		self:HandleLeftSideButtonClick(config.name)
@@ -349,10 +331,8 @@ function UIManager:CreateLeftSideButton(parent, config)
 end
 
 function UIManager:ShowButtonTooltip(button, description)
-	-- Remove existing tooltip
 	self:HideButtonTooltip()
 
-	-- Create tooltip
 	local tooltip = Instance.new("Frame")
 	tooltip.Name = "ButtonTooltip"
 	tooltip.Size = UDim2.new(0, 200, 0, 50)
@@ -377,7 +357,6 @@ function UIManager:ShowButtonTooltip(button, description)
 	tooltipText.TextWrapped = true
 	tooltipText.Parent = tooltip
 
-	-- Animate in
 	tooltip.BackgroundTransparency = 1
 	tooltipText.TextTransparency = 1
 
@@ -398,10 +377,8 @@ end
 function UIManager:HandleLeftSideButtonClick(buttonName)
 	print("UIManager: Left-side button clicked: " .. buttonName)
 
-	-- Provide visual feedback
 	local button = self.State.LeftSideButtons[buttonName]
 	if button then
-		-- Quick press animation
 		local pressDown = TweenService:Create(button,
 			TweenInfo.new(0.1, Enum.EasingStyle.Quad),
 			{Size = UDim2.new(0, 135, 0, 58)}
@@ -417,7 +394,6 @@ function UIManager:HandleLeftSideButtonClick(buttonName)
 		end)
 	end
 
-	-- Open the corresponding menu
 	print("UIManager: Attempting to open menu: " .. buttonName)
 	local success = self:OpenMenu(buttonName)
 
@@ -428,28 +404,23 @@ function UIManager:HandleLeftSideButtonClick(buttonName)
 	end
 end
 
--- ========== UPDATED INPUT HANDLING (NO SHOP HOTKEY) ==========
+-- ========== INPUT HANDLING ==========
 
 function UIManager:SetupInputHandling()
-	-- Close menus on escape
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then return end
 
 		if input.KeyCode == Enum.KeyCode.Escape then
 			self:CloseActiveMenus()
 		elseif input.KeyCode == Enum.KeyCode.F then
-			-- F key for Farm
 			print("UIManager: F key pressed - opening Farm")
 			self:OpenMenu("Farm")
 		elseif input.KeyCode == Enum.KeyCode.M then
-			-- M key for Mining
 			print("UIManager: M key pressed - opening Mining")
 			self:OpenMenu("Mining")
 		elseif input.KeyCode == Enum.KeyCode.C then
-			-- C key for Crafting
 			print("UIManager: C key pressed - opening Crafting")
 			self:OpenMenu("Crafting")
-			-- NOTE: B key for shop REMOVED - shop now only via proximity
 		end
 	end)
 
@@ -468,11 +439,10 @@ function UIManager:OpenMenu(menuName)
 
 	print("UIManager: Opening menu: " .. menuName)
 
-	-- Close existing menus first
 	if #self.State.ActiveMenus > 0 then
 		print("UIManager: Closing existing menus...")
 		self:CloseActiveMenus()
-		wait(0.1) -- Brief delay for animation
+		wait(0.1)
 	end
 
 	self.State.IsTransitioning = true
@@ -480,9 +450,8 @@ function UIManager:OpenMenu(menuName)
 
 	local success = false
 
-	-- Create the appropriate menu (SHOP INCLUDED - can be opened by proximity)
 	if menuName == "Shop" then
-		success = self:CreateShopMenu()
+		success = self:CreateTabbedShopMenu()
 	elseif menuName == "Farm" then
 		success = self:CreateFarmMenu()
 	elseif menuName == "Mining" then
@@ -497,12 +466,10 @@ function UIManager:OpenMenu(menuName)
 	if success then
 		print("UIManager: Menu content created successfully")
 
-		-- Show menu container with animation
 		local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
 		if menuContainer then
 			menuContainer.Visible = true
 
-			-- Animate in
 			local tween = TweenService:Create(menuContainer,
 				TweenInfo.new(self.Config.TransitionTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 				{BackgroundTransparency = 0}
@@ -538,7 +505,6 @@ function UIManager:CloseActiveMenus()
 
 	local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
 	if menuContainer and menuContainer.Visible then
-		-- Animate out
 		local tween = TweenService:Create(menuContainer,
 			TweenInfo.new(self.Config.TransitionTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
 			{BackgroundTransparency = 1}
@@ -548,10 +514,8 @@ function UIManager:CloseActiveMenus()
 		tween.Completed:Connect(function()
 			menuContainer.Visible = false
 
-			-- Clear menu content
 			local menuFrame = menuContainer:FindFirstChild("MenuFrame")
 			if menuFrame then
-				-- Keep close button, remove everything else
 				for _, child in pairs(menuFrame:GetChildren()) do
 					if child.Name ~= "CloseButton" and not child:IsA("UICorner") then
 						child:Destroy()
@@ -565,7 +529,6 @@ function UIManager:CloseActiveMenus()
 	self.State.CurrentPage = "None"
 end
 
--- Get current page
 function UIManager:GetCurrentPage()
 	return self.State.CurrentPage
 end
@@ -576,25 +539,22 @@ function UIManager:CreateCurrencyDisplay(parent)
 	local currencyFrame = Instance.new("Frame")
 	currencyFrame.Name = "CurrencyDisplay"
 	currencyFrame.Size = UDim2.new(0, 300, 0, 80)
-	currencyFrame.Position = UDim2.new(1, -320, 0, 20) -- Top right
+	currencyFrame.Position = UDim2.new(1, -320, 0, 20)
 	currencyFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 	currencyFrame.BorderSizePixel = 0
 	currencyFrame.ZIndex = self.Config.UIOrder.Main
 	currencyFrame.Parent = parent
 
-	-- Corner radius
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0.15, 0)
 	corner.Parent = currencyFrame
 
-	-- Stroke for better visibility
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = Color3.fromRGB(100, 100, 100)
 	stroke.Thickness = 1
 	stroke.Transparency = 0.5
 	stroke.Parent = currencyFrame
 
-	-- Coins display
 	local coinsLabel = Instance.new("TextLabel")
 	coinsLabel.Name = "CoinsLabel"
 	coinsLabel.Size = UDim2.new(0.5, -5, 1, 0)
@@ -606,7 +566,6 @@ function UIManager:CreateCurrencyDisplay(parent)
 	coinsLabel.Font = Enum.Font.GothamBold
 	coinsLabel.Parent = currencyFrame
 
-	-- Farm tokens display
 	local tokensLabel = Instance.new("TextLabel")
 	tokensLabel.Name = "TokensLabel"
 	tokensLabel.Size = UDim2.new(0.5, -5, 1, 0)
@@ -618,7 +577,6 @@ function UIManager:CreateCurrencyDisplay(parent)
 	tokensLabel.Font = Enum.Font.GothamBold
 	tokensLabel.Parent = currencyFrame
 
-	-- Store references
 	self.State.CurrencyLabels = {
 		coins = coinsLabel,
 		farmTokens = tokensLabel
@@ -627,29 +585,27 @@ function UIManager:CreateCurrencyDisplay(parent)
 	print("UIManager: Enhanced currency display created")
 end
 
--- Create menu containers
+-- ========== MENU CONTAINERS ==========
+
 function UIManager:CreateMenuContainers(parent)
-	-- Main menu container
 	local menuContainer = Instance.new("Frame")
 	menuContainer.Name = "MenuContainer"
-	menuContainer.Size = UDim2.new(0.85, 0, 0.85, 0) -- Slightly smaller to accommodate buttons
-	menuContainer.Position = UDim2.new(0.15, 0, 0.1, 0) -- Offset for left buttons
+	menuContainer.Size = UDim2.new(0.85, 0, 0.85, 0)
+	menuContainer.Position = UDim2.new(0.15, 0, 0.1, 0)
 	menuContainer.BackgroundTransparency = 1
 	menuContainer.ZIndex = self.Config.UIOrder.Menus
 	menuContainer.Visible = false
 	menuContainer.Parent = parent
 
-	-- Background blur
 	local background = Instance.new("Frame")
 	background.Name = "Background"
-	background.Size = UDim2.new(1.2, 0, 1.2, 0) -- Cover left buttons too
+	background.Size = UDim2.new(1.2, 0, 1.2, 0)
 	background.Position = UDim2.new(-0.2, 0, -0.1, 0)
 	background.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 	background.BackgroundTransparency = 0.3
 	background.ZIndex = self.Config.UIOrder.Background
 	background.Parent = menuContainer
 
-	-- Menu frame
 	local menuFrame = Instance.new("Frame")
 	menuFrame.Name = "MenuFrame"
 	menuFrame.Size = UDim2.new(0.9, 0, 0.9, 0)
@@ -663,7 +619,6 @@ function UIManager:CreateMenuContainers(parent)
 	menuCorner.CornerRadius = UDim.new(0.02, 0)
 	menuCorner.Parent = menuFrame
 
-	-- Close button
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "CloseButton"
 	closeButton.Size = UDim2.new(0, 40, 0, 40)
@@ -688,7 +643,8 @@ function UIManager:CreateMenuContainers(parent)
 	print("UIManager: Enhanced menu containers created")
 end
 
--- Create notification area
+-- ========== NOTIFICATION AREA ==========
+
 function UIManager:CreateNotificationArea(parent)
 	local notificationArea = Instance.new("Frame")
 	notificationArea.Name = "NotificationArea"
@@ -701,10 +657,10 @@ function UIManager:CreateNotificationArea(parent)
 	print("UIManager: Notification area created")
 end
 
--- ========== MENU CREATION FUNCTIONS ==========
+-- ========== TABBED SHOP MENU ==========
 
-function UIManager:CreateShopMenu()
-	print("UIManager: Creating shop menu (proximity access)")
+function UIManager:CreateTabbedShopMenu()
+	print("UIManager: Creating tabbed shop menu")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
@@ -726,38 +682,427 @@ function UIManager:CreateShopMenu()
 	accessNote.Size = UDim2.new(1, -40, 0, 20)
 	accessNote.Position = UDim2.new(0, 20, 0, 80)
 	accessNote.BackgroundTransparency = 1
-	accessNote.Text = "👣 Accessible by stepping on the shop area"
+	accessNote.Text = "👣 Organized by category • Logical purchase progression"
 	accessNote.TextColor3 = Color3.fromRGB(200, 200, 200)
 	accessNote.TextScaled = true
 	accessNote.Font = Enum.Font.Gotham
 	accessNote.Parent = menuFrame
 
-	-- Content area
-	local contentFrame = Instance.new("ScrollingFrame")
-	contentFrame.Name = "ContentFrame"
-	contentFrame.Size = UDim2.new(1, -40, 1, -120)
-	contentFrame.Position = UDim2.new(0, 20, 0, 100)
-	contentFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	contentFrame.BorderSizePixel = 0
-	contentFrame.ScrollBarThickness = 10
-	contentFrame.Parent = menuFrame
+	-- Create tab container
+	local tabContainer = Instance.new("Frame")
+	tabContainer.Name = "TabContainer"
+	tabContainer.Size = UDim2.new(1, -40, 0, 50)
+	tabContainer.Position = UDim2.new(0, 20, 0, 110)
+	tabContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	tabContainer.BorderSizePixel = 0
+	tabContainer.Parent = menuFrame
+
+	local tabCorner = Instance.new("UICorner")
+	tabCorner.CornerRadius = UDim.new(0.02, 0)
+	tabCorner.Parent = tabContainer
+
+	-- Create content container
+	local contentContainer = Instance.new("Frame")
+	contentContainer.Name = "ContentContainer"
+	contentContainer.Size = UDim2.new(1, -40, 1, -180)
+	contentContainer.Position = UDim2.new(0, 20, 0, 170)
+	contentContainer.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	contentContainer.BorderSizePixel = 0
+	contentContainer.Parent = menuFrame
 
 	local contentCorner = Instance.new("UICorner")
 	contentCorner.CornerRadius = UDim.new(0.02, 0)
-	contentCorner.Parent = contentFrame
+	contentCorner.Parent = contentContainer
 
-	-- Get shop items from GameClient
-	self:PopulateShopContent(contentFrame)
+	-- Create tabs
+	self:CreateShopTabs(tabContainer, contentContainer)
+
+	-- Show default tab
+	self:ShowShopTab(self.State.ActiveShopTab)
 
 	return true
 end
+
+function UIManager:CreateShopTabs(tabContainer, contentContainer)
+	print("UIManager: Creating shop tabs")
+
+	-- Clear existing tabs
+	self.State.ShopTabs = {}
+
+	local tabWidth = 1 / #self.Config.ShopTabConfig
+
+	for i, tabConfig in ipairs(self.Config.ShopTabConfig) do
+		-- Create tab button
+		local tabButton = Instance.new("TextButton")
+		tabButton.Name = "Tab_" .. tabConfig.id
+		tabButton.Size = UDim2.new(tabWidth, -5, 1, -10)
+		tabButton.Position = UDim2.new(tabWidth * (i - 1), 5, 0, 5)
+		tabButton.BackgroundColor3 = tabConfig.color
+		tabButton.BorderSizePixel = 0
+		tabButton.Text = tabConfig.name
+		tabButton.TextColor3 = Color3.new(1, 1, 1)
+		tabButton.TextScaled = true
+		tabButton.Font = Enum.Font.GothamBold
+		tabButton.Parent = tabContainer
+
+		local tabCorner = Instance.new("UICorner")
+		tabCorner.CornerRadius = UDim.new(0.1, 0)
+		tabCorner.Parent = tabButton
+
+		-- Create content frame for this tab
+		local contentFrame = Instance.new("ScrollingFrame")
+		contentFrame.Name = "Content_" .. tabConfig.id
+		contentFrame.Size = UDim2.new(1, -20, 1, -20)
+		contentFrame.Position = UDim2.new(0, 10, 0, 10)
+		contentFrame.BackgroundTransparency = 1
+		contentFrame.BorderSizePixel = 0
+		contentFrame.ScrollBarThickness = 8
+		contentFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+		contentFrame.Visible = false
+		contentFrame.Parent = contentContainer
+
+		-- Store tab reference
+		self.State.ShopTabs[tabConfig.id] = {
+			button = tabButton,
+			content = contentFrame,
+			config = tabConfig,
+			populated = false
+		}
+
+		-- Tab click handler
+		tabButton.MouseButton1Click:Connect(function()
+			self:ShowShopTab(tabConfig.id)
+		end)
+
+		-- Tab hover effects
+		tabButton.MouseEnter:Connect(function()
+			if self.State.ActiveShopTab ~= tabConfig.id then
+				local hoverTween = TweenService:Create(tabButton,
+					TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+					{BackgroundColor3 = self:LightenColor(tabConfig.color, 0.2)}
+				)
+				hoverTween:Play()
+			end
+		end)
+
+		tabButton.MouseLeave:Connect(function()
+			if self.State.ActiveShopTab ~= tabConfig.id then
+				local leaveTween = TweenService:Create(tabButton,
+					TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+					{BackgroundColor3 = tabConfig.color}
+				)
+				leaveTween:Play()
+			end
+		end)
+
+		print("UIManager: Created tab: " .. tabConfig.name)
+	end
+end
+
+function UIManager:ShowShopTab(tabId)
+	print("UIManager: Switching to shop tab: " .. tabId)
+
+	if not self.State.ShopTabs[tabId] then
+		warn("UIManager: Tab not found: " .. tabId)
+		return
+	end
+
+	-- Update active tab
+	local previousTab = self.State.ActiveShopTab
+	self.State.ActiveShopTab = tabId
+
+	-- Update tab appearances
+	for id, tab in pairs(self.State.ShopTabs) do
+		local isActive = (id == tabId)
+
+		-- Hide/show content
+		tab.content.Visible = isActive
+
+		-- Update button appearance
+		local targetColor = isActive and self:LightenColor(tab.config.color, 0.3) or tab.config.color
+		local buttonTween = TweenService:Create(tab.button,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+			{BackgroundColor3 = targetColor}
+		)
+		buttonTween:Play()
+
+		-- Add selection indicator for active tab
+		if isActive then
+			local indicator = tab.button:FindFirstChild("ActiveIndicator")
+			if not indicator then
+				indicator = Instance.new("Frame")
+				indicator.Name = "ActiveIndicator"
+				indicator.Size = UDim2.new(1, 0, 0, 3)
+				indicator.Position = UDim2.new(0, 0, 1, -3)
+				indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				indicator.BorderSizePixel = 0
+				indicator.Parent = tab.button
+
+				local indicatorCorner = Instance.new("UICorner")
+				indicatorCorner.CornerRadius = UDim.new(0.5, 0)
+				indicatorCorner.Parent = indicator
+			end
+		else
+			local indicator = tab.button:FindFirstChild("ActiveIndicator")
+			if indicator then
+				indicator:Destroy()
+			end
+		end
+	end
+
+	-- Populate tab content if not already done
+	if not self.State.ShopTabs[tabId].populated then
+		self:PopulateShopTabContent(tabId)
+		self.State.ShopTabs[tabId].populated = true
+	end
+end
+
+function UIManager:PopulateShopTabContent(tabId)
+	print("UIManager: Populating content for tab: " .. tabId)
+
+	local tab = self.State.ShopTabs[tabId]
+	if not tab then return end
+
+	local contentFrame = tab.content
+
+	-- Clear existing content
+	for _, child in pairs(contentFrame:GetChildren()) do
+		if not child:IsA("UICorner") then
+			child:Destroy()
+		end
+	end
+
+	if not self.State.GameClient then
+		local loadingLabel = Instance.new("TextLabel")
+		loadingLabel.Size = UDim2.new(1, 0, 1, 0)
+		loadingLabel.BackgroundTransparency = 1
+		loadingLabel.Text = "Loading " .. tab.config.name .. " items..."
+		loadingLabel.TextColor3 = Color3.new(1, 1, 1)
+		loadingLabel.TextScaled = true
+		loadingLabel.Font = Enum.Font.Gotham
+		loadingLabel.Parent = contentFrame
+		return
+	end
+
+	-- Get shop items from GameClient
+	local success, shopItems = pcall(function()
+		if self.State.GameClient.GetShopItems then
+			return self.State.GameClient:GetShopItems()
+		end
+		return {}
+	end)
+
+	if not success or not shopItems or #shopItems == 0 then
+		local noItemsLabel = Instance.new("TextLabel")
+		noItemsLabel.Size = UDim2.new(1, 0, 1, 0)
+		noItemsLabel.BackgroundTransparency = 1
+		noItemsLabel.Text = "No " .. tab.config.name .. " items available"
+		noItemsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		noItemsLabel.TextScaled = true
+		noItemsLabel.Font = Enum.Font.Gotham
+		noItemsLabel.Parent = contentFrame
+		return
+	end
+
+	-- Filter items by category
+	local categoryItems = {}
+	for _, item in ipairs(shopItems) do
+		if item.category == tabId then
+			table.insert(categoryItems, item)
+		end
+	end
+
+	-- Sort by purchase order
+	table.sort(categoryItems, function(a, b)
+		local orderA = a.purchaseOrder or 999
+		local orderB = b.purchaseOrder or 999
+
+		if orderA == orderB then
+			return a.price < b.price
+		end
+
+		return orderA < orderB
+	end)
+
+	if #categoryItems == 0 then
+		local emptyLabel = Instance.new("TextLabel")
+		emptyLabel.Size = UDim2.new(1, 0, 1, 0)
+		emptyLabel.BackgroundTransparency = 1
+		emptyLabel.Text = "No items in " .. tab.config.name .. " category"
+		emptyLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		emptyLabel.TextScaled = true
+		emptyLabel.Font = Enum.Font.Gotham
+		emptyLabel.Parent = contentFrame
+		return
+	end
+
+	-- Create items with enhanced layout
+	local yOffset = 0
+	local itemSpacing = 10
+
+	for i, item in ipairs(categoryItems) do
+		local itemFrame = self:CreateEnhancedShopItemFrame(item, i, tab.config.color)
+		itemFrame.Position = UDim2.new(0, 10, 0, yOffset)
+		itemFrame.Parent = contentFrame
+		yOffset = yOffset + 120 + itemSpacing
+	end
+
+	-- Update canvas size with padding
+	contentFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 20)
+
+	print("UIManager: Populated " .. #categoryItems .. " items in " .. tabId .. " tab")
+end
+
+function UIManager:CreateEnhancedShopItemFrame(item, index, categoryColor)
+	local itemFrame = Instance.new("Frame")
+	itemFrame.Name = "ShopItem_" .. index
+	itemFrame.Size = UDim2.new(1, -20, 0, 120)
+	itemFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	itemFrame.BorderSizePixel = 0
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.05, 0)
+	corner.Parent = itemFrame
+
+	-- Category color indicator
+	local indicator = Instance.new("Frame")
+	indicator.Name = "CategoryIndicator"
+	indicator.Size = UDim2.new(0, 5, 1, 0)
+	indicator.Position = UDim2.new(0, 0, 0, 0)
+	indicator.BackgroundColor3 = categoryColor
+	indicator.BorderSizePixel = 0
+	indicator.Parent = itemFrame
+
+	local indicatorCorner = Instance.new("UICorner")
+	indicatorCorner.CornerRadius = UDim.new(0.05, 0)
+	indicatorCorner.Parent = indicator
+
+	-- Purchase order badge (if exists)
+	if item.purchaseOrder and item.purchaseOrder <= 20 then
+		local orderBadge = Instance.new("Frame")
+		orderBadge.Name = "OrderBadge"
+		orderBadge.Size = UDim2.new(0, 30, 0, 30)
+		orderBadge.Position = UDim2.new(0, 10, 0, 5)
+		orderBadge.BackgroundColor3 = categoryColor
+		orderBadge.BorderSizePixel = 0
+		orderBadge.Parent = itemFrame
+
+		local badgeCorner = Instance.new("UICorner")
+		badgeCorner.CornerRadius = UDim.new(0.5, 0)
+		badgeCorner.Parent = orderBadge
+
+		local orderLabel = Instance.new("TextLabel")
+		orderLabel.Size = UDim2.new(1, 0, 1, 0)
+		orderLabel.BackgroundTransparency = 1
+		orderLabel.Text = tostring(item.purchaseOrder)
+		orderLabel.TextColor3 = Color3.new(1, 1, 1)
+		orderLabel.TextScaled = true
+		orderLabel.Font = Enum.Font.GothamBold
+		orderLabel.Parent = orderBadge
+	end
+
+	-- Item icon
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.Name = "ItemIcon"
+	iconLabel.Size = UDim2.new(0, 60, 0, 60)
+	iconLabel.Position = UDim2.new(0, 20, 0, 30)
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Text = item.icon or "📦"
+	iconLabel.TextColor3 = Color3.new(1, 1, 1)
+	iconLabel.TextScaled = true
+	iconLabel.Font = Enum.Font.Gotham
+	iconLabel.Parent = itemFrame
+
+	-- Item name
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(0.45, -100, 0.4, 0)
+	nameLabel.Position = UDim2.new(0, 90, 0, 10)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = item.name or item.id
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.TextScaled = true
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = itemFrame
+
+	-- Item price
+	local priceLabel = Instance.new("TextLabel")
+	priceLabel.Size = UDim2.new(0.25, 0, 0.4, 0)
+	priceLabel.Position = UDim2.new(0.75, -10, 0, 10)
+	priceLabel.BackgroundTransparency = 1
+	priceLabel.Text = (item.price or 0) .. " " .. (item.currency == "farmTokens" and "🎫" or "💰")
+	priceLabel.TextColor3 = item.currency == "farmTokens" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 215, 0)
+	priceLabel.TextScaled = true
+	priceLabel.Font = Enum.Font.Gotham
+	priceLabel.TextXAlignment = Enum.TextXAlignment.Right
+	priceLabel.Parent = itemFrame
+
+	-- Item description
+	local descLabel = Instance.new("TextLabel")
+	descLabel.Size = UDim2.new(0.45, -100, 0.5, -5)
+	descLabel.Position = UDim2.new(0, 90, 0.4, 5)
+	descLabel.BackgroundTransparency = 1
+	descLabel.Text = item.description and item.description:sub(1, 100) .. (item.description:len() > 100 and "..." or "") or "No description"
+	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	descLabel.TextScaled = true
+	descLabel.Font = Enum.Font.Gotham
+	descLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descLabel.TextYAlignment = Enum.TextYAlignment.Top
+	descLabel.TextWrapped = true
+	descLabel.Parent = itemFrame
+
+	-- Buy button
+	local buyButton = Instance.new("TextButton")
+	buyButton.Size = UDim2.new(0.2, -10, 0.5, -10)
+	buyButton.Position = UDim2.new(0.8, 0, 0.4, 5)
+	buyButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+	buyButton.BorderSizePixel = 0
+	buyButton.Text = "BUY"
+	buyButton.TextColor3 = Color3.new(1, 1, 1)
+	buyButton.TextScaled = true
+	buyButton.Font = Enum.Font.GothamBold
+	buyButton.Parent = itemFrame
+
+	local buyCorner = Instance.new("UICorner")
+	buyCorner.CornerRadius = UDim.new(0.1, 0)
+	buyCorner.Parent = buyButton
+
+	-- Buy button functionality
+	buyButton.MouseButton1Click:Connect(function()
+		if self.State.GameClient and self.State.GameClient.PurchaseItem then
+			self.State.GameClient:PurchaseItem(item)
+		else
+			self:ShowNotification("Shop Error", "Purchase system not available!", "error")
+		end
+	end)
+
+	-- Hover effects
+	itemFrame.MouseEnter:Connect(function()
+		local hoverTween = TweenService:Create(itemFrame,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+			{BackgroundColor3 = Color3.fromRGB(70, 70, 70)}
+		)
+		hoverTween:Play()
+	end)
+
+	itemFrame.MouseLeave:Connect(function()
+		local leaveTween = TweenService:Create(itemFrame,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+			{BackgroundColor3 = Color3.fromRGB(60, 60, 60)}
+		)
+		leaveTween:Play()
+	end)
+
+	return itemFrame
+end
+
+-- ========== OTHER MENU CREATION FUNCTIONS ==========
 
 function UIManager:CreateFarmMenu()
 	print("UIManager: Creating farm menu")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, -100, 0, 60)
@@ -769,7 +1114,6 @@ function UIManager:CreateFarmMenu()
 	title.Font = Enum.Font.GothamBold
 	title.Parent = menuFrame
 
-	-- Farm expansion section
 	local expansionFrame = Instance.new("Frame")
 	expansionFrame.Name = "ExpansionFrame"
 	expansionFrame.Size = UDim2.new(1, -40, 0, 200)
@@ -782,7 +1126,6 @@ function UIManager:CreateFarmMenu()
 	expansionCorner.CornerRadius = UDim.new(0.02, 0)
 	expansionCorner.Parent = expansionFrame
 
-	-- Farm status
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.Name = "StatusLabel"
 	statusLabel.Size = UDim2.new(1, -20, 0, 60)
@@ -794,7 +1137,6 @@ function UIManager:CreateFarmMenu()
 	statusLabel.Font = Enum.Font.Gotham
 	statusLabel.Parent = expansionFrame
 
-	-- Populate farm content
 	self:PopulateFarmContent(expansionFrame)
 
 	return true
@@ -805,7 +1147,6 @@ function UIManager:CreateMiningMenu()
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, -100, 0, 60)
@@ -817,7 +1158,6 @@ function UIManager:CreateMiningMenu()
 	title.Font = Enum.Font.GothamBold
 	title.Parent = menuFrame
 
-	-- Coming soon message
 	local comingSoon = Instance.new("TextLabel")
 	comingSoon.Size = UDim2.new(0.8, 0, 0.5, 0)
 	comingSoon.Position = UDim2.new(0.1, 0, 0.25, 0)
@@ -836,7 +1176,6 @@ function UIManager:CreateCraftingMenu()
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, -100, 0, 60)
@@ -848,7 +1187,6 @@ function UIManager:CreateCraftingMenu()
 	title.Font = Enum.Font.GothamBold
 	title.Parent = menuFrame
 
-	-- Coming soon message
 	local comingSoon = Instance.new("TextLabel")
 	comingSoon.Size = UDim2.new(0.8, 0, 0.5, 0)
 	comingSoon.Position = UDim2.new(0.1, 0, 0.25, 0)
@@ -867,7 +1205,6 @@ function UIManager:CreateGenericMenu(menuName)
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(1, -100, 0, 60)
@@ -879,7 +1216,6 @@ function UIManager:CreateGenericMenu(menuName)
 	title.Font = Enum.Font.GothamBold
 	title.Parent = menuFrame
 
-	-- Placeholder content
 	local placeholder = Instance.new("TextLabel")
 	placeholder.Size = UDim2.new(0.8, 0, 0.5, 0)
 	placeholder.Position = UDim2.new(0.1, 0, 0.25, 0)
@@ -895,59 +1231,11 @@ end
 
 -- ========== CONTENT POPULATION ==========
 
-function UIManager:PopulateShopContent(contentFrame)
-	if not self.State.GameClient then
-		-- Show loading message
-		local loadingLabel = Instance.new("TextLabel")
-		loadingLabel.Size = UDim2.new(1, 0, 1, 0)
-		loadingLabel.BackgroundTransparency = 1
-		loadingLabel.Text = "🛒 Loading shop items...\n\nIf this takes too long, try stepping on the shop area again."
-		loadingLabel.TextColor3 = Color3.new(1, 1, 1)
-		loadingLabel.TextScaled = true
-		loadingLabel.Font = Enum.Font.Gotham
-		loadingLabel.Parent = contentFrame
-		return
-	end
-
-	-- Try to get shop items from GameClient
-	local success, shopItems = pcall(function()
-		if self.State.GameClient.GetShopItems then
-			return self.State.GameClient:GetShopItems()
-		end
-		return {}
-	end)
-
-	if not success or not shopItems or #shopItems == 0 then
-		-- Show no items message
-		local noItemsLabel = Instance.new("TextLabel")
-		noItemsLabel.Size = UDim2.new(1, 0, 1, 0)
-		noItemsLabel.BackgroundTransparency = 1
-		noItemsLabel.Text = "🛒 Shop items not available\n\nPlease try:\n• Stepping on the shop area again\n• Rejoining the game\n• Contacting support"
-		noItemsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-		noItemsLabel.TextScaled = true
-		noItemsLabel.Font = Enum.Font.Gotham
-		noItemsLabel.Parent = contentFrame
-		return
-	end
-
-	-- Create shop items
-	local yOffset = 0
-	for i, item in ipairs(shopItems) do
-		local itemFrame = self:CreateShopItemFrame(item, i)
-		itemFrame.Position = UDim2.new(0, 10, 0, yOffset)
-		itemFrame.Parent = contentFrame
-		yOffset = yOffset + 120
-	end
-
-	contentFrame.CanvasSize = UDim2.new(0, 0, 0, yOffset + 20)
-end
-
 function UIManager:PopulateFarmContent(expansionFrame)
 	if not self.State.GameClient then
 		return
 	end
 
-	-- Try to get player data
 	local success, playerData = pcall(function()
 		if self.State.GameClient.GetPlayerData then
 			return self.State.GameClient:GetPlayerData()
@@ -958,7 +1246,6 @@ function UIManager:PopulateFarmContent(expansionFrame)
 	if success and playerData and playerData.farming then
 		local expansionLevel = playerData.farming.expansionLevel or 1
 
-		-- Update status label
 		local statusLabel = expansionFrame:FindFirstChild("StatusLabel")
 		if statusLabel then
 			statusLabel.Text = "🌾 Current Farm Level: " .. expansionLevel .. "\n" .. 
@@ -966,7 +1253,6 @@ function UIManager:PopulateFarmContent(expansionFrame)
 				"Total Spots: " .. self:GetTotalSpotsForLevel(expansionLevel)
 		end
 
-		-- Add expansion button if available
 		if expansionLevel < 5 then
 			local expandButton = Instance.new("TextButton")
 			expandButton.Name = "ExpandButton"
@@ -991,7 +1277,6 @@ function UIManager:PopulateFarmContent(expansionFrame)
 	end
 end
 
--- Helper functions for farm content
 function UIManager:GetGridSizeForLevel(level)
 	local sizes = {[1] = "3x3", [2] = "5x5", [3] = "7x7", [4] = "9x9", [5] = "11x11"}
 	return sizes[level] or "Unknown"
@@ -1002,88 +1287,11 @@ function UIManager:GetTotalSpotsForLevel(level)
 	return spots[level] or 0
 end
 
--- Create shop item frame
-function UIManager:CreateShopItemFrame(item, index)
-	local itemFrame = Instance.new("Frame")
-	itemFrame.Name = "ShopItem_" .. index
-	itemFrame.Size = UDim2.new(1, -20, 0, 100)
-	itemFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	itemFrame.BorderSizePixel = 0
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.05, 0)
-	corner.Parent = itemFrame
-
-	-- Item name
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(0.6, -10, 0.5, 0)
-	nameLabel.Position = UDim2.new(0, 10, 0, 5)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = item.name or item.id
-	nameLabel.TextColor3 = Color3.new(1, 1, 1)
-	nameLabel.TextScaled = true
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Parent = itemFrame
-
-	-- Item price
-	local priceLabel = Instance.new("TextLabel")
-	priceLabel.Size = UDim2.new(0.4, -10, 0.5, 0)
-	priceLabel.Position = UDim2.new(0.6, 0, 0, 5)
-	priceLabel.BackgroundTransparency = 1
-	priceLabel.Text = (item.price or 0) .. " " .. (item.currency or "coins")
-	priceLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-	priceLabel.TextScaled = true
-	priceLabel.Font = Enum.Font.Gotham
-	priceLabel.TextXAlignment = Enum.TextXAlignment.Right
-	priceLabel.Parent = itemFrame
-
-	-- Item description
-	local descLabel = Instance.new("TextLabel")
-	descLabel.Size = UDim2.new(0.7, -10, 0.4, 0)
-	descLabel.Position = UDim2.new(0, 10, 0.5, 0)
-	descLabel.BackgroundTransparency = 1
-	descLabel.Text = item.description or "No description"
-	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	descLabel.TextScaled = true
-	descLabel.Font = Enum.Font.Gotham
-	descLabel.TextXAlignment = Enum.TextXAlignment.Left
-	descLabel.Parent = itemFrame
-
-	-- Buy button
-	local buyButton = Instance.new("TextButton")
-	buyButton.Size = UDim2.new(0.25, -10, 0.4, -5)
-	buyButton.Position = UDim2.new(0.75, 0, 0.55, 0)
-	buyButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-	buyButton.BorderSizePixel = 0
-	buyButton.Text = "BUY"
-	buyButton.TextColor3 = Color3.new(1, 1, 1)
-	buyButton.TextScaled = true
-	buyButton.Font = Enum.Font.GothamBold
-	buyButton.Parent = itemFrame
-
-	local buyCorner = Instance.new("UICorner")
-	buyCorner.CornerRadius = UDim.new(0.1, 0)
-	buyCorner.Parent = buyButton
-
-	-- Buy button functionality
-	buyButton.MouseButton1Click:Connect(function()
-		if self.State.GameClient and self.State.GameClient.PurchaseItem then
-			self.State.GameClient:PurchaseItem(item)
-		else
-			self:ShowNotification("Shop Error", "Purchase system not available!", "error")
-		end
-	end)
-
-	return itemFrame
-end
-
 -- ========== NOTIFICATION SYSTEM ==========
 
 function UIManager:SetupNotificationSystem()
 	self.State.NotificationQueue = {}
 
-	-- Process notification queue
 	spawn(function()
 		while true do
 			if #self.State.NotificationQueue > 0 then
@@ -1116,7 +1324,6 @@ function UIManager:DisplayNotification(notificationData)
 	local notificationArea = self.State.MainUI:FindFirstChild("NotificationArea")
 	if not notificationArea then return end
 
-	-- Count existing notifications
 	local existingCount = 0
 	for _, child in pairs(notificationArea:GetChildren()) do
 		if child.Name:find("Notification_") then
@@ -1124,7 +1331,6 @@ function UIManager:DisplayNotification(notificationData)
 		end
 	end
 
-	-- Remove oldest if too many
 	if existingCount >= self.Config.MaxNotificationsVisible then
 		for _, child in pairs(notificationArea:GetChildren()) do
 			if child.Name:find("Notification_") then
@@ -1135,7 +1341,6 @@ function UIManager:DisplayNotification(notificationData)
 		existingCount = existingCount - 1
 	end
 
-	-- Create notification
 	local notification = Instance.new("Frame")
 	notification.Name = "Notification_" .. tick()
 	notification.Size = UDim2.new(1, -20, 0, 80)
@@ -1149,7 +1354,6 @@ function UIManager:DisplayNotification(notificationData)
 	notifCorner.CornerRadius = UDim.new(0.1, 0)
 	notifCorner.Parent = notification
 
-	-- Title
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Size = UDim2.new(1, -20, 0.5, 0)
 	titleLabel.Position = UDim2.new(0, 10, 0, 5)
@@ -1161,7 +1365,6 @@ function UIManager:DisplayNotification(notificationData)
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Parent = notification
 
-	-- Message
 	local messageLabel = Instance.new("TextLabel")
 	messageLabel.Size = UDim2.new(1, -20, 0.5, -5)
 	messageLabel.Position = UDim2.new(0, 10, 0.5, 0)
@@ -1174,7 +1377,6 @@ function UIManager:DisplayNotification(notificationData)
 	messageLabel.TextWrapped = true
 	messageLabel.Parent = notification
 
-	-- Animate in
 	notification.Position = UDim2.new(1, 0, 0, 20 + (existingCount * 90))
 	local slideIn = TweenService:Create(notification,
 		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
@@ -1182,7 +1384,6 @@ function UIManager:DisplayNotification(notificationData)
 	)
 	slideIn:Play()
 
-	-- Auto-remove after display time
 	spawn(function()
 		wait(self.Config.NotificationDisplayTime)
 		if notification and notification.Parent then
@@ -1213,20 +1414,17 @@ end
 function UIManager:UpdateCurrencyDisplay(playerData)
 	if not playerData or not self.State.CurrencyLabels then return end
 
-	-- Update coins
 	if self.State.CurrencyLabels.coins then
 		local coins = playerData.coins or 0
 		self.State.CurrencyLabels.coins.Text = "💰 " .. self:FormatNumber(coins)
 	end
 
-	-- Update farm tokens
 	if self.State.CurrencyLabels.farmTokens then
 		local tokens = playerData.farmTokens or 0
 		self.State.CurrencyLabels.farmTokens.Text = "🎫 " .. self:FormatNumber(tokens)
 	end
 end
 
--- Format numbers with commas
 function UIManager:FormatNumber(number)
 	if number < 1000 then
 		return tostring(number)
@@ -1244,17 +1442,33 @@ function UIManager:RefreshMenuContent(menuName)
 
 	print("UIManager: Refreshing content for " .. menuName)
 
-	-- Close and reopen menu to refresh
-	local currentMenus = self.State.ActiveMenus
-	self:CloseActiveMenus()
+	if menuName == "Shop" then
+		-- Refresh current shop tab
+		local activeTab = self.State.ShopTabs[self.State.ActiveShopTab]
+		if activeTab then
+			activeTab.populated = false
+			self:PopulateShopTabContent(self.State.ActiveShopTab)
+		end
+	else
+		local currentMenus = self.State.ActiveMenus
+		self:CloseActiveMenus()
 
-	spawn(function()
-		wait(0.1) -- Brief delay
-		self:OpenMenu(menuName)
-	end)
+		spawn(function()
+			wait(0.1)
+			self:OpenMenu(menuName)
+		end)
+	end
 end
 
--- ========== GET STATE FUNCTIONS ==========
+-- ========== UTILITY FUNCTIONS ==========
+
+function UIManager:LightenColor(color, amount)
+	return Color3.new(
+		math.min(1, color.R + amount),
+		math.min(1, color.G + amount),
+		math.min(1, color.B + amount)
+	)
+end
 
 function UIManager:GetState()
 	return self.State
@@ -1265,25 +1479,20 @@ end
 function UIManager:Cleanup()
 	print("UIManager: Performing cleanup...")
 
-	-- Close all menus
 	self:CloseActiveMenus()
 
-	-- Clear notification queue
 	self.State.NotificationQueue = {}
 
-	-- Destroy main UI
 	if self.State.MainUI then
 		self.State.MainUI:Destroy()
 		self.State.MainUI = nil
 	end
 
-	-- Destroy left-side buttons UI
 	local leftSideUI = LocalPlayer.PlayerGui:FindFirstChild("LeftSideButtonsUI")
 	if leftSideUI then
 		leftSideUI:Destroy()
 	end
 
-	-- Reset state
 	self.State = {
 		MainUI = nil,
 		CurrentPage = "None",
@@ -1293,30 +1502,28 @@ function UIManager:Cleanup()
 		NotificationQueue = {},
 		CurrencyLabels = {},
 		GameClient = nil,
-		LeftSideButtons = {}
+		LeftSideButtons = {},
+		ShopTabs = {},
+		ActiveShopTab = "seeds"
 	}
 
 	print("UIManager: Cleanup complete")
 end
 
--- Make globally available
 _G.UIManager = UIManager
 
-print("UIManager: ✅ Updated for proximity-only shop access!")
-print("📋 Changes Made:")
-print("  ❌ Removed Shop button from left-side menu")
-print("  ❌ Removed B key hotkey for shop")
-print("  ✅ Shop now only accessible via ShopTouchPart")
-print("  ✅ Added proximity shop indicator")
-print("  ✅ Repositioned remaining buttons")
+print("UIManager: ✅ Enhanced with TABBED SHOP SYSTEM!")
+print("🛒 NEW SHOP FEATURES:")
+print("  📁 Separate tabs: Seeds, Farming, Defense, Mining, Crafting, Premium")
+print("  🎨 Category-specific colors and indicators")
+print("  📋 Purchase order badges for logical progression")
+print("  ✨ Smooth tab switching animations")
+print("  🔍 Category-based item filtering")
+print("  📱 Enhanced item cards with better layout")
 print("")
-print("🎮 Left-Side Buttons (Updated):")
-print("  🌾 Farm - Press F or click button")
-print("  ⛏️ Mining - Press M or click button")
-print("  🔨 Crafting - Press C or click button")
-print("  🛒 Shop - Step on shop area only")
-print("")
-print("⌨️ Hotkeys: F=Farm, M=Mining, C=Crafting, ESC=Close")
-print("🚶 Shop Access: Proximity only via ShopTouchPart")
+print("🎮 Tab Navigation:")
+print("  Click tabs to switch categories")
+print("  Items sorted by purchase order within each tab")
+print("  Category colors for visual organization")
 
 return UIManager

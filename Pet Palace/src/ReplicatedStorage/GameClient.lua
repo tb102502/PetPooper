@@ -1,11 +1,12 @@
 --[[
-    UPDATED GameClient.lua - Shop Hotkey Removed for Proximity-Only Access
+    UPDATED GameClient.lua - Tabbed Shop Support
+    Place in: ReplicatedStorage/GameClient.lua
     
     CHANGES:
-    ✅ Removed B key hotkey for shop opening
-    ✅ Removed OpenMenu("Shop") calls from input handling
-    ✅ Shop can still be opened via proximity system
-    ✅ All other functionality preserved
+    ✅ Enhanced shop menu opening for tabbed system
+    ✅ Support for tab-specific item filtering
+    ✅ Better shop state management
+    ✅ Enhanced purchase confirmations for categories
 ]]
 
 local GameClient = {}
@@ -16,7 +17,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
--- Load ItemConfig safely - this is the ONLY external module we load
+-- Load ItemConfig safely
 local ItemConfig = nil
 local function loadItemConfig()
 	local success, result = pcall(function()
@@ -53,15 +54,17 @@ GameClient.FarmingState = {
 GameClient.Cache = {
 	ShopItems = {},
 	CowCooldown = 0,
-	PigState = {}
+	PigState = {},
+	-- NEW: Shop tab cache
+	ShopTabCache = {},
+	LastShopRefresh = 0
 }
 
 -- ========== INITIALIZATION ==========
 
 function GameClient:Initialize(uiManager)
-	print("GameClient: Starting updated core initialization...")
+	print("GameClient: Starting enhanced core initialization with tabbed shop support...")
 
-	-- Store UIManager reference
 	self.UIManager = uiManager
 
 	local success, errorMsg
@@ -75,7 +78,7 @@ function GameClient:Initialize(uiManager)
 	end
 	print("GameClient: ✅ ItemConfig initialized")
 
-	-- Step 2: Setup Remote Connections (Updated for new architecture)
+	-- Step 2: Setup Remote Connections
 	success, errorMsg = pcall(function()
 		self:SetupRemoteConnections()
 	end)
@@ -86,14 +89,13 @@ function GameClient:Initialize(uiManager)
 
 	-- Step 3: Establish UIManager connection
 	if self.UIManager then
-		-- Set GameClient reference in UIManager
 		self.UIManager:SetGameClient(self)
 		print("GameClient: ✅ UIManager reference established")
 	else
 		error("GameClient: UIManager not provided during initialization")
 	end
 
-	-- Step 4: Setup Input Handling (WITHOUT SHOP HOTKEY)
+	-- Step 4: Setup Input Handling
 	success, errorMsg = pcall(function()
 		self:SetupInputHandling()
 	end)
@@ -129,11 +131,11 @@ function GameClient:Initialize(uiManager)
 	end
 	print("GameClient: ✅ InitialData initialized")
 
-	print("GameClient: 🎉 Updated initialization complete (proximity-only shop)!")
+	print("GameClient: 🎉 Enhanced initialization complete with tabbed shop support!")
 	return true
 end
 
--- ========== UPDATED INPUT HANDLING (NO SHOP HOTKEY) ==========
+-- ========== INPUT HANDLING ==========
 
 function GameClient:SetupInputHandling()
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -144,18 +146,13 @@ function GameClient:SetupInputHandling()
 				self.UIManager:CloseActiveMenus()
 			end
 		elseif input.KeyCode == Enum.KeyCode.F then
-			-- F key for Farm
 			self:OpenMenu("Farm")
 		elseif input.KeyCode == Enum.KeyCode.M then
-			-- M key for Mining
 			self:OpenMenu("Mining")
 		elseif input.KeyCode == Enum.KeyCode.C then
-			-- C key for Crafting
 			self:OpenMenu("Crafting")
 		elseif input.KeyCode == Enum.KeyCode.H then
-			-- H key for Harvest All
 			self:RequestHarvestAll()
-			-- NOTE: B key for shop REMOVED - shop now only accessible via proximity
 		end
 	end)
 
@@ -167,7 +164,6 @@ end
 -- ========== FARMING SYSTEM LOGIC ==========
 
 function GameClient:SetupFarmingSystemLogic()
-	-- Initialize farming state
 	self.FarmingState = {
 		selectedSeed = nil,
 		isPlantingMode = false,
@@ -183,7 +179,6 @@ end
 -- ========== MENU AND ACTION METHODS ==========
 
 function GameClient:OpenMenu(menuName)
-	-- NOTE: Shop can still be opened by proximity system, but not by direct calls
 	if menuName == "Shop" then
 		print("GameClient: Shop menu opening blocked - use proximity system")
 		if self.UIManager then
@@ -219,42 +214,39 @@ function GameClient:RequestHarvestAll()
 	print("GameClient: Sent harvest all request to server")
 end
 
--- ========== UPDATED REMOTE CONNECTIONS ==========
+-- ========== REMOTE CONNECTIONS ==========
 
 function GameClient:SetupRemoteConnections()
-	print("GameClient: Setting up updated remote connections...")
+	print("GameClient: Setting up enhanced remote connections...")
 
-	-- Wait for GameRemotes folder to exist
 	local remotes = ReplicatedStorage:WaitForChild("GameRemotes", 10)
 	if not remotes then
 		error("GameClient: GameRemotes folder not found after 10 seconds!")
 	end
 
-	-- Clear existing connections
 	self.RemoteEvents = {}
 	self.RemoteFunctions = {}
 
-	-- UPDATED: Core + Shop remotes (working with new architecture)
 	local requiredRemoteEvents = {
-		-- Core game events (handled by GameCore)
+		-- Core game events
 		"CollectMilk", "FeedPig", "PlayerDataUpdated", "ShowNotification",
 		"PlantSeed", "HarvestCrop", "HarvestAllCrops",
 		"PestSpotted", "PestEliminated", "ChickenPlaced", "ChickenMoved",
 		"FeedAllChickens", "FeedChickensWithType", "UsePesticide",
 
-		-- Shop events (handled by ShopSystem)
+		-- Shop events (enhanced for tabbed system)
 		"PurchaseItem", "ItemPurchased", "SellItem", "ItemSold", "CurrencyUpdated",
 
-		-- Proximity events (INCLUDES SHOP EVENTS FOR PROXIMITY ACCESS)
+		-- Proximity events
 		"OpenShop", "CloseShop", "ShowPigFeedingUI", "HidePigFeedingUI"
 	}
 
 	local requiredRemoteFunctions = {
-		-- Core functions (handled by GameCore)
+		-- Core functions
 		"GetPlayerData", "GetFarmingData",
 
-		-- Shop functions (handled by ShopSystem)
-		"GetShopItems"
+		-- Shop functions (enhanced for tabbed system)
+		"GetShopItems", "GetShopItemsByCategory"
 	}
 
 	-- Load remote events
@@ -279,10 +271,9 @@ function GameClient:SetupRemoteConnections()
 		end
 	end
 
-	-- Setup all event handlers
 	self:SetupAllEventHandlers()
 
-	print("GameClient: Updated remote connections established")
+	print("GameClient: Enhanced remote connections established")
 	print("  RemoteEvents: " .. self:CountTable(self.RemoteEvents))
 	print("  RemoteFunctions: " .. self:CountTable(self.RemoteFunctions))
 end
@@ -290,7 +281,6 @@ end
 function GameClient:SetupAllEventHandlers()
 	print("GameClient: Setting up all event handlers...")
 
-	-- Clean up existing connections
 	if self.ActiveConnections then
 		for _, connection in pairs(self.ActiveConnections) do
 			if connection and connection.Connected then
@@ -300,14 +290,13 @@ function GameClient:SetupAllEventHandlers()
 	end
 	self.ActiveConnections = {}
 
-	-- All event handlers (Updated for new architecture)
 	local eventHandlers = {
-		-- Player Data Updates (GameCore)
+		-- Player Data Updates
 		PlayerDataUpdated = function(newData)
 			pcall(function() self:HandlePlayerDataUpdate(newData) end)
 		end,
 
-		-- Farming System (GameCore)
+		-- Farming System
 		PlantSeed = function(plotModel)
 			pcall(function()
 				print("GameClient: Received plot click, showing seed selection for", plotModel.Name)
@@ -315,9 +304,9 @@ function GameClient:SetupAllEventHandlers()
 			end)
 		end,
 
-		-- Shop System Events (ShopSystem)
+		-- Enhanced Shop System Events
 		ItemPurchased = function(itemId, quantity, cost, currency)
-			pcall(function() self:HandleItemPurchased(itemId, quantity, cost, currency) end)
+			pcall(function() self:HandleEnhancedItemPurchased(itemId, quantity, cost, currency) end)
 		end,
 
 		ItemSold = function(itemId, quantity, earnings, currency)
@@ -328,7 +317,7 @@ function GameClient:SetupAllEventHandlers()
 			pcall(function() self:HandleCurrencyUpdate(currencyData) end)
 		end,
 
-		-- Notification Handler (Both systems)
+		-- Notification Handler
 		ShowNotification = function(title, message, notificationType)
 			pcall(function() 
 				if self.UIManager then
@@ -337,7 +326,7 @@ function GameClient:SetupAllEventHandlers()
 			end)
 		end,
 
-		-- Pest Control Events (GameCore)
+		-- Pest Control Events
 		PestSpotted = function(pestType, cropType, plotInfo)
 			pcall(function() self:HandlePestSpottedNotification(pestType, cropType, plotInfo) end)
 		end,
@@ -346,7 +335,7 @@ function GameClient:SetupAllEventHandlers()
 			pcall(function() self:HandlePestEliminatedNotification(pestType, eliminatedBy) end)
 		end,
 
-		-- Chicken Events (GameCore)
+		-- Chicken Events
 		ChickenPlaced = function(chickenType, position)
 			pcall(function() self:HandleChickenPlacedNotification(chickenType, position) end)
 		end
@@ -369,10 +358,9 @@ end
 function GameClient:SetupProximitySystemHandlers()
 	print("GameClient: Setting up proximity system handlers...")
 
-	-- Shop proximity handlers (THESE STILL WORK - proximity access allowed)
 	if self.RemoteEvents.OpenShop then
 		self.RemoteEvents.OpenShop.OnClientEvent:Connect(function()
-			print("GameClient: Proximity shop triggered - opening shop menu")
+			print("GameClient: Proximity shop triggered - opening tabbed shop menu")
 			self:OpenShopProximity()
 		end)
 	end
@@ -386,7 +374,6 @@ function GameClient:SetupProximitySystemHandlers()
 		end)
 	end
 
-	-- Pig proximity handlers
 	if self.RemoteEvents.ShowPigFeedingUI then
 		self.RemoteEvents.ShowPigFeedingUI.OnClientEvent:Connect(function()
 			self:ShowPigFeedingInterface()
@@ -418,7 +405,10 @@ function GameClient:HandlePlayerDataUpdate(newData)
 	-- Update current page if needed
 	local currentPage = self.UIManager and self.UIManager:GetCurrentPage()
 	if currentPage == "Shop" then
-		if self.UIManager then self.UIManager:RefreshMenuContent("Shop") end
+		-- Refresh the active shop tab if shop is open
+		if self.UIManager then 
+			self.UIManager:RefreshMenuContent("Shop") 
+		end
 	elseif currentPage == "Farm" then
 		if self.UIManager then self.UIManager:RefreshMenuContent("Farm") end
 	elseif currentPage == "Mining" then
@@ -430,10 +420,9 @@ function GameClient:HandlePlayerDataUpdate(newData)
 	-- Update planting mode if seeds changed
 	if self.FarmingState.isPlantingMode then
 		local currentSeeds = newData.farming and newData.farming.inventory or {}
-		local selectedSeedCount = currentSeeds[self.FarmingState.selectedSeed] or 0
+		local seedCount = currentSeeds[self.FarmingState.selectedSeed] or 0
 
-		if selectedSeedCount <= 0 then
-			-- Selected seed is out of stock, exit planting mode
+		if seedCount <= 0 then
 			self:ExitPlantingMode()
 			if self.UIManager then
 				self.UIManager:ShowNotification("Out of Seeds", "You ran out of " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. "!", "warning")
@@ -442,9 +431,9 @@ function GameClient:HandlePlayerDataUpdate(newData)
 	end
 end
 
--- UPDATED: Shop event handlers for new architecture
-function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
-	print("🎉 CLIENT: Received purchase confirmation!")
+-- ENHANCED: Shop event handlers for tabbed system
+function GameClient:HandleEnhancedItemPurchased(itemId, quantity, cost, currency)
+	print("🎉 CLIENT: Received enhanced purchase confirmation!")
 	print("    Item: " .. tostring(itemId))
 	print("    Quantity: " .. tostring(quantity))
 
@@ -461,10 +450,13 @@ function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
 		end
 	end
 
-	-- Show appropriate notification
+	-- Enhanced category-aware notifications
+	local categoryEmoji = self:GetCategoryEmoji(itemId)
+	local itemCategory = self:GetItemCategory(itemId)
+
 	if itemId:find("_seeds") then
 		if self.UIManager then
-			self.UIManager:ShowNotification("🌱 Seeds Purchased!", 
+			self.UIManager:ShowNotification(categoryEmoji .. " Seeds Purchased!", 
 				"Added " .. tostring(quantity) .. "x " .. itemId:gsub("_", " ") .. " to your farming inventory!", "success")
 		end
 	elseif itemId == "farm_plot_starter" then
@@ -472,14 +464,34 @@ function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
 			self.UIManager:ShowNotification("🌾 Farm Plot Created!", 
 				"Your farm plot is ready! Press F to start farming.", "success")
 		end
+	elseif itemCategory == "defense" then
+		if self.UIManager then
+			self.UIManager:ShowNotification("🛡️ Defense Purchase!", 
+				"Added " .. itemId:gsub("_", " ") .. " to your defense arsenal!", "success")
+		end
+	elseif itemCategory == "mining" then
+		if self.UIManager then
+			self.UIManager:ShowNotification("⛏️ Mining Equipment!", 
+				"Added " .. itemId:gsub("_", " ") .. " to your mining tools!", "success")
+		end
+	elseif itemCategory == "crafting" then
+		if self.UIManager then
+			self.UIManager:ShowNotification("🔨 Crafting Station!", 
+				"Built " .. itemId:gsub("_", " ") .. " for your workshop!", "success")
+		end
+	elseif itemCategory == "premium" then
+		if self.UIManager then
+			self.UIManager:ShowNotification("✨ Premium Purchase!", 
+				"Unlocked premium " .. itemId:gsub("_", " ") .. "!", "success")
+		end
 	else
 		if self.UIManager then
-			self.UIManager:ShowNotification("Purchase Complete!", 
+			self.UIManager:ShowNotification("🛒 Purchase Complete!", 
 				"Purchased " .. itemId, "success")
 		end
 	end
 
-	-- Refresh shop if open
+	-- Refresh shop if open (specific to active tab)
 	if self.UIManager and self.UIManager:GetCurrentPage() == "Shop" then
 		spawn(function()
 			wait(0.5) -- Wait for server data update
@@ -487,17 +499,15 @@ function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
 		end)
 	end
 
-	print("✅ CLIENT: Purchase handling completed")
+	print("✅ CLIENT: Enhanced purchase handling completed")
 end
 
--- NEW: Handle item sold confirmations
 function GameClient:HandleItemSold(itemId, quantity, earnings, currency)
 	print("💰 CLIENT: Received sell confirmation!")
 	print("    Item: " .. tostring(itemId))
 	print("    Quantity: " .. tostring(quantity))
 	print("    Earnings: " .. tostring(earnings))
 
-	-- Update local data
 	if self.PlayerData then
 		local safeCurrency = currency or "coins"
 		local safeEarnings = earnings or 0
@@ -508,14 +518,13 @@ function GameClient:HandleItemSold(itemId, quantity, earnings, currency)
 		end
 	end
 
-	-- Show notification
 	if self.UIManager then
 		local itemName = self:GetItemDisplayName(itemId)
 		self.UIManager:ShowNotification("💰 Item Sold!", 
 			"Sold " .. tostring(quantity) .. "x " .. itemName .. " for " .. tostring(earnings) .. " " .. currency .. "!", "success")
 	end
 
-	-- Refresh sell tab if open
+	-- Refresh sell tab if shop is open
 	if self.UIManager and self.UIManager:GetCurrentPage() == "Shop" then
 		spawn(function()
 			wait(0.5)
@@ -544,7 +553,6 @@ function GameClient:ShowSeedSelectionForPlot(plotModel)
 		return
 	end
 
-	-- Count available seeds
 	local availableSeeds = {}
 	for itemId, quantity in pairs(playerData.farming.inventory) do
 		if itemId:find("_seeds") and quantity > 0 then
@@ -559,7 +567,6 @@ function GameClient:ShowSeedSelectionForPlot(plotModel)
 		return
 	end
 
-	-- Create seed selection UI
 	self:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 end
 
@@ -631,7 +638,6 @@ function GameClient:RequestInitialData()
 				self:HandlePlayerDataUpdate(data)
 			else
 				warn("GameClient: Failed to get initial data: " .. tostring(data))
-				-- Create default data structure for offline testing
 				self:HandlePlayerDataUpdate({
 					coins = 0,
 					farmTokens = 0,
@@ -659,12 +665,20 @@ function GameClient:GetPlayerData()
 	return self.PlayerData
 end
 
--- ========== UPDATED SHOP SYSTEM METHODS ==========
+-- ========== ENHANCED SHOP SYSTEM METHODS ==========
 
 function GameClient:GetShopItems()
-	print("🛒 CLIENT: Requesting shop items from ShopSystem...")
+	print("🛒 CLIENT: Requesting shop items for tabbed system...")
 
-	-- Method 1: Try RemoteFunction (ShopSystem)
+	-- Try to get from cache first
+	local currentTime = tick()
+	if self.Cache.ShopItems and #self.Cache.ShopItems > 0 and 
+		(currentTime - self.Cache.LastShopRefresh) < 30 then
+		print("🛒 CLIENT: Using cached shop items")
+		return self.Cache.ShopItems
+	end
+
+	-- Request fresh data from server
 	if self.RemoteFunctions and self.RemoteFunctions.GetShopItems then
 		print("🛒 CLIENT: Using ShopSystem RemoteFunction")
 		local success, items = pcall(function()
@@ -674,7 +688,6 @@ function GameClient:GetShopItems()
 		if success and items and type(items) == "table" then
 			print("🛒 CLIENT: Received " .. #items .. " items from ShopSystem")
 
-			-- Validate items
 			local validItems = {}
 			for _, item in ipairs(items) do
 				if item.id and item.name and item.price and item.currency and item.category then
@@ -686,6 +699,9 @@ function GameClient:GetShopItems()
 
 			print("🛒 CLIENT: " .. #validItems .. " valid items after validation")
 			if #validItems > 0 then
+				-- Cache the results
+				self.Cache.ShopItems = validItems
+				self.Cache.LastShopRefresh = currentTime
 				return validItems
 			end
 		else
@@ -698,7 +714,52 @@ function GameClient:GetShopItems()
 	return {}
 end
 
--- UPDATED: Purchase method for new architecture
+function GameClient:GetShopItemsByCategory(category)
+	print("🛒 CLIENT: Requesting items for category: " .. category)
+
+	-- Check if we have cached data for this category
+	if self.Cache.ShopTabCache[category] then
+		local cacheData = self.Cache.ShopTabCache[category]
+		local currentTime = tick()
+
+		if (currentTime - cacheData.timestamp) < 30 then
+			print("🛒 CLIENT: Using cached data for " .. category)
+			return cacheData.items
+		end
+	end
+
+	-- Get all items and filter by category
+	local allItems = self:GetShopItems()
+	local categoryItems = {}
+
+	for _, item in ipairs(allItems) do
+		if item.category == category then
+			table.insert(categoryItems, item)
+		end
+	end
+
+	-- Sort by purchase order within category
+	table.sort(categoryItems, function(a, b)
+		local orderA = a.purchaseOrder or 999
+		local orderB = b.purchaseOrder or 999
+
+		if orderA == orderB then
+			return a.price < b.price
+		end
+
+		return orderA < orderB
+	end)
+
+	-- Cache the filtered results
+	self.Cache.ShopTabCache[category] = {
+		items = categoryItems,
+		timestamp = tick()
+	}
+
+	print("🛒 CLIENT: Filtered " .. #categoryItems .. " items for " .. category .. " category")
+	return categoryItems
+end
+
 function GameClient:PurchaseItem(item)
 	if not self:CanAffordItem(item) then
 		if self.UIManager then
@@ -707,10 +768,12 @@ function GameClient:PurchaseItem(item)
 		return
 	end
 
-	-- Use ShopSystem's PurchaseItem RemoteEvent
 	if self.RemoteEvents.PurchaseItem then
 		print("GameClient: Purchasing item via ShopSystem:", item.id, "for", item.price, item.currency)
 		self.RemoteEvents.PurchaseItem:FireServer(item.id, 1)
+
+		-- Clear relevant cache after purchase
+		self:ClearShopCache(item.category)
 	else
 		warn("GameClient: PurchaseItem remote event not available")
 		if self.UIManager then
@@ -719,7 +782,6 @@ function GameClient:PurchaseItem(item)
 	end
 end
 
--- NEW: Sell method for new architecture
 function GameClient:SellItem(itemId, quantity)
 	quantity = quantity or 1
 
@@ -748,16 +810,51 @@ function GameClient:CanAffordItem(item)
 	return playerCurrency >= item.price
 end
 
+function GameClient:ClearShopCache(category)
+	if category then
+		self.Cache.ShopTabCache[category] = nil
+		print("🛒 CLIENT: Cleared cache for " .. category .. " category")
+	else
+		self.Cache.ShopItems = {}
+		self.Cache.ShopTabCache = {}
+		self.Cache.LastShopRefresh = 0
+		print("🛒 CLIENT: Cleared all shop cache")
+	end
+end
+
+-- ========== CATEGORY HELPER FUNCTIONS ==========
+
+function GameClient:GetCategoryEmoji(itemId)
+	local categoryEmojis = {
+		seeds = "🌱",
+		farm = "🌾",
+		defense = "🛡️",
+		mining = "⛏️",
+		crafting = "🔨",
+		premium = "✨"
+	}
+
+	local category = self:GetItemCategory(itemId)
+	return categoryEmojis[category] or "📦"
+end
+
+function GameClient:GetItemCategory(itemId)
+	if not ItemConfig or not ItemConfig.ShopItems then
+		return "unknown"
+	end
+
+	local item = ItemConfig.ShopItems[itemId]
+	return item and item.category or "unknown"
+end
+
 -- ========== FARMING SYSTEM ==========
 
 function GameClient:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
 
-	-- Remove existing seed selection UI
 	local existingUI = playerGui:FindFirstChild("SeedSelectionUI")
 	if existingUI then existingUI:Destroy() end
 
-	-- Create simple seed selection UI
 	local seedUI = Instance.new("ScreenGui")
 	seedUI.Name = "SeedSelectionUI"
 	seedUI.ResetOnSpawn = false
@@ -776,7 +873,6 @@ function GameClient:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 	corner.CornerRadius = UDim.new(0.02, 0)
 	corner.Parent = mainFrame
 
-	-- Title
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, 0, 0, 40)
 	title.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
@@ -787,7 +883,6 @@ function GameClient:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 	title.Font = Enum.Font.GothamBold
 	title.Parent = mainFrame
 
-	-- Close button
 	local closeButton = Instance.new("TextButton")
 	closeButton.Size = UDim2.new(0, 80, 0, 30)
 	closeButton.Position = UDim2.new(0.5, -40, 1, -40)
@@ -803,7 +898,6 @@ function GameClient:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 		seedUI:Destroy()
 	end)
 
-	-- Create seed buttons
 	for i, seedData in ipairs(availableSeeds) do
 		local seedButton = Instance.new("TextButton")
 		seedButton.Size = UDim2.new(1, -20, 0, 30)
@@ -816,7 +910,6 @@ function GameClient:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 		seedButton.Font = Enum.Font.Gotham
 		seedButton.Parent = mainFrame
 
-		-- Plant this seed when clicked
 		seedButton.MouseButton1Click:Connect(function()
 			print("GameClient: Player selected seed:", seedData.id)
 			self:PlantSelectedSeed(plotModel, seedData.id)
@@ -846,7 +939,6 @@ end
 function GameClient:ShowPigFeedingInterface()
 	print("GameClient: Showing simple pig feeding interface")
 
-	-- Remove existing pig UI
 	local existingUI = LocalPlayer.PlayerGui:FindFirstChild("PigFeedingUI")
 	if existingUI then existingUI:Destroy() end
 
@@ -858,7 +950,6 @@ function GameClient:ShowPigFeedingInterface()
 		return
 	end
 
-	-- Simple pig feeding notification
 	if self.UIManager then
 		self.UIManager:ShowNotification("🐷 Pig Feeding", "Pig feeding system active - approach pig to feed!", "info")
 	end
@@ -874,13 +965,10 @@ end
 
 function GameClient:GetCropDisplayName(cropId)
 	local displayNames = {
-		-- Basic crops
 		carrot = "🥕 Carrot",
 		corn = "🌽 Corn", 
 		strawberry = "🍓 Strawberry",
 		golden_fruit = "✨ Golden Fruit",
-
-		-- Extended crops from ItemConfig
 		wheat = "🌾 Wheat",
 		potato = "🥔 Potato",
 		tomato = "🍅 Tomato",
@@ -888,15 +976,11 @@ function GameClient:GetCropDisplayName(cropId)
 		radish = "🌶️ Radish",
 		broccoli = "🥦 Broccoli",
 		glorious_sunflower = "🌻 Glorious Sunflower",
-
-		-- Animal products
 		milk = "🥛 Fresh Milk",
 		fresh_milk = "🥛 Fresh Milk",
 		chicken_egg = "🥚 Chicken Egg",
 		guinea_egg = "🥚 Guinea Fowl Egg",
 		rooster_egg = "🥚 Rooster Egg",
-
-		-- Ores (for future mining)
 		copper_ore = "🟫 Copper Ore",
 		bronze_ore = "🟤 Bronze Ore",
 		silver_ore = "⚪ Silver Ore",
@@ -910,7 +994,7 @@ end
 
 function GameClient:GetItemDisplayName(itemId)
 	local names = {
-		-- ========== SEEDS ==========
+		-- Seeds
 		carrot_seeds = "Carrot Seeds",
 		corn_seeds = "Corn Seeds",
 		strawberry_seeds = "Strawberry Seeds",
@@ -923,7 +1007,7 @@ function GameClient:GetItemDisplayName(itemId)
 		tomato_seeds = "Tomato Seeds",
 		glorious_sunflower_seeds = "Glorious Sunflower Seeds",
 
-		-- ========== CROPS ==========
+		-- Crops
 		carrot = "Carrots",
 		corn = "Corn",
 		strawberry = "Strawberries",
@@ -936,18 +1020,18 @@ function GameClient:GetItemDisplayName(itemId)
 		tomato = "Tomatoes",
 		glorious_sunflower = "Glorious Sunflower",
 
-		-- ========== ANIMAL PRODUCTS ==========
+		-- Animal products
 		milk = "Fresh Milk",
 		fresh_milk = "Fresh Milk",
 		chicken_egg = "Chicken Eggs",
 		guinea_egg = "Guinea Fowl Eggs",
 		rooster_egg = "Rooster Eggs",
 
-		-- ========== FARM ITEMS ==========
+		-- Farm items
 		farm_plot_starter = "Your First Farm Plot",
 		farm_plot_expansion = "Farm Plot Expansion",
 
-		-- ========== DEFENSE ITEMS ==========
+		-- Defense items
 		basic_chicken = "Basic Chicken",
 		guinea_fowl = "Guinea Fowl",
 		rooster = "Rooster",
@@ -957,7 +1041,7 @@ function GameClient:GetItemDisplayName(itemId)
 		basic_feed = "Basic Chicken Feed",
 		premium_feed = "Premium Chicken Feed",
 
-		-- ========== MINING TOOLS ==========
+		-- Mining tools
 		basic_pickaxe = "Basic Pickaxe",
 		stone_pickaxe = "Stone Pickaxe",
 		iron_pickaxe = "Iron Pickaxe",
@@ -965,23 +1049,23 @@ function GameClient:GetItemDisplayName(itemId)
 		obsidian_pickaxe = "Obsidian Pickaxe",
 		cave_access_pass = "Cave Access Pass",
 
-		-- ========== CRAFTING ITEMS ==========
+		-- Crafting items
 		basic_workbench = "Basic Workbench",
 		forge = "Advanced Forge",
 		mystical_altar = "Mystical Altar",
 
-		-- ========== PREMIUM ITEMS ==========
+		-- Premium items
 		auto_harvester = "Auto Harvester",
 		rarity_booster = "Rarity Booster",
 		mega_dome = "Mega Protection Dome",
 
-		-- ========== MILK EFFICIENCY UPGRADES ==========
+		-- Cow system
 		milk_efficiency_1 = "Enhanced Milking I",
 		milk_efficiency_2 = "Enhanced Milking II",
 		milk_efficiency_3 = "Enhanced Milking III",
 		milk_value_boost = "Premium Milk Quality",
 
-		-- ========== ORES ==========
+		-- Ores
 		copper_ore = "Copper Ore",
 		bronze_ore = "Bronze Ore",
 		silver_ore = "Silver Ore",
@@ -993,16 +1077,14 @@ function GameClient:GetItemDisplayName(itemId)
 	if names[itemId] then
 		return names[itemId]
 	else
-		-- Clean up underscores and capitalize as fallback
 		return itemId:gsub("_", " "):gsub("(%l)(%w*)", function(a,b) return string.upper(a)..b end)
 	end
 end
 
--- ========== INTERNAL PROXIMITY METHOD ==========
+-- ========== PROXIMITY SHOP METHOD ==========
 
 function GameClient:OpenShopProximity()
-	print("GameClient: Opening shop via proximity system")
-	-- This bypasses the normal OpenMenu check for proximity access
+	print("GameClient: Opening tabbed shop via proximity system")
 	if self.UIManager then
 		return self.UIManager:OpenMenu("Shop")
 	end
@@ -1024,7 +1106,6 @@ end
 function GameClient:RecoverFromError(errorMsg)
 	warn("GameClient: Attempting recovery from error: " .. tostring(errorMsg))
 
-	-- Reset critical systems
 	self.FarmingState = {
 		selectedSeed = nil,
 		isPlantingMode = false,
@@ -1034,7 +1115,9 @@ function GameClient:RecoverFromError(errorMsg)
 		rarityPreview = nil
 	}
 
-	-- Try to reconnect remotes
+	-- Clear shop cache on error
+	self:ClearShopCache()
+
 	local success, error = pcall(function()
 		self:SetupRemoteConnections()
 	end)
@@ -1051,7 +1134,7 @@ end
 -- ========== DEBUG FUNCTIONS ==========
 
 function GameClient:DebugStatus()
-	print("=== UPDATED GAMECLIENT DEBUG STATUS ===")
+	print("=== ENHANCED GAMECLIENT DEBUG STATUS ===")
 	print("PlayerData exists:", self.PlayerData ~= nil)
 	if self.PlayerData then
 		print("  Coins:", self.PlayerData.coins or "N/A")
@@ -1062,18 +1145,34 @@ function GameClient:DebugStatus()
 	if self.UIManager then
 		print("  UIManager state exists:", self.UIManager.State ~= nil)
 		print("  Current page:", self.UIManager:GetCurrentPage() or "None")
+		if self.UIManager.State and self.UIManager.State.ShopTabs then
+			print("  Active shop tab:", self.UIManager.State.ActiveShopTab or "None")
+		end
 	end
 	print("RemoteEvents count:", self.RemoteEvents and self:CountTable(self.RemoteEvents) or 0)
 	print("RemoteFunctions count:", self.RemoteFunctions and self:CountTable(self.RemoteFunctions) or 0)
+	print("Shop cache status:")
+	print("  Cached items:", self.Cache.ShopItems and #self.Cache.ShopItems or 0)
+	print("  Cached tabs:", self.Cache.ShopTabCache and self:CountTable(self.Cache.ShopTabCache) or 0)
 	print("Shop access: PROXIMITY ONLY")
 	print("Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All")
 	print("=====================================")
 end
 
+function GameClient:DebugShopCache()
+	print("=== SHOP CACHE DEBUG ===")
+	print("Total cached items:", self.Cache.ShopItems and #self.Cache.ShopItems or 0)
+	print("Last refresh:", self.Cache.LastShopRefresh or 0)
+	print("Tab cache:")
+	for category, data in pairs(self.Cache.ShopTabCache or {}) do
+		print("  " .. category .. ": " .. #data.items .. " items (age: " .. (tick() - data.timestamp) .. "s)")
+	end
+	print("========================")
+end
+
 -- ========== CLEANUP ==========
 
 function GameClient:Cleanup()
-	-- Cleanup connections
 	if self.ActiveConnections then
 		for _, connection in pairs(self.ActiveConnections) do
 			if connection and connection.Connected then
@@ -1082,12 +1181,10 @@ function GameClient:Cleanup()
 		end
 	end
 
-	-- Cleanup UIManager
 	if self.UIManager then
 		self.UIManager:Cleanup()
 	end
 
-	-- Reset state
 	self.PlayerData = {}
 	self.ActiveConnections = {}
 	self.FarmingState = {
@@ -1097,6 +1194,13 @@ function GameClient:Cleanup()
 		seedInventory = {},
 		activeBoosters = {},
 		rarityPreview = nil
+	}
+	self.Cache = {
+		ShopItems = {},
+		CowCooldown = 0,
+		PigState = {},
+		ShopTabCache = {},
+		LastShopRefresh = 0
 	}
 
 	print("GameClient: Cleaned up")
@@ -1116,21 +1220,28 @@ _G.DebugGameClient = function()
 	end
 end
 
+_G.DebugShopCache = function()
+	if _G.GameClient and _G.GameClient.DebugShopCache then
+		_G.GameClient:DebugShopCache()
+	end
+end
+
 _G.TestFarm = function()
 	if _G.GameClient then
 		_G.GameClient:OpenMenu("Farm")
 	end
 end
 
-print("GameClient: ✅ Updated for proximity-only shop access!")
+print("GameClient: ✅ Enhanced for tabbed shop system!")
 print("🎯 Changes Made:")
-print("  ❌ Removed B key hotkey for shop")
-print("  ❌ Blocked direct shop menu opening")
-print("  ✅ Shop only accessible via ShopTouchPart proximity")
-print("  ✅ All other systems and hotkeys preserved")
+print("  🛒 Enhanced shop system with tab support")
+print("  📦 Smart caching for better performance")
+print("  🏷️ Category-aware purchase notifications")
+print("  🔄 Tab-specific cache management")
+print("  📊 Enhanced debugging tools")
 print("")
 print("🔧 Available Features:")
-print("  🛒 Shop: Proximity access only (step on shop area)")
+print("  🛒 Shop: Tabbed interface via proximity")
 print("  🌾 Farming: F key or button")
 print("  ⛏️ Mining: M key or button")
 print("  🔨 Crafting: C key or button")
@@ -1139,5 +1250,6 @@ print("")
 print("🔧 Debug Commands:")
 print("  _G.TestFarm() - Open farm menu")
 print("  _G.DebugGameClient() - Show system status")
+print("  _G.DebugShopCache() - Show shop cache status")
 
 return GameClient

@@ -1,12 +1,13 @@
 --[[
-    ENHANCED ShopSystem.lua - Purchase Order Support & Better Item Management
+    UPDATED ShopSystem.lua - Tabbed Categories Support
+    Place in: ServerScriptService/Systems/ShopSystem.lua
     
-    IMPROVEMENTS:
-    ✅ Respects purchaseOrder from ItemConfig for logical progression
-    ✅ Enhanced item sorting by category and purchase order
-    ✅ Better debugging for shop item ordering
-    ✅ Improved item filtering and validation
-    ✅ Enhanced purchase requirement checking
+    NEW FEATURES:
+    ✅ Enhanced category-based item filtering
+    ✅ Tab-specific remote functions
+    ✅ Better category validation and sorting
+    ✅ Enhanced purchase notifications by category
+    ✅ Category-aware inventory management
 ]]
 
 local ShopSystem = {}
@@ -19,6 +20,7 @@ local HttpService = game:GetService("HttpService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local GameCore = require(ServerScriptService.Core:WaitForChild("GameCore"))
 local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
+
 -- Module State
 ShopSystem.RemoteEvents = {}
 ShopSystem.RemoteFunctions = {}
@@ -29,10 +31,50 @@ ShopSystem.GameCore = nil
 ShopSystem.PurchaseCooldowns = {}
 ShopSystem.PURCHASE_COOLDOWN = 1
 
+-- NEW: Category configuration for tabbed system
+ShopSystem.CategoryConfig = {
+	seeds = {
+		name = "Seeds",
+		emoji = "🌱",
+		description = "Plant these to grow crops on your farm",
+		priority = 1
+	},
+	farm = {
+		name = "Farming",
+		emoji = "🌾",
+		description = "Essential farming equipment and expansions",
+		priority = 2
+	},
+	defense = {
+		name = "Defense",
+		emoji = "🛡️",
+		description = "Protect your farm from pests and UFO attacks",
+		priority = 3
+	},
+	mining = {
+		name = "Mining",
+		emoji = "⛏️",
+		description = "Tools and equipment for mining operations",
+		priority = 4
+	},
+	crafting = {
+		name = "Crafting",
+		emoji = "🔨",
+		description = "Workbenches and crafting stations",
+		priority = 5
+	},
+	premium = {
+		name = "Premium",
+		emoji = "✨",
+		description = "Premium items and exclusive upgrades",
+		priority = 6
+	}
+}
+
 -- ========== INITIALIZATION ==========
 
 function ShopSystem:Initialize(gameCore)
-	print("ShopSystem: Initializing ENHANCED shop system with purchase order support...")
+	print("ShopSystem: Initializing ENHANCED tabbed shop system...")
 
 	self.GameCore = gameCore
 
@@ -52,15 +94,16 @@ function ShopSystem:Initialize(gameCore)
 	self:SetupRemoteConnections()
 	self:SetupRemoteHandlers()
 	self:ValidateShopData()
+	self:ValidateCategoryData()
 
-	print("ShopSystem: ✅ ENHANCED shop system initialization complete")
+	print("ShopSystem: ✅ ENHANCED tabbed shop system initialization complete")
 	return true
 end
 
 -- ========== REMOTE SETUP ==========
 
 function ShopSystem:SetupRemoteConnections()
-	print("ShopSystem: Setting up remote connections...")
+	print("ShopSystem: Setting up enhanced remote connections...")
 
 	local remoteFolder = ReplicatedStorage:FindFirstChild("GameRemotes")
 	if not remoteFolder then
@@ -71,6 +114,8 @@ function ShopSystem:SetupRemoteConnections()
 
 	local requiredRemotes = {
 		{name = "GetShopItems", type = "RemoteFunction"},
+		{name = "GetShopItemsByCategory", type = "RemoteFunction"}, -- NEW: Category-specific
+		{name = "GetShopCategories", type = "RemoteFunction"}, -- NEW: Category info
 		{name = "PurchaseItem", type = "RemoteEvent"},
 		{name = "ItemPurchased", type = "RemoteEvent"},
 		{name = "SellItem", type = "RemoteEvent"},
@@ -94,15 +139,29 @@ function ShopSystem:SetupRemoteConnections()
 		end
 	end
 
-	print("ShopSystem: Remote connections established")
+	print("ShopSystem: Enhanced remote connections established")
 end
 
 function ShopSystem:SetupRemoteHandlers()
-	print("ShopSystem: Setting up remote handlers...")
+	print("ShopSystem: Setting up enhanced remote handlers...")
 
 	if self.RemoteFunctions.GetShopItems then
 		self.RemoteFunctions.GetShopItems.OnServerInvoke = function(player)
 			return self:HandleGetShopItems(player)
+		end
+	end
+
+	-- NEW: Category-specific shop items handler
+	if self.RemoteFunctions.GetShopItemsByCategory then
+		self.RemoteFunctions.GetShopItemsByCategory.OnServerInvoke = function(player, category)
+			return self:HandleGetShopItemsByCategory(player, category)
+		end
+	end
+
+	-- NEW: Category information handler
+	if self.RemoteFunctions.GetShopCategories then
+		self.RemoteFunctions.GetShopCategories.OnServerInvoke = function(player)
+			return self:HandleGetShopCategories(player)
 		end
 	end
 
@@ -118,10 +177,10 @@ function ShopSystem:SetupRemoteHandlers()
 		end)
 	end
 
-	print("ShopSystem: All remote handlers connected")
+	print("ShopSystem: All enhanced remote handlers connected")
 end
 
--- ========== ENHANCED SHOP ITEMS HANDLER ==========
+-- ========== ENHANCED SHOP ITEMS HANDLERS ==========
 
 function ShopSystem:HandleGetShopItems(player)
 	print("🛒 ShopSystem: GetShopItems request from " .. player.Name)
@@ -142,26 +201,12 @@ function ShopSystem:HandleGetShopItems(player)
 			end
 		end
 
-		-- ENHANCED: Sort by category, then by purchase order, then by price
+		-- ENHANCED: Sort by category priority, then purchase order, then price
 		table.sort(shopItemsArray, function(a, b)
-			-- First sort by category
-			if a.category ~= b.category then
-				return self:GetCategoryPriority(a.category) < self:GetCategoryPriority(b.category)
-			end
-
-			-- Within same category, sort by purchase order
-			local orderA = a.purchaseOrder or 999
-			local orderB = b.purchaseOrder or 999
-
-			if orderA ~= orderB then
-				return orderA < orderB
-			end
-
-			-- If same purchase order, sort by price
-			return a.price < b.price
+			return self:CompareItemsForSorting(a, b)
 		end)
 
-		print("🛒 ShopSystem: Returning " .. #shopItemsArray .. " items (sorted by purchase order)")
+		print("🛒 ShopSystem: Returning " .. #shopItemsArray .. " items (sorted by category and purchase order)")
 		self:LogItemOrdering(shopItemsArray)
 
 		return shopItemsArray
@@ -175,23 +220,122 @@ function ShopSystem:HandleGetShopItems(player)
 	end
 end
 
-function ShopSystem:GetCategoryPriority(category)
-	-- Define the order categories should appear
-	local categoryOrder = {
-		seeds = 1,
-		farm = 2,
-		defense = 3,
-		sell = 4,
-		mining = 5,
-		crafting = 6,
-		premium = 7
-	}
+-- NEW: Category-specific items handler
+function ShopSystem:HandleGetShopItemsByCategory(player, category)
+	print("🛒 ShopSystem: GetShopItemsByCategory request from " .. player.Name .. " for category: " .. tostring(category))
 
-	return categoryOrder[category] or 999
+	if not category or not self.CategoryConfig[category] then
+		warn("🛒 ShopSystem: Invalid category requested: " .. tostring(category))
+		return {}
+	end
+
+	local success, result = pcall(function()
+		if not self.ItemConfig or not self.ItemConfig.ShopItems then
+			error("ItemConfig.ShopItems not available")
+		end
+
+		local categoryItems = {}
+		local playerData = self.GameCore and self.GameCore:GetPlayerData(player)
+
+		-- Filter items by category
+		for itemId, item in pairs(self.ItemConfig.ShopItems) do
+			if item.category == category and self:ValidateItem(item, itemId) and self:ShouldShowItem(item, itemId, playerData) then
+				local itemCopy = self:CreateEnhancedItemCopy(item, itemId, playerData)
+				table.insert(categoryItems, itemCopy)
+			end
+		end
+
+		-- Sort by purchase order within category
+		table.sort(categoryItems, function(a, b)
+			local orderA = a.purchaseOrder or 999
+			local orderB = b.purchaseOrder or 999
+
+			if orderA == orderB then
+				return a.price < b.price
+			end
+
+			return orderA < orderB
+		end)
+
+		print("🛒 ShopSystem: Returning " .. #categoryItems .. " items for " .. category .. " category")
+		return categoryItems
+	end)
+
+	if success then
+		return result
+	else
+		warn("🛒 ShopSystem: GetShopItemsByCategory failed: " .. tostring(result))
+		return {}
+	end
+end
+
+-- NEW: Category information handler
+function ShopSystem:HandleGetShopCategories(player)
+	print("🛒 ShopSystem: GetShopCategories request from " .. player.Name)
+
+	local categories = {}
+
+	for categoryId, config in pairs(self.CategoryConfig) do
+		-- Count items in this category
+		local itemCount = 0
+		local playerData = self.GameCore and self.GameCore:GetPlayerData(player)
+
+		for itemId, item in pairs(self.ItemConfig.ShopItems or {}) do
+			if item.category == categoryId and self:ValidateItem(item, itemId) and self:ShouldShowItem(item, itemId, playerData) then
+				itemCount = itemCount + 1
+			end
+		end
+
+		if itemCount > 0 then
+			table.insert(categories, {
+				id = categoryId,
+				name = config.name,
+				emoji = config.emoji,
+				description = config.description,
+				priority = config.priority,
+				itemCount = itemCount
+			})
+		end
+	end
+
+	-- Sort by priority
+	table.sort(categories, function(a, b)
+		return a.priority < b.priority
+	end)
+
+	print("🛒 ShopSystem: Returning " .. #categories .. " categories")
+	return categories
+end
+
+function ShopSystem:CompareItemsForSorting(a, b)
+	-- First sort by category priority
+	local categoryA = self.CategoryConfig[a.category]
+	local categoryB = self.CategoryConfig[b.category]
+
+	if categoryA and categoryB then
+		if categoryA.priority ~= categoryB.priority then
+			return categoryA.priority < categoryB.priority
+		end
+	elseif categoryA then
+		return true
+	elseif categoryB then
+		return false
+	end
+
+	-- Within same category, sort by purchase order
+	local orderA = a.purchaseOrder or 999
+	local orderB = b.purchaseOrder or 999
+
+	if orderA ~= orderB then
+		return orderA < orderB
+	end
+
+	-- If same purchase order, sort by price
+	return a.price < b.price
 end
 
 function ShopSystem:ShouldShowItem(item, itemId, playerData)
-	-- Don't show items marked as not purchasable (like crops in inventory)
+	-- Don't show items marked as not purchasable
 	if item.notPurchasable then
 		return false
 	end
@@ -214,11 +358,46 @@ function ShopSystem:ShouldShowItem(item, itemId, playerData)
 		end
 	end
 
+	-- NEW: Check category-specific requirements
+	if not self:MeetsCategoryRequirements(item, itemId, playerData) then
+		return false
+	end
+
+	return true
+end
+
+function ShopSystem:MeetsCategoryRequirements(item, itemId, playerData)
+	local category = item.category
+
+	-- Category-specific logic
+	if category == "mining" then
+		-- Mining items might require cave access
+		if itemId:find("pickaxe") and itemId ~= "cave_access_pass" then
+			if not (playerData and playerData.access and playerData.access.cave_access_pass) then
+				return false
+			end
+		end
+	elseif category == "crafting" then
+		-- Advanced crafting items might require basic workbench
+		if itemId ~= "basic_workbench" then
+			if not (playerData and playerData.buildings and playerData.buildings.basic_workbench) then
+				return false
+			end
+		end
+	elseif category == "defense" then
+		-- Advanced defense items might require farm plot
+		if itemId:find("chicken") or itemId:find("pesticide") then
+			if not (playerData and playerData.farming and playerData.farming.plots and playerData.farming.plots > 0) then
+				return false
+			end
+		end
+	end
+
 	return true
 end
 
 function ShopSystem:LogItemOrdering(shopItemsArray)
-	print("📋 Shop Items Order:")
+	print("📋 Enhanced Shop Items Order:")
 	local currentCategory = ""
 	local categoryCount = 0
 
@@ -229,7 +408,9 @@ function ShopSystem:LogItemOrdering(shopItemsArray)
 			end
 			currentCategory = item.category
 			categoryCount = 0
-			print("📁 " .. currentCategory:upper() .. " Category:")
+			local categoryInfo = self.CategoryConfig[currentCategory]
+			local categoryDisplay = categoryInfo and (categoryInfo.emoji .. " " .. categoryInfo.name) or currentCategory
+			print("📁 " .. categoryDisplay:upper() .. " Category:")
 		end
 
 		categoryCount = categoryCount + 1
@@ -265,6 +446,12 @@ function ShopSystem:ValidateItem(item, itemId)
 		end
 	end
 
+	-- NEW: Validate category
+	if not self.CategoryConfig[item.category] then
+		warn("🛒 ShopSystem: Invalid category for item " .. itemId .. ": " .. tostring(item.category))
+		return false
+	end
+
 	return isValidCurrency
 end
 
@@ -279,7 +466,7 @@ function ShopSystem:CreateEnhancedItemCopy(item, itemId, playerData)
 		icon = item.icon or "📦",
 		maxQuantity = item.maxQuantity or 999,
 		type = item.type or "item",
-		purchaseOrder = item.purchaseOrder or 999 -- ENHANCED: Include purchase order
+		purchaseOrder = item.purchaseOrder or 999
 	}
 
 	-- Copy all other properties
@@ -300,7 +487,10 @@ function ShopSystem:CreateEnhancedItemCopy(item, itemId, playerData)
 		itemCopy.alreadyOwned = self:IsAlreadyOwned(playerData, itemId)
 		itemCopy.playerStock = self:GetPlayerStock(playerData, itemId)
 
-		-- ENHANCED: Add requirement status for UI
+		-- ENHANCED: Add category-specific data
+		itemCopy.categoryInfo = self.CategoryConfig[item.category]
+
+		-- Add requirement status for UI
 		if item.requiresPurchase then
 			local reqItem = self:GetShopItemById(item.requiresPurchase)
 			itemCopy.requirementName = reqItem and reqItem.name or item.requiresPurchase
@@ -354,7 +544,7 @@ function ShopSystem:HandlePurchase(player, itemId, quantity)
 
 	if success and errorMsg then
 		self.PurchaseCooldowns[userId] = currentTime
-		self:SendPurchaseConfirmation(player, item, quantity)
+		self:SendEnhancedPurchaseConfirmation(player, item, quantity)
 		print("🛒 ShopSystem: Purchase successful - " .. player.Name .. " bought " .. quantity .. "x " .. itemId)
 		return true
 	else
@@ -385,6 +575,12 @@ function ShopSystem:ValidateEnhancedPurchase(player, playerData, item, quantity)
 			return false, "🔒 Requires a farm plot!"
 		end
 
+		-- NEW: Category-specific requirement messages
+		local categoryRequirement = self:GetCategoryRequirementMessage(item, playerData)
+		if categoryRequirement then
+			return false, categoryRequirement
+		end
+
 		return false, "🔒 Requirements not met!"
 	end
 
@@ -401,6 +597,32 @@ function ShopSystem:ValidateEnhancedPurchase(player, playerData, item, quantity)
 	end
 
 	return true, "Can purchase"
+end
+
+function ShopSystem:GetCategoryRequirementMessage(item, playerData)
+	local category = item.category
+
+	if category == "mining" then
+		if item.id:find("pickaxe") and item.id ~= "cave_access_pass" then
+			if not (playerData and playerData.access and playerData.access.cave_access_pass) then
+				return "🔒 Requires Cave Access Pass!"
+			end
+		end
+	elseif category == "crafting" then
+		if item.id ~= "basic_workbench" then
+			if not (playerData and playerData.buildings and playerData.buildings.basic_workbench) then
+				return "🔒 Requires Basic Workbench!"
+			end
+		end
+	elseif category == "defense" then
+		if item.id:find("chicken") or item.id:find("pesticide") then
+			if not (playerData and playerData.farming and playerData.farming.plots and playerData.farming.plots > 0) then
+				return "🔒 Requires a farm plot!"
+			end
+		end
+	end
+
+	return nil
 end
 
 function ShopSystem:MeetsEnhancedRequirements(playerData, item)
@@ -429,6 +651,11 @@ function ShopSystem:MeetsEnhancedRequirements(playerData, item)
 		end
 	end
 
+	-- NEW: Check category-specific requirements
+	if not self:MeetsCategoryRequirements(item, item.id, playerData) then
+		return false
+	end
+
 	return true
 end
 
@@ -440,6 +667,7 @@ function ShopSystem:ProcessPurchase(player, playerData, item, quantity)
 	print("💰 Processing enhanced purchase:")
 	print("  Player: " .. player.Name)
 	print("  Item: " .. item.id .. " (" .. item.type .. ")")
+	print("  Category: " .. item.category)
 	print("  Quantity: " .. quantity)
 	print("  Total Cost: " .. totalCost .. " " .. currency)
 	print("  Purchase Order: " .. (item.purchaseOrder or "none"))
@@ -512,6 +740,10 @@ function ShopSystem:ProcessPurchase(player, playerData, item, quantity)
 	playerData.stats.totalPurchases = (playerData.stats.totalPurchases or 0) + quantity
 	playerData.stats.totalSpent = (playerData.stats.totalSpent or 0) + totalCost
 
+	-- NEW: Category-specific statistics
+	local categoryKey = "spent_" .. item.category
+	playerData.stats[categoryKey] = (playerData.stats[categoryKey] or 0) + totalCost
+
 	-- Save and update
 	if self.GameCore then
 		self.GameCore:SavePlayerData(player)
@@ -542,10 +774,36 @@ function ShopSystem:ProcessSeedPurchase(player, playerData, item, quantity)
 	return true
 end
 
+function ShopSystem:ProcessFarmPlotPurchase(player, playerData, item, quantity)
+	-- Handle different types of farm expansions
+	if item.effects and item.effects.type == "farm_expansion" then
+		return self:HandleFarmExpansionPurchase(player, item)
+	end
+
+	-- Regular farm plot purchase
+	if not playerData.farming then
+		playerData.farming = {plots = 0, inventory = {}}
+	end
+
+	playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+
+	-- Create the physical farm plot
+	if self.GameCore and self.GameCore.CreatePlayerFarmPlot then
+		local success = self.GameCore:CreatePlayerFarmPlot(player, playerData.farming.plots)
+		if not success then
+			playerData.farming.plots = playerData.farming.plots - quantity
+			return false
+		end
+	end
+
+	print("🌾 Added " .. quantity .. " farm plot(s), total: " .. playerData.farming.plots)
+	return true
+end
+
 function ShopSystem:HandleFarmExpansionPurchase(player, item)
 	print("🌾 ShopSystem: Processing farm expansion purchase for " .. player.Name)
 
-	local playerData = GameCore:GetPlayerData(player)
+	local playerData = self.GameCore:GetPlayerData(player)
 	if not playerData then
 		return false, "Player data not found"
 	end
@@ -569,14 +827,14 @@ function ShopSystem:HandleFarmExpansionPurchase(player, item)
 
 	-- Check expansion level requirement
 	if item.requirements.expansionLevel and currentLevel ~= item.requirements.expansionLevel then
-		local requiredConfig = GameCore:GetExpansionConfig(item.requirements.expansionLevel)
+		local requiredConfig = self.GameCore:GetExpansionConfig(item.requirements.expansionLevel)
 		local requiredName = requiredConfig and requiredConfig.name or "Level " .. item.requirements.expansionLevel
 		return false, "You need " .. requiredName .. " before purchasing this expansion!"
 	end
 
 	-- Check if already at or above target level
 	if currentLevel >= targetLevel then
-		local currentConfig = GameCore:GetExpansionConfig(currentLevel)
+		local currentConfig = self.GameCore:GetExpansionConfig(currentLevel)
 		return false, "You already have " .. (currentConfig and currentConfig.name or "this expansion level") .. " or higher!"
 	end
 
@@ -599,24 +857,24 @@ function ShopSystem:HandleFarmExpansionPurchase(player, item)
 	}
 
 	-- Update the physical farm
-	local success = GameCore:CreateExpandableFarmPlot(player)
+	local success = self.GameCore:CreateExpandableFarmPlot(player)
 
 	if success then
 		-- Save data
-		GameCore:SavePlayerData(player)
+		self.GameCore:SavePlayerData(player)
 
 		-- Update player data
-		if GameCore.RemoteEvents and GameCore.RemoteEvents.PlayerDataUpdated then
-			GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+		if self.GameCore.RemoteEvents and self.GameCore.RemoteEvents.PlayerDataUpdated then
+			self.GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
 		end
 
 		-- Get expansion config for notification
-		local newConfig = GameCore:GetExpansionConfig(targetLevel)
+		local newConfig = self.GameCore:GetExpansionConfig(targetLevel)
 		local unlockedSpots = item.effects.unlocksSpots or 0
 
 		-- Send success notification
-		if GameCore.SendNotification then
-			GameCore:SendNotification(player, "🎉 Farm Expanded!", 
+		if self.GameCore.SendNotification then
+			self.GameCore:SendNotification(player, "🎉 Farm Expanded!", 
 				"Upgraded to " .. newConfig.name .. "!\nUnlocked " .. unlockedSpots .. " new planting spots!\nTotal: " .. newConfig.totalSpots .. " spots", "success")
 		end
 
@@ -632,141 +890,10 @@ function ShopSystem:HandleFarmExpansionPurchase(player, item)
 	end
 end
 
--- ========== SHOPSYSTEM INTEGRATION ==========
-
---[[
-Update your existing ShopSystem purchase method to handle farm expansions.
-Add this to your main purchase handler:
-]]
-
-function ShopSystem:ProcessItemPurchase(player, itemId, quantity)
-	local item = ItemConfig.ShopItems[itemId]
-	if not item then
-		return false, "Item not found"
-	end
-
-	-- Check if this is a farm expansion
-	if item.effects and item.effects.type == "farm_expansion" then
-		return self:HandleFarmExpansionPurchase(player, item)
-	end
-
-	-- Handle other item types with your existing logic
-	-- ... rest of your purchase logic
-end
-
--- ========== SHOP UI INTEGRATION ==========
-
---[[
-Add this function to filter expansion items based on player's current level
-This should be used when displaying items in the shop UI
-]]
-
-function ShopSystem:GetAvailableFarmExpansions(player)
-	local playerData = GameCore:GetPlayerData(player)
-	if not playerData then return {} end
-
-	local currentLevel = playerData.farming and playerData.farming.expansionLevel or 0
-	local hasStarter = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
-
-	local availableExpansions = {}
-
-	-- Check each expansion level
-	for level = 2, 5 do
-		local itemId = "farm_expansion_level_" .. level
-		local item = ItemConfig.ShopItems[itemId]
-
-		if item then
-			-- Check requirements
-			local meetsRequirements = true
-			local requirementIssues = {}
-
-			if item.requirements then
-				-- Check starter requirement
-				if item.requirements.farmPlotStarter and not hasStarter then
-					meetsRequirements = false
-					table.insert(requirementIssues, "Need starter farm plot")
-				end
-
-				-- Check level requirement
-				if item.requirements.expansionLevel and currentLevel ~= item.requirements.expansionLevel then
-					meetsRequirements = false
-					local requiredConfig = GameCore:GetExpansionConfig(item.requirements.expansionLevel)
-					local requiredName = requiredConfig and requiredConfig.name or "Level " .. item.requirements.expansionLevel
-					table.insert(requirementIssues, "Need " .. requiredName)
-				end
-
-				-- Check if already purchased/exceeded
-				if currentLevel >= item.effects.targetLevel then
-					meetsRequirements = false
-					table.insert(requirementIssues, "Already owned")
-				end
-
-				-- Check currency
-				if playerData.coins < item.price then
-					-- Don't exclude, but mark as unaffordable
-					table.insert(requirementIssues, "Need " .. item.price .. " coins")
-				end
-			end
-
-			-- Add to available items with requirement status
-			table.insert(availableExpansions, {
-				item = item,
-				meetsRequirements = meetsRequirements,
-				isAffordable = playerData.coins >= item.price,
-				requirementIssues = requirementIssues,
-				isNextLevel = (currentLevel + 1) == item.effects.targetLevel
-			})
-		end
-	end
-
-	return availableExpansions
-end
-
--- ========== SHOP UI DISPLAY HELPER ==========
-
---[[
-Helper function to create expansion item display text for shop UI
-]]
-
-function ShopSystem:GetExpansionDisplayInfo(expansionInfo)
-	local item = expansionInfo.item
-	local targetConfig = GameCore:GetExpansionConfig(item.effects.targetLevel)
-
-	local displayText = {
-		title = item.name,
-		description = item.description,
-		price = item.price .. " " .. item.currency,
-		details = {
-			"📏 Grid Size: " .. targetConfig.gridSize .. "x" .. targetConfig.gridSize,
-			"🌱 Total Spots: " .. targetConfig.totalSpots,
-			"✨ New Spots: +" .. item.effects.unlocksSpots
-		}
-	}
-
-	-- Add requirement status
-	if not expansionInfo.meetsRequirements then
-		displayText.status = "LOCKED"
-		displayText.statusColor = Color3.fromRGB(255, 100, 100)
-		displayText.requirements = expansionInfo.requirementIssues
-	elseif not expansionInfo.isAffordable then
-		displayText.status = "INSUFFICIENT FUNDS"
-		displayText.statusColor = Color3.fromRGB(255, 200, 100)
-	elseif expansionInfo.isNextLevel then
-		displayText.status = "AVAILABLE"
-		displayText.statusColor = Color3.fromRGB(100, 255, 100)
-	else
-		displayText.status = "FUTURE EXPANSION"
-		displayText.statusColor = Color3.fromRGB(200, 200, 200)
-	end
-
-	return displayText
-end
-
-
-
 function ShopSystem:ProcessCowPurchase(player, playerData, item, quantity)
 	print("🐄 ShopSystem: Processing enhanced cow purchase for " .. player.Name)
 	print("  Item: " .. item.id .. " (Order: " .. (item.purchaseOrder or "none") .. ")")
+	print("  Category: " .. item.category)
 	print("  Quantity: " .. quantity)
 	print("  Price: " .. item.price .. " " .. item.currency)
 
@@ -861,113 +988,6 @@ function ShopSystem:ProcessCowPurchase(player, playerData, item, quantity)
 	print("🐄 Purchase complete: " .. successCount .. "/" .. quantity .. " cows purchased")
 	return successCount > 0
 end
-function ShopSystem:ProcessCowPurchaseEnhanced(player, playerData, item, quantity)
-	print("🐄 ShopSystem: Processing ENHANCED cow purchase for " .. player.Name)
-	print("  Item: " .. item.id .. " (Tier: " .. (item.cowData and item.cowData.tier or "unknown") .. ")")
-
-	if not self.GameCore then
-		print("❌ GameCore not available!")
-		return false
-	end
-
-	-- Initialize livestock data
-	if not playerData.livestock then
-		playerData.livestock = {cows = {}}
-	end
-	if not playerData.livestock.cows then
-		playerData.livestock.cows = {}
-	end
-
-	-- Get cow configuration
-	local cowConfig = self.GameCore:GetCowConfiguration(item.id)
-	if not cowConfig then
-		print("❌ GameCore:GetCowConfiguration failed for " .. item.id)
-		return false
-	end
-
-	-- Handle upgrades differently from new cow purchases
-	if item.type == "cow_upgrade" then
-		return self:ProcessCowUpgrade(player, playerData, item, quantity)
-	end
-
-	-- Regular cow purchase logic
-	local currentCowCount = 0
-	for _ in pairs(playerData.livestock.cows) do
-		currentCowCount = currentCowCount + 1
-	end
-
-	local maxCows = cowConfig.maxCows or 1
-	if currentCowCount >= maxCows then
-		self:SendNotification(player, "Cow Limit", "Maximum cows reached for this tier!", "error")
-		return false
-	end
-
-	-- Purchase new cow
-	local successCount = 0
-	for i = 1, quantity do
-		local success, result = pcall(function()
-			return self.GameCore:PurchaseCow(player, item.id, cowConfig.tier)
-		end)
-
-		if success and result then
-			successCount = successCount + 1
-		else
-			break
-		end
-	end
-
-	return successCount > 0
-end
-
--- New function to handle cow upgrades
-function ShopSystem:ProcessCowUpgrade(player, playerData, item, quantity)
-	print("🔄 ShopSystem: Processing cow upgrade for " .. player.Name)
-
-	local upgradeConfig = self.GameCore:GetCowConfiguration(item.id)
-	if not upgradeConfig then
-		return false
-	end
-
-	-- Find cows that can be upgraded
-	local upgradableCows = {}
-	for cowId, cow in pairs(playerData.livestock.cows) do
-		if cow.tier == upgradeConfig.upgradeFrom then
-			table.insert(upgradableCows, cowId)
-		end
-	end
-
-	if #upgradableCows == 0 then
-		local requiredTier = upgradeConfig.upgradeFrom or "unknown"
-		self:SendNotification(player, "No Upgradable Cows", 
-			"You need a " .. requiredTier .. " tier cow to upgrade!", "error")
-		return false
-	end
-
-	-- Upgrade cows
-	local upgradeCount = math.min(quantity, #upgradableCows)
-	local successCount = 0
-
-	for i = 1, upgradeCount do
-		local cowId = upgradableCows[i]
-		local success, message = self.GameCore:UpgradeCow(player, cowId, item.id)
-
-		if success then
-			successCount = successCount + 1
-			print("✅ Upgraded cow " .. cowId .. " to " .. upgradeConfig.tier)
-		else
-			print("❌ Failed to upgrade cow " .. cowId .. ": " .. (message or "unknown error"))
-		end
-	end
-
-	if successCount > 0 then
-		self:SendNotification(player, "🔄 Cow Upgraded!", 
-			"Successfully upgraded " .. successCount .. " cow(s) to " .. upgradeConfig.tier .. " tier!", "success")
-		return true
-	end
-
-	return false
-end
-
 
 function ShopSystem:ProcessChickenPurchase(player, playerData, item, quantity)
 	if not playerData.defense then
@@ -1087,6 +1107,20 @@ function ShopSystem:ProcessAccessPurchase(player, playerData, item, quantity)
 	}
 
 	print("🔓 Unlocked access: " .. item.id)
+	return true
+end
+
+function ShopSystem:ProcessUpgradePurchase(player, playerData, item, quantity)
+	if not playerData.upgrades then
+		playerData.upgrades = {}
+	end
+
+	playerData.upgrades[item.id] = {
+		purchaseTime = os.time(),
+		level = 1
+	}
+
+	print("⬆️ Applied upgrade: " .. item.id)
 	return true
 end
 
@@ -1374,13 +1408,19 @@ function ShopSystem:SendNotification(player, title, message, notificationType)
 	end
 end
 
-function ShopSystem:SendPurchaseConfirmation(player, item, quantity)
+function ShopSystem:SendEnhancedPurchaseConfirmation(player, item, quantity)
 	if self.RemoteEvents.ItemPurchased then
 		self.RemoteEvents.ItemPurchased:FireClient(player, item.id, quantity, item.price * quantity, item.currency)
 	end
 
+	-- Enhanced category-aware notifications
+	local categoryInfo = self.CategoryConfig[item.category]
+	local categoryEmoji = categoryInfo and categoryInfo.emoji or "📦"
+	local categoryName = categoryInfo and categoryInfo.name or item.category
+
 	local itemName = item.name or item.id:gsub("_", " ")
-	self:SendNotification(player, "🛒 Purchase Complete!", 
+
+	self:SendNotification(player, categoryEmoji .. " " .. categoryName .. " Purchase!", 
 		"Purchased " .. quantity .. "x " .. itemName .. "!", "success")
 end
 
@@ -1429,10 +1469,49 @@ function ShopSystem:ValidateShopData()
 
 	print("Category breakdown:")
 	for category, stats in pairs(categoryStats) do
-		print("  " .. category .. ": " .. stats.count .. " items (" .. stats.withOrder .. " with purchase order)")
+		local categoryInfo = self.CategoryConfig[category]
+		local categoryDisplay = categoryInfo and (categoryInfo.emoji .. " " .. categoryInfo.name) or category
+		print("  " .. categoryDisplay .. ": " .. stats.count .. " items (" .. stats.withOrder .. " with purchase order)")
 	end
 
 	return invalidItems == 0
+end
+
+function ShopSystem:ValidateCategoryData()
+	print("ShopSystem: Validating category configuration...")
+
+	-- Check that all categories in shop items are defined
+	local undefinedCategories = {}
+
+	for itemId, item in pairs(self.ItemConfig.ShopItems) do
+		if item.category and not self.CategoryConfig[item.category] then
+			if not undefinedCategories[item.category] then
+				undefinedCategories[item.category] = {}
+			end
+			table.insert(undefinedCategories[item.category], itemId)
+		end
+	end
+
+	if next(undefinedCategories) then
+		warn("ShopSystem: Found items with undefined categories:")
+		for category, items in pairs(undefinedCategories) do
+			warn("  " .. category .. ": " .. table.concat(items, ", "))
+		end
+	else
+		print("ShopSystem: ✅ All item categories are properly defined")
+	end
+
+	-- Report category usage
+	print("ShopSystem: Category usage report:")
+	for categoryId, config in pairs(self.CategoryConfig) do
+		local itemCount = 0
+		for _, item in pairs(self.ItemConfig.ShopItems) do
+			if item.category == categoryId then
+				itemCount = itemCount + 1
+			end
+		end
+		print("  " .. config.emoji .. " " .. config.name .. ": " .. itemCount .. " items")
+	end
 end
 
 -- ========== DEBUG FUNCTIONS ==========
@@ -1454,23 +1533,33 @@ function ShopSystem:DebugPurchaseOrder(category)
 
 	-- Sort by purchase order
 	table.sort(items, function(a, b)
-		local orderA = a.item.purchaseOrder or 999
-		local orderB = b.item.purchaseOrder or 999
-
-		if orderA == orderB then
-			return a.item.price < b.item.price
-		end
-
-		return orderA < orderB
+		return self:CompareItemsForSorting(a.item, b.item)
 	end)
 
 	for i, itemData in ipairs(items) do
 		local item = itemData.item
+		local categoryInfo = self.CategoryConfig[item.category]
+		local categoryDisplay = categoryInfo and (categoryInfo.emoji .. " " .. categoryInfo.name) or item.category
 		local orderInfo = item.purchaseOrder and ("[" .. item.purchaseOrder .. "]") or "[NO ORDER]"
-		print(i .. ". " .. orderInfo .. " " .. item.name .. " - " .. item.price .. " " .. item.currency)
+		print(i .. ". " .. categoryDisplay .. " " .. orderInfo .. " " .. item.name .. " - " .. item.price .. " " .. item.currency)
 	end
 
 	print("==============================")
+end
+
+function ShopSystem:DebugCategorySystem(player)
+	print("=== CATEGORY SYSTEM DEBUG ===")
+
+	local categories = self:HandleGetShopCategories(player)
+
+	print("Available categories:")
+	for _, category in ipairs(categories) do
+		print("  " .. category.emoji .. " " .. category.name .. " (" .. category.itemCount .. " items)")
+		print("    Priority: " .. category.priority)
+		print("    Description: " .. category.description)
+	end
+
+	print("============================")
 end
 
 -- ========== ADMIN COMMANDS ==========
@@ -1484,6 +1573,17 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 			if command == "/debugorder" then
 				local category = args[2]
 				ShopSystem:DebugPurchaseOrder(category)
+
+			elseif command == "/debugcategories" then
+				ShopSystem:DebugCategorySystem(player)
+
+			elseif command == "/testcategory" then
+				local category = args[2] or "seeds"
+				local items = ShopSystem:HandleGetShopItemsByCategory(player, category)
+				print("Category " .. category .. " has " .. #items .. " items:")
+				for i, item in ipairs(items) do
+					print("  " .. i .. ". " .. item.name .. " - " .. item.price .. " " .. item.currency)
+				end
 
 			elseif command == "/debuginventory" then
 				ShopSystem:DebugPlayerInventory(player)
@@ -1616,16 +1716,23 @@ function ShopSystem:DebugSellableItems(player)
 	print("============================")
 end
 
-print("ShopSystem: ✅ ENHANCED with purchase order support and better item management!")
-print("🏪 IMPROVEMENTS:")
-print("  📋 Respects purchaseOrder for logical item progression")
-print("  🔄 Enhanced item sorting by category and purchase order")
-print("  🔒 Better prerequisite checking and requirement validation")
-print("  📊 Improved debugging for shop item ordering")
-print("  📦 Enhanced item filtering to hide inappropriate items")
+print("ShopSystem: ✅ ENHANCED with full tabbed categories support!")
+print("🛒 NEW TABBED FEATURES:")
+print("  📁 Category-specific item filtering and retrieval")
+print("  🎨 Enhanced category configuration with emojis and descriptions")
+print("  📊 Category-aware purchase confirmations and statistics")
+print("  🔍 Category-specific requirement validation")
+print("  📋 Enhanced sorting by category priority and purchase order")
+print("  🎯 Category usage reporting and validation")
 print("")
-print("🔧 Debug Commands:")
+print("🔧 New Remote Functions:")
+print("  GetShopItemsByCategory(category) - Get items for specific tab")
+print("  GetShopCategories() - Get all available categories with info")
+print("")
+print("🔧 Enhanced Debug Commands:")
 print("  /debugorder [category] - Show purchase order for category")
+print("  /debugcategories - Show all available categories")
+print("  /testcategory [category] - Test category filtering")
 print("  /debuginventory - Show all inventory locations")
 print("  /debugsellable - Test sellable items detection")
 print("  /testsell [item] [amount] - Test selling specific item")
