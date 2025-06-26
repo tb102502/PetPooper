@@ -1136,12 +1136,13 @@ ItemConfig.ShopItems = {
 
 	-- ========== ADDITIONAL UTILITY ITEMS ==========
 
+
 	milk = {
 		id = "milk",
 		name = "Fresh Milk",
 		price = 10,
 		currency = "coins",
-		category = "livestock",
+		category = "farm", -- FIXED: Changed from "livestock" to "farm"
 		description = "Fresh milk collected from your cows. Can be sold for coins.",
 		icon = "🥛",
 		type = "material",

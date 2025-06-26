@@ -68,8 +68,92 @@ ShopSystem.CategoryConfig = {
 		emoji = "✨",
 		description = "Premium items and exclusive upgrades",
 		priority = 6
+	},
+	sell = {
+		name = "Sell Items",
+		emoji = "💰",
+		description = "Sell your crops, milk, and other items for coins",
+		priority = 7
 	}
 }
+
+-- ========== 2. ADD SELL TAB HANDLER TO ShopSystem.lua ==========
+-- Add this new method to ShopSystem.lua:
+
+function ShopSystem:HandleGetSellableItems(player)
+	print("🏪 ShopSystem: GetSellableItems request from " .. player.Name)
+
+	local success, result = pcall(function()
+		local playerData = self.GameCore and self.GameCore:GetPlayerData(player)
+		if not playerData then
+			return {}
+		end
+
+		local sellableItems = {}
+
+		-- Define sellable item types with their locations and properties
+		local sellableItemTypes = {
+			-- Crops
+			{id = "carrot", name = "🥕 Carrots", locations = {{"farming", "inventory"}}, sellPrice = 8},
+			{id = "corn", name = "🌽 Corn", locations = {{"farming", "inventory"}}, sellPrice = 725},
+			{id = "strawberry", name = "🍓 Strawberries", locations = {{"farming", "inventory"}}, sellPrice = 350},
+			{id = "wheat", name = "🌾 Wheat", locations = {{"farming", "inventory"}}, sellPrice = 600},
+			{id = "potato", name = "🥔 Potatoes", locations = {{"farming", "inventory"}}, sellPrice = 40},
+			{id = "tomato", name = "🍅 Tomatoes", locations = {{"farming", "inventory"}}, sellPrice = 675},
+			{id = "cabbage", name = "🥬 Cabbage", locations = {{"farming", "inventory"}}, sellPrice = 75},
+			{id = "radish", name = "🌶️ Radishes", locations = {{"farming", "inventory"}}, sellPrice = 140},
+			{id = "broccoli", name = "🥦 Broccoli", locations = {{"farming", "inventory"}}, sellPrice = 110},
+
+			-- Animal Products
+			{id = "milk", name = "🥛 Fresh Milk", locations = {{"livestock", "inventory"}, {"farming", "inventory"}, {}}, sellPrice = 75},
+			{id = "chicken_egg", name = "🥚 Chicken Eggs", locations = {{"defense", "eggs"}, {"inventory"}}, sellPrice = 15},
+			{id = "guinea_egg", name = "🥚 Guinea Fowl Eggs", locations = {{"defense", "eggs"}, {"inventory"}}, sellPrice = 20},
+			{id = "rooster_egg", name = "🥚 Rooster Eggs", locations = {{"defense", "eggs"}, {"inventory"}}, sellPrice = 25},
+
+			-- Ores (if mining is implemented)
+			{id = "copper_ore", name = "🟫 Copper Ore", locations = {{"mining", "inventory"}, {"inventory"}}, sellPrice = 30},
+			{id = "bronze_ore", name = "🟤 Bronze Ore", locations = {{"mining", "inventory"}, {"inventory"}}, sellPrice = 45},
+			{id = "silver_ore", name = "⚪ Silver Ore", locations = {{"mining", "inventory"}, {"inventory"}}, sellPrice = 80},
+			{id = "gold_ore", name = "🟡 Gold Ore", locations = {{"mining", "inventory"}, {"inventory"}}, sellPrice = 150},
+			{id = "platinum_ore", name = "⚫ Platinum Ore", locations = {{"mining", "inventory"}, {"inventory"}}, sellPrice = 300}
+		}
+
+		-- Check each sellable item type
+		for _, itemType in ipairs(sellableItemTypes) do
+			local totalStock = self:GetPlayerStockComprehensive(playerData, itemType.id)
+
+			if totalStock > 0 then
+				table.insert(sellableItems, {
+					id = itemType.id,
+					name = itemType.name,
+					sellPrice = itemType.sellPrice,
+					currency = "coins",
+					category = "sell",
+					description = "You have " .. totalStock .. " in stock. Sell for " .. itemType.sellPrice .. " coins each.",
+					icon = itemType.name:match("^%S+") or "📦",
+					stock = totalStock,
+					totalValue = totalStock * itemType.sellPrice,
+					type = "sellable"
+				})
+			end
+		end
+
+		-- Sort by total value (highest first)
+		table.sort(sellableItems, function(a, b)
+			return a.totalValue > b.totalValue
+		end)
+
+		print("🏪 ShopSystem: Returning " .. #sellableItems .. " sellable items")
+		return sellableItems
+	end)
+
+	if success then
+		return result
+	else
+		warn("🏪 ShopSystem: GetSellableItems failed: " .. tostring(result))
+		return {}
+	end
+end
 
 -- ========== INITIALIZATION ==========
 
@@ -112,10 +196,12 @@ function ShopSystem:SetupRemoteConnections()
 		remoteFolder.Parent = ReplicatedStorage
 	end
 
+
 	local requiredRemotes = {
 		{name = "GetShopItems", type = "RemoteFunction"},
-		{name = "GetShopItemsByCategory", type = "RemoteFunction"}, -- NEW: Category-specific
-		{name = "GetShopCategories", type = "RemoteFunction"}, -- NEW: Category info
+		{name = "GetShopItemsByCategory", type = "RemoteFunction"},
+		{name = "GetShopCategories", type = "RemoteFunction"},
+		{name = "GetSellableItems", type = "RemoteFunction"}, -- ADD THIS LINE
 		{name = "PurchaseItem", type = "RemoteEvent"},
 		{name = "ItemPurchased", type = "RemoteEvent"},
 		{name = "SellItem", type = "RemoteEvent"},
@@ -176,7 +262,12 @@ function ShopSystem:SetupRemoteHandlers()
 			self:HandleSell(player, itemId, quantity or 1)
 		end)
 	end
-
+	
+	if self.RemoteFunctions.GetSellableItems then
+		self.RemoteFunctions.GetSellableItems.OnServerInvoke = function(player)
+			return self:HandleGetSellableItems(player)
+		end
+	end
 	print("ShopSystem: All enhanced remote handlers connected")
 end
 
@@ -1409,21 +1500,14 @@ function ShopSystem:SendNotification(player, title, message, notificationType)
 end
 
 function ShopSystem:SendEnhancedPurchaseConfirmation(player, item, quantity)
+	-- Send the purchase data to client - client will handle the notification
 	if self.RemoteEvents.ItemPurchased then
 		self.RemoteEvents.ItemPurchased:FireClient(player, item.id, quantity, item.price * quantity, item.currency)
 	end
 
-	-- Enhanced category-aware notifications
-	local categoryInfo = self.CategoryConfig[item.category]
-	local categoryEmoji = categoryInfo and categoryInfo.emoji or "📦"
-	local categoryName = categoryInfo and categoryInfo.name or item.category
-
-	local itemName = item.name or item.id:gsub("_", " ")
-
-	self:SendNotification(player, categoryEmoji .. " " .. categoryName .. " Purchase!", 
-		"Purchased " .. quantity .. "x " .. itemName .. "!", "success")
+	-- REMOVED: Server-side notification call to prevent duplicates
+	-- The client-side HandleEnhancedItemPurchased method will show the proper notification
 end
-
 function ShopSystem:DeepCopyTable(original)
 	local copy = {}
 	for key, value in pairs(original) do

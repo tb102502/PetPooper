@@ -246,8 +246,9 @@ function GameClient:SetupRemoteConnections()
 		"GetPlayerData", "GetFarmingData",
 
 		-- Shop functions (enhanced for tabbed system)
-		"GetShopItems", "GetShopItemsByCategory"
+		"GetShopItems", "GetShopItemsByCategory", "GetSellableItems" -- ADD GetSellableItems HERE
 	}
+
 
 	-- Load remote events
 	for _, eventName in ipairs(requiredRemoteEvents) do
@@ -520,15 +521,46 @@ function GameClient:HandleItemSold(itemId, quantity, earnings, currency)
 
 	if self.UIManager then
 		local itemName = self:GetItemDisplayName(itemId)
+		local totalValue = quantity * (earnings / quantity) -- Calculate per-item price
+
 		self.UIManager:ShowNotification("💰 Item Sold!", 
 			"Sold " .. tostring(quantity) .. "x " .. itemName .. " for " .. tostring(earnings) .. " " .. currency .. "!", "success")
 	end
 
-	-- Refresh sell tab if shop is open
+	-- Refresh sell tab if shop is open and sell tab is active
 	if self.UIManager and self.UIManager:GetCurrentPage() == "Shop" then
+		if self.State.ActiveShopTab == "sell" then
+			spawn(function()
+				wait(0.5) -- Wait for server data update
+				if self.UIManager then
+					self.UIManager:PopulateShopTabContent("sell")
+				end
+			end)
+		end
+	end
+end
+
+function GameClient:RefreshMenuContent(menuName)
+	if self.State.CurrentPage ~= menuName then return end
+
+	print("GameClient: Refreshing content for " .. menuName)
+
+	if menuName == "Shop" then
+		-- Refresh current shop tab (including sell tab)
+		local activeTab = self.State.ShopTabs and self.State.ShopTabs[self.State.ActiveShopTab]
+		if activeTab then
+			activeTab.populated = false
+			if self.UIManager then
+				self.UIManager:PopulateShopTabContent(self.State.ActiveShopTab)
+			end
+		end
+	else
+		local currentMenus = self.State.ActiveMenus
+		self:CloseMenus()
+
 		spawn(function()
-			wait(0.5)
-			self.UIManager:RefreshMenuContent("Shop")
+			wait(0.1)
+			self:OpenMenu(menuName)
 		end)
 	end
 end
@@ -759,6 +791,28 @@ function GameClient:GetShopItemsByCategory(category)
 	print("🛒 CLIENT: Filtered " .. #categoryItems .. " items for " .. category .. " category")
 	return categoryItems
 end
+function GameClient:GetSellableItems()
+	print("💰 CLIENT: Requesting sellable items...")
+
+	-- Request sellable items from server
+	if self.RemoteFunctions and self.RemoteFunctions.GetSellableItems then
+		print("💰 CLIENT: Using GetSellableItems RemoteFunction")
+		local success, items = pcall(function()
+			return self.RemoteFunctions.GetSellableItems:InvokeServer()
+		end)
+
+		if success and items and type(items) == "table" then
+			print("💰 CLIENT: Received " .. #items .. " sellable items")
+			return items
+		else
+			warn("💰 CLIENT: GetSellableItems RemoteFunction failed: " .. tostring(items))
+		end
+	else
+		warn("💰 CLIENT: GetSellableItems RemoteFunction not available")
+	end
+
+	return {}
+end
 
 function GameClient:PurchaseItem(item)
 	if not self:CanAffordItem(item) then
@@ -782,18 +836,18 @@ function GameClient:PurchaseItem(item)
 	end
 end
 
-function GameClient:SellItem(itemId, quantity)
-	quantity = quantity or 1
 
-	if self.RemoteEvents.SellItem then
-		print("GameClient: Selling item via ShopSystem:", itemId, "quantity:", quantity)
-		self.RemoteEvents.SellItem:FireServer(itemId, quantity)
-	else
-		warn("GameClient: SellItem remote event not available")
+function GameClient:SellItem(itemId, quantity)
+	if not self.RemoteEvents.SellItem then
 		if self.UIManager then
-			self.UIManager:ShowNotification("Sell Error", "Sell system unavailable!", "error")
+			self.UIManager:ShowNotification("Sell Error", "Sell system not available!", "error")
 		end
+		return false
 	end
+
+	print("💰 CLIENT: Selling " .. quantity .. "x " .. itemId)
+	self.RemoteEvents.SellItem:FireServer(itemId, quantity)
+	return true
 end
 
 function GameClient:CanAffordItem(item)
@@ -1160,14 +1214,23 @@ function GameClient:DebugStatus()
 end
 
 function GameClient:DebugShopCache()
-	print("=== SHOP CACHE DEBUG ===")
-	print("Total cached items:", self.Cache.ShopItems and #self.Cache.ShopItems or 0)
-	print("Last refresh:", self.Cache.LastShopRefresh or 0)
-	print("Tab cache:")
-	for category, data in pairs(self.Cache.ShopTabCache or {}) do
-		print("  " .. category .. ": " .. #data.items .. " items (age: " .. (tick() - data.timestamp) .. "s)")
+print("=== ENHANCED SHOP CACHE DEBUG ===")
+print("Total cached items:", self.Cache.ShopItems and #self.Cache.ShopItems or 0)
+print("Last refresh:", self.Cache.LastShopRefresh or 0)
+print("Tab cache:")
+for category, data in pairs(self.Cache.ShopTabCache or {}) do
+	print("  " .. category .. ": " .. #data.items .. " items (age: " .. (tick() - data.timestamp) .. "s)")
+end
+
+-- Test sellable items
+if self.GetSellableItems then
+	local sellableItems = self:GetSellableItems()
+	print("Current sellable items: " .. #sellableItems)
+	for i, item in ipairs(sellableItems) do
+		print("  " .. item.name .. ": " .. item.stock .. " in stock (value: " .. item.totalValue .. " coins)")
 	end
-	print("========================")
+end
+print("========================")
 end
 
 -- ========== CLEANUP ==========
