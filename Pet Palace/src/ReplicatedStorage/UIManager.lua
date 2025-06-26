@@ -1,12 +1,12 @@
 --[[
-    FIXED UIManager.lua - Complete with Left-Side Buttons Fix
+    UPDATED UIManager.lua - Shop Button Removed for Proximity-Only Access
     Place in: ReplicatedStorage/UIManager.lua
     
-    FIXES:
-    ✅ Ensures left-side buttons are always created
-    ✅ Better error handling for button creation
-    ✅ Proper menu opening from proximity system
-    ✅ Enhanced debugging capabilities
+    CHANGES:
+    ✅ Removed Shop button from left-side menu
+    ✅ Removed Shop hotkey (B key) from input handling
+    ✅ Shop now only accessible via ShopTouchPart proximity
+    ✅ Updated button positioning to fill the gap
 ]]
 
 local UIManager = {}
@@ -47,12 +47,12 @@ UIManager.Config = {
 	}
 }
 
-print("UIManager: Enhanced module loaded with left-side buttons fix")
+print("UIManager: Enhanced module loaded with proximity-only shop access")
 
 -- ========== INITIALIZATION ==========
 
 function UIManager:Initialize()
-	print("UIManager: Starting FIXED initialization...")
+	print("UIManager: Starting initialization with proximity-only shop...")
 
 	-- Wait for PlayerGui
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui", 30)
@@ -78,7 +78,7 @@ function UIManager:Initialize()
 	end
 	print("UIManager: ✅ Main UI structure created")
 
-	-- Setup input handling
+	-- Setup input handling (without shop hotkey)
 	self:SetupInputHandling()
 	print("UIManager: ✅ Input handling setup")
 
@@ -86,7 +86,7 @@ function UIManager:Initialize()
 	self:SetupNotificationSystem()
 	print("UIManager: ✅ Notification system setup")
 
-	-- CRITICAL: Setup left-side menu buttons
+	-- Setup left-side menu buttons (without shop button)
 	local buttonSuccess, buttonError = pcall(function()
 		self:SetupLeftSideButtons()
 	end)
@@ -111,7 +111,7 @@ function UIManager:Initialize()
 		print("UIManager: ✅ Left-side buttons created successfully")
 	end
 
-	print("UIManager: 🎉 FIXED initialization complete!")
+	print("UIManager: 🎉 Initialization complete with proximity-only shop!")
 	return true
 end
 
@@ -153,10 +153,10 @@ function UIManager:CreateMainUIStructure()
 	print("UIManager: Main UI structure created")
 end
 
--- ========== LEFT-SIDE MENU BUTTONS (FIXED) ==========
+-- ========== LEFT-SIDE MENU BUTTONS (WITHOUT SHOP) ==========
 
 function UIManager:SetupLeftSideButtons()
-	print("UIManager: Setting up FIXED left-side menu buttons...")
+	print("UIManager: Setting up left-side menu buttons (proximity-only shop)...")
 
 	local playerGui = LocalPlayer.PlayerGui
 
@@ -174,20 +174,12 @@ function UIManager:SetupLeftSideButtons()
 	buttonUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	buttonUI.Parent = playerGui
 
-	-- Button configuration
+	-- Button configuration (SHOP REMOVED)
 	local buttons = {
-		{
-			name = "Shop",
-			text = "🛒 Shop",
-			position = UDim2.new(0, 20, 0, 150),
-			color = Color3.fromRGB(60, 120, 80),
-			hoverColor = Color3.fromRGB(80, 140, 100),
-			description = "Buy seeds, tools, and upgrades"
-		},
 		{
 			name = "Farm",
 			text = "🌾 Farm",
-			position = UDim2.new(0, 20, 0, 220),
+			position = UDim2.new(0, 20, 0, 150), -- Moved up to fill shop position
 			color = Color3.fromRGB(80, 120, 60),
 			hoverColor = Color3.fromRGB(100, 140, 80),
 			description = "Manage your farm and crops"
@@ -195,7 +187,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Mining", 
 			text = "⛏️ Mining",
-			position = UDim2.new(0, 20, 0, 290),
+			position = UDim2.new(0, 20, 0, 220), -- Adjusted position
 			color = Color3.fromRGB(80, 80, 120),
 			hoverColor = Color3.fromRGB(100, 100, 140),
 			description = "Mine ores and explore caves"
@@ -203,7 +195,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Crafting",
 			text = "🔨 Crafting", 
-			position = UDim2.new(0, 20, 0, 360),
+			position = UDim2.new(0, 20, 0, 290), -- Adjusted position
 			color = Color3.fromRGB(120, 80, 60),
 			hoverColor = Color3.fromRGB(140, 100, 80),
 			description = "Craft tools and equipment"
@@ -223,7 +215,72 @@ function UIManager:SetupLeftSideButtons()
 		end
 	end
 
-	print("UIManager: ✅ Left-side buttons setup complete")
+	-- Create proximity shop indicator
+	self:CreateProximityShopIndicator(buttonUI)
+
+	print("UIManager: ✅ Left-side buttons setup complete (shop removed)")
+end
+
+function UIManager:CreateProximityShopIndicator(parent)
+	-- Create a visual indicator that shows when shop is accessible via proximity
+	local indicator = Instance.new("Frame")
+	indicator.Name = "ShopProximityIndicator"
+	indicator.Size = UDim2.new(0, 140, 0, 60)
+	indicator.Position = UDim2.new(0, 20, 0, 360) -- Below other buttons
+	indicator.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	indicator.BorderSizePixel = 0
+	indicator.Visible = false -- Hidden by default
+	indicator.ZIndex = self.Config.UIOrder.Main
+	indicator.Parent = parent
+
+	-- Add corner radius
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.15, 0)
+	corner.Parent = indicator
+
+	-- Add text
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, -10, 1, -10)
+	label.Position = UDim2.new(0, 5, 0, 5)
+	label.BackgroundTransparency = 1
+	label.Text = "🛒 Shop\nStep on shop area"
+	label.TextColor3 = Color3.new(0.8, 0.8, 0.8)
+	label.TextScaled = true
+	label.Font = Enum.Font.Gotham
+	label.Parent = indicator
+
+	-- Store reference for proximity system to control
+	self.State.ShopProximityIndicator = indicator
+
+	print("UIManager: ✅ Created proximity shop indicator")
+end
+
+function UIManager:ShowShopProximityIndicator()
+	if self.State.ShopProximityIndicator then
+		self.State.ShopProximityIndicator.Visible = true
+
+		-- Animate to green when accessible
+		local tween = TweenService:Create(self.State.ShopProximityIndicator,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{BackgroundColor3 = Color3.fromRGB(60, 120, 80)}
+		)
+		tween:Play()
+	end
+end
+
+function UIManager:HideShopProximityIndicator()
+	if self.State.ShopProximityIndicator then
+		-- Animate back to gray
+		local tween = TweenService:Create(self.State.ShopProximityIndicator,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{BackgroundColor3 = Color3.fromRGB(60, 60, 60)}
+		)
+		tween:Play()
+
+		tween.Completed:Connect(function()
+			self.State.ShopProximityIndicator.Visible = false
+		end)
+	end
 end
 
 function UIManager:CreateLeftSideButton(parent, config)
@@ -282,7 +339,7 @@ function UIManager:CreateLeftSideButton(parent, config)
 		self:HideButtonTooltip()
 	end)
 
-	-- Click handler with enhanced logging
+	-- Click handler
 	button.MouseButton1Click:Connect(function()
 		print("UIManager: Left-side button clicked: " .. config.name)
 		self:HandleLeftSideButtonClick(config.name)
@@ -339,7 +396,7 @@ function UIManager:HideButtonTooltip()
 end
 
 function UIManager:HandleLeftSideButtonClick(buttonName)
-	print("UIManager: FIXED Left-side button clicked: " .. buttonName)
+	print("UIManager: Left-side button clicked: " .. buttonName)
 
 	-- Provide visual feedback
 	local button = self.State.LeftSideButtons[buttonName]
@@ -360,7 +417,7 @@ function UIManager:HandleLeftSideButtonClick(buttonName)
 		end)
 	end
 
-	-- Open the corresponding menu with enhanced logging
+	-- Open the corresponding menu
 	print("UIManager: Attempting to open menu: " .. buttonName)
 	local success = self:OpenMenu(buttonName)
 
@@ -371,7 +428,7 @@ function UIManager:HandleLeftSideButtonClick(buttonName)
 	end
 end
 
--- ========== ENHANCED INPUT HANDLING ==========
+-- ========== UPDATED INPUT HANDLING (NO SHOP HOTKEY) ==========
 
 function UIManager:SetupInputHandling()
 	-- Close menus on escape
@@ -392,18 +449,16 @@ function UIManager:SetupInputHandling()
 			-- C key for Crafting
 			print("UIManager: C key pressed - opening Crafting")
 			self:OpenMenu("Crafting")
-		elseif input.KeyCode == Enum.KeyCode.B then
-			-- B key for Shop (Buy)
-			print("UIManager: B key pressed - opening Shop")
-			self:OpenMenu("Shop")
+			-- NOTE: B key for shop REMOVED - shop now only via proximity
 		end
 	end)
 
-	print("UIManager: Enhanced input handling setup complete")
-	print("  Hotkeys: F=Farm, M=Mining, C=Crafting, B=Shop, ESC=Close")
+	print("UIManager: Input handling setup complete (shop hotkey removed)")
+	print("  Hotkeys: F=Farm, M=Mining, C=Crafting, ESC=Close")
+	print("  Shop: Only accessible via ShopTouchPart proximity")
 end
 
--- ========== ENHANCED MENU MANAGEMENT ==========
+-- ========== MENU MANAGEMENT ==========
 
 function UIManager:OpenMenu(menuName)
 	if self.State.IsTransitioning then
@@ -411,7 +466,7 @@ function UIManager:OpenMenu(menuName)
 		return false
 	end
 
-	print("UIManager: ENHANCED Opening menu: " .. menuName)
+	print("UIManager: Opening menu: " .. menuName)
 
 	-- Close existing menus first
 	if #self.State.ActiveMenus > 0 then
@@ -425,7 +480,7 @@ function UIManager:OpenMenu(menuName)
 
 	local success = false
 
-	-- Create the appropriate menu
+	-- Create the appropriate menu (SHOP INCLUDED - can be opened by proximity)
 	if menuName == "Shop" then
 		success = self:CreateShopMenu()
 	elseif menuName == "Farm" then
@@ -649,7 +704,7 @@ end
 -- ========== MENU CREATION FUNCTIONS ==========
 
 function UIManager:CreateShopMenu()
-	print("UIManager: Creating enhanced shop menu")
+	print("UIManager: Creating shop menu (proximity access)")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
@@ -665,11 +720,23 @@ function UIManager:CreateShopMenu()
 	title.Font = Enum.Font.GothamBold
 	title.Parent = menuFrame
 
+	-- Proximity access note
+	local accessNote = Instance.new("TextLabel")
+	accessNote.Name = "AccessNote"
+	accessNote.Size = UDim2.new(1, -40, 0, 20)
+	accessNote.Position = UDim2.new(0, 20, 0, 80)
+	accessNote.BackgroundTransparency = 1
+	accessNote.Text = "👣 Accessible by stepping on the shop area"
+	accessNote.TextColor3 = Color3.fromRGB(200, 200, 200)
+	accessNote.TextScaled = true
+	accessNote.Font = Enum.Font.Gotham
+	accessNote.Parent = menuFrame
+
 	-- Content area
 	local contentFrame = Instance.new("ScrollingFrame")
 	contentFrame.Name = "ContentFrame"
-	contentFrame.Size = UDim2.new(1, -40, 1, -100)
-	contentFrame.Position = UDim2.new(0, 20, 0, 80)
+	contentFrame.Size = UDim2.new(1, -40, 1, -120)
+	contentFrame.Position = UDim2.new(0, 20, 0, 100)
 	contentFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
 	contentFrame.BorderSizePixel = 0
 	contentFrame.ScrollBarThickness = 10
@@ -686,7 +753,7 @@ function UIManager:CreateShopMenu()
 end
 
 function UIManager:CreateFarmMenu()
-	print("UIManager: Creating enhanced farm menu")
+	print("UIManager: Creating farm menu")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
@@ -734,7 +801,7 @@ function UIManager:CreateFarmMenu()
 end
 
 function UIManager:CreateMiningMenu()
-	print("UIManager: Creating enhanced mining menu")
+	print("UIManager: Creating mining menu")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
@@ -765,7 +832,7 @@ function UIManager:CreateMiningMenu()
 end
 
 function UIManager:CreateCraftingMenu()
-	print("UIManager: Creating enhanced crafting menu")
+	print("UIManager: Creating crafting menu")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
@@ -1235,21 +1302,21 @@ end
 -- Make globally available
 _G.UIManager = UIManager
 
-print("UIManager: ✅ FIXED module ready with enhanced left-side buttons!")
-print("📋 Available Methods:")
-print("  Initialize() - Initialize the UI system")
-print("  OpenMenu(menuName) - Open specific menu")
-print("  CloseActiveMenus() - Close all open menus")
-print("  ShowNotification(title, message, type) - Show notification")
-print("  UpdateCurrencyDisplay(playerData) - Update currency display")
-print("  SetGameClient(gameClient) - Set GameClient reference")
+print("UIManager: ✅ Updated for proximity-only shop access!")
+print("📋 Changes Made:")
+print("  ❌ Removed Shop button from left-side menu")
+print("  ❌ Removed B key hotkey for shop")
+print("  ✅ Shop now only accessible via ShopTouchPart")
+print("  ✅ Added proximity shop indicator")
+print("  ✅ Repositioned remaining buttons")
 print("")
-print("🎮 Left-Side Buttons:")
-print("  🛒 Shop - Press B or click button")
+print("🎮 Left-Side Buttons (Updated):")
 print("  🌾 Farm - Press F or click button")
 print("  ⛏️ Mining - Press M or click button")
 print("  🔨 Crafting - Press C or click button")
+print("  🛒 Shop - Step on shop area only")
 print("")
-print("⌨️ Hotkeys: F=Farm, M=Mining, C=Crafting, B=Shop, ESC=Close")
+print("⌨️ Hotkeys: F=Farm, M=Mining, C=Crafting, ESC=Close")
+print("🚶 Shop Access: Proximity only via ShopTouchPart")
 
 return UIManager

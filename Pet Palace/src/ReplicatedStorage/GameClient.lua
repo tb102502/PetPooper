@@ -1,10 +1,11 @@
 --[[
-    UPDATED GameClient.lua - Compatible with New Architecture
+    UPDATED GameClient.lua - Shop Hotkey Removed for Proximity-Only Access
     
-    Updated to work with:
-    - Separate ShopSystem module handling shop functions
-    - GameCore focusing on core game mechanics
-    - Maintains all existing connections and functionality
+    CHANGES:
+    ✅ Removed B key hotkey for shop opening
+    ✅ Removed OpenMenu("Shop") calls from input handling
+    ✅ Shop can still be opened via proximity system
+    ✅ All other functionality preserved
 ]]
 
 local GameClient = {}
@@ -92,7 +93,7 @@ function GameClient:Initialize(uiManager)
 		error("GameClient: UIManager not provided during initialization")
 	end
 
-	-- Step 4: Setup Input Handling
+	-- Step 4: Setup Input Handling (WITHOUT SHOP HOTKEY)
 	success, errorMsg = pcall(function()
 		self:SetupInputHandling()
 	end)
@@ -128,9 +129,11 @@ function GameClient:Initialize(uiManager)
 	end
 	print("GameClient: ✅ InitialData initialized")
 
-	print("GameClient: 🎉 Updated core initialization complete!")
+	print("GameClient: 🎉 Updated initialization complete (proximity-only shop)!")
 	return true
 end
+
+-- ========== UPDATED INPUT HANDLING (NO SHOP HOTKEY) ==========
 
 function GameClient:SetupInputHandling()
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -141,12 +144,24 @@ function GameClient:SetupInputHandling()
 				self.UIManager:CloseActiveMenus()
 			end
 		elseif input.KeyCode == Enum.KeyCode.F then
+			-- F key for Farm
 			self:OpenMenu("Farm")
+		elseif input.KeyCode == Enum.KeyCode.M then
+			-- M key for Mining
+			self:OpenMenu("Mining")
+		elseif input.KeyCode == Enum.KeyCode.C then
+			-- C key for Crafting
+			self:OpenMenu("Crafting")
 		elseif input.KeyCode == Enum.KeyCode.H then
 			-- H key for Harvest All
 			self:RequestHarvestAll()
+			-- NOTE: B key for shop REMOVED - shop now only accessible via proximity
 		end
 	end)
+
+	print("GameClient: Input handling setup complete (shop hotkey removed)")
+	print("  Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All, ESC=Close")
+	print("  Shop access: Proximity only via ShopTouchPart")
 end
 
 -- ========== FARMING SYSTEM LOGIC ==========
@@ -168,9 +183,19 @@ end
 -- ========== MENU AND ACTION METHODS ==========
 
 function GameClient:OpenMenu(menuName)
-	if self.UIManager then
-		self.UIManager:OpenMenu(menuName)
+	-- NOTE: Shop can still be opened by proximity system, but not by direct calls
+	if menuName == "Shop" then
+		print("GameClient: Shop menu opening blocked - use proximity system")
+		if self.UIManager then
+			self.UIManager:ShowNotification("Shop Access", "Step on the shop area to access the shop!", "info")
+		end
+		return false
 	end
+
+	if self.UIManager then
+		return self.UIManager:OpenMenu(menuName)
+	end
+	return false
 end
 
 function GameClient:CloseMenus()
@@ -220,7 +245,7 @@ function GameClient:SetupRemoteConnections()
 		-- Shop events (handled by ShopSystem)
 		"PurchaseItem", "ItemPurchased", "SellItem", "ItemSold", "CurrencyUpdated",
 
-		-- Proximity events
+		-- Proximity events (INCLUDES SHOP EVENTS FOR PROXIMITY ACCESS)
 		"OpenShop", "CloseShop", "ShowPigFeedingUI", "HidePigFeedingUI"
 	}
 
@@ -344,7 +369,7 @@ end
 function GameClient:SetupProximitySystemHandlers()
 	print("GameClient: Setting up proximity system handlers...")
 
-	-- Shop proximity handlers
+	-- Shop proximity handlers (THESE STILL WORK - proximity access allowed)
 	if self.RemoteEvents.OpenShop then
 		self.RemoteEvents.OpenShop.OnClientEvent:Connect(function()
 			print("GameClient: Proximity shop triggered - opening shop menu")
@@ -670,7 +695,7 @@ function GameClient:GetShopItems()
 		warn("🛒 CLIENT: GetShopItems RemoteFunction not available")
 	end
 
-
+	return {}
 end
 
 -- UPDATED: Purchase method for new architecture
@@ -973,12 +998,15 @@ function GameClient:GetItemDisplayName(itemId)
 	end
 end
 
--- Internal proximity method
+-- ========== INTERNAL PROXIMITY METHOD ==========
+
 function GameClient:OpenShopProximity()
 	print("GameClient: Opening shop via proximity system")
+	-- This bypasses the normal OpenMenu check for proximity access
 	if self.UIManager then
-		self.UIManager:OpenMenu("Shop")
+		return self.UIManager:OpenMenu("Shop")
 	end
+	return false
 end
 
 -- ========== UTILITY FUNCTIONS ==========
@@ -990,8 +1018,6 @@ function GameClient:CountTable(t)
 	end
 	return count
 end
-
-
 
 -- ========== ERROR RECOVERY ==========
 
@@ -1039,7 +1065,8 @@ function GameClient:DebugStatus()
 	end
 	print("RemoteEvents count:", self.RemoteEvents and self:CountTable(self.RemoteEvents) or 0)
 	print("RemoteFunctions count:", self.RemoteFunctions and self:CountTable(self.RemoteFunctions) or 0)
-	print("Architecture: Updated for ShopSystem + GameCore split")
+	print("Shop access: PROXIMITY ONLY")
+	print("Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All")
 	print("=====================================")
 end
 
@@ -1095,19 +1122,19 @@ _G.TestFarm = function()
 	end
 end
 
-print("GameClient: ✅ Updated for new architecture!")
-print("🎯 Compatible with:")
-print("  📦 ShopSystem module (separate shop handling)")
-print("  🎮 GameCore module (core game mechanics)")
-print("  🔗 UIManager integration")
-print("  🛡️ Error recovery system")
+print("GameClient: ✅ Updated for proximity-only shop access!")
+print("🎯 Changes Made:")
+print("  ❌ Removed B key hotkey for shop")
+print("  ❌ Blocked direct shop menu opening")
+print("  ✅ Shop only accessible via ShopTouchPart proximity")
+print("  ✅ All other systems and hotkeys preserved")
 print("")
-print("🔧 Updated Features:")
-print("  🛒 Shop methods work with ShopSystem RemoteEvents")
-print("  💰 New sell functionality via SellItem RemoteEvent")
-print("  📊 Enhanced event handling for new architecture")
-print("  🔌 All core game connections maintained")
-print("  🌾 All farming, livestock, and pest systems intact")
+print("🔧 Available Features:")
+print("  🛒 Shop: Proximity access only (step on shop area)")
+print("  🌾 Farming: F key or button")
+print("  ⛏️ Mining: M key or button")
+print("  🔨 Crafting: C key or button")
+print("  🌾 Harvest All: H key")
 print("")
 print("🔧 Debug Commands:")
 print("  _G.TestFarm() - Open farm menu")
