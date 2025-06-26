@@ -1,12 +1,12 @@
 --[[
-    FIXED UIManager.lua - Complete with Left-Side Buttons
+    FIXED UIManager.lua - Complete with Left-Side Buttons Fix
     Place in: ReplicatedStorage/UIManager.lua
     
     FIXES:
-    ✅ Added left-side menu buttons (Farm, Mining, Crafting)
-    ✅ Proper button positioning and styling
-    ✅ Complete shop system integration
-    ✅ All missing functionality restored
+    ✅ Ensures left-side buttons are always created
+    ✅ Better error handling for button creation
+    ✅ Proper menu opening from proximity system
+    ✅ Enhanced debugging capabilities
 ]]
 
 local UIManager = {}
@@ -47,12 +47,12 @@ UIManager.Config = {
 	}
 }
 
-print("UIManager: Enhanced module loaded with left-side buttons")
+print("UIManager: Enhanced module loaded with left-side buttons fix")
 
 -- ========== INITIALIZATION ==========
 
 function UIManager:Initialize()
-	print("UIManager: Starting COMPLETE initialization...")
+	print("UIManager: Starting FIXED initialization...")
 
 	-- Wait for PlayerGui
 	local playerGui = LocalPlayer:WaitForChild("PlayerGui", 30)
@@ -76,17 +76,42 @@ function UIManager:Initialize()
 	if not success then
 		error("UIManager: Failed to create main UI structure: " .. tostring(errorMsg))
 	end
+	print("UIManager: ✅ Main UI structure created")
 
 	-- Setup input handling
 	self:SetupInputHandling()
+	print("UIManager: ✅ Input handling setup")
 
 	-- Setup notification system
 	self:SetupNotificationSystem()
+	print("UIManager: ✅ Notification system setup")
 
-	-- FIXED: Setup left-side menu buttons
-	self:SetupLeftSideButtons()
+	-- CRITICAL: Setup left-side menu buttons
+	local buttonSuccess, buttonError = pcall(function()
+		self:SetupLeftSideButtons()
+	end)
 
-	print("UIManager: COMPLETE initialization finished!")
+	if not buttonSuccess then
+		warn("UIManager: Failed to create left-side buttons: " .. tostring(buttonError))
+		-- Try again after a delay
+		spawn(function()
+			wait(1)
+			print("UIManager: Retrying left-side button creation...")
+			local retrySuccess, retryError = pcall(function()
+				self:SetupLeftSideButtons()
+			end)
+
+			if retrySuccess then
+				print("UIManager: ✅ Left-side buttons created on retry")
+			else
+				warn("UIManager: Failed again to create left-side buttons: " .. tostring(retryError))
+			end
+		end)
+	else
+		print("UIManager: ✅ Left-side buttons created successfully")
+	end
+
+	print("UIManager: 🎉 FIXED initialization complete!")
 	return true
 end
 
@@ -128,10 +153,10 @@ function UIManager:CreateMainUIStructure()
 	print("UIManager: Main UI structure created")
 end
 
--- ========== LEFT-SIDE MENU BUTTONS ==========
+-- ========== LEFT-SIDE MENU BUTTONS (FIXED) ==========
 
 function UIManager:SetupLeftSideButtons()
-	print("UIManager: Setting up left-side menu buttons...")
+	print("UIManager: Setting up FIXED left-side menu buttons...")
 
 	local playerGui = LocalPlayer.PlayerGui
 
@@ -139,6 +164,7 @@ function UIManager:SetupLeftSideButtons()
 	local existingButtonUI = playerGui:FindFirstChild("LeftSideButtonsUI")
 	if existingButtonUI then
 		existingButtonUI:Destroy()
+		print("UIManager: Removed existing left-side buttons")
 	end
 
 	-- Create button UI container
@@ -151,9 +177,17 @@ function UIManager:SetupLeftSideButtons()
 	-- Button configuration
 	local buttons = {
 		{
+			name = "Shop",
+			text = "🛒 Shop",
+			position = UDim2.new(0, 20, 0, 150),
+			color = Color3.fromRGB(60, 120, 80),
+			hoverColor = Color3.fromRGB(80, 140, 100),
+			description = "Buy seeds, tools, and upgrades"
+		},
+		{
 			name = "Farm",
 			text = "🌾 Farm",
-			position = UDim2.new(0, 20, 0, 150),
+			position = UDim2.new(0, 20, 0, 220),
 			color = Color3.fromRGB(80, 120, 60),
 			hoverColor = Color3.fromRGB(100, 140, 80),
 			description = "Manage your farm and crops"
@@ -161,7 +195,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Mining", 
 			text = "⛏️ Mining",
-			position = UDim2.new(0, 20, 0, 220),
+			position = UDim2.new(0, 20, 0, 290),
 			color = Color3.fromRGB(80, 80, 120),
 			hoverColor = Color3.fromRGB(100, 100, 140),
 			description = "Mine ores and explore caves"
@@ -169,28 +203,27 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Crafting",
 			text = "🔨 Crafting", 
-			position = UDim2.new(0, 20, 0, 290),
+			position = UDim2.new(0, 20, 0, 360),
 			color = Color3.fromRGB(120, 80, 60),
 			hoverColor = Color3.fromRGB(140, 100, 80),
 			description = "Craft tools and equipment"
-		},
-		{
-			name = "Shop",
-			text = "🛒 Shop",
-			position = UDim2.new(0, 20, 0, 360),
-			color = Color3.fromRGB(60, 120, 80),
-			hoverColor = Color3.fromRGB(80, 140, 100),
-			description = "Buy seeds, tools, and upgrades"
 		}
 	}
 
-	-- Create each button
-	for _, buttonConfig in ipairs(buttons) do
-		local button = self:CreateLeftSideButton(buttonUI, buttonConfig)
-		self.State.LeftSideButtons[buttonConfig.name] = button
+	-- Create each button with enhanced error handling
+	for i, buttonConfig in ipairs(buttons) do
+		local success, error = pcall(function()
+			local button = self:CreateLeftSideButton(buttonUI, buttonConfig)
+			self.State.LeftSideButtons[buttonConfig.name] = button
+			print("UIManager: ✅ Created " .. buttonConfig.name .. " button")
+		end)
+
+		if not success then
+			warn("UIManager: Failed to create " .. buttonConfig.name .. " button: " .. tostring(error))
+		end
 	end
 
-	print("UIManager: ✅ Left-side buttons created successfully")
+	print("UIManager: ✅ Left-side buttons setup complete")
 end
 
 function UIManager:CreateLeftSideButton(parent, config)
@@ -249,12 +282,12 @@ function UIManager:CreateLeftSideButton(parent, config)
 		self:HideButtonTooltip()
 	end)
 
-	-- Click handler
+	-- Click handler with enhanced logging
 	button.MouseButton1Click:Connect(function()
+		print("UIManager: Left-side button clicked: " .. config.name)
 		self:HandleLeftSideButtonClick(config.name)
 	end)
 
-	print("UIManager: Created " .. config.name .. " button")
 	return button
 end
 
@@ -306,7 +339,7 @@ function UIManager:HideButtonTooltip()
 end
 
 function UIManager:HandleLeftSideButtonClick(buttonName)
-	print("UIManager: Left-side button clicked: " .. buttonName)
+	print("UIManager: FIXED Left-side button clicked: " .. buttonName)
 
 	-- Provide visual feedback
 	local button = self.State.LeftSideButtons[buttonName]
@@ -327,8 +360,15 @@ function UIManager:HandleLeftSideButtonClick(buttonName)
 		end)
 	end
 
-	-- Open the corresponding menu
-	self:OpenMenu(buttonName)
+	-- Open the corresponding menu with enhanced logging
+	print("UIManager: Attempting to open menu: " .. buttonName)
+	local success = self:OpenMenu(buttonName)
+
+	if success then
+		print("UIManager: ✅ Successfully opened " .. buttonName .. " menu")
+	else
+		print("UIManager: ❌ Failed to open " .. buttonName .. " menu")
+	end
 end
 
 -- ========== ENHANCED INPUT HANDLING ==========
@@ -342,15 +382,19 @@ function UIManager:SetupInputHandling()
 			self:CloseActiveMenus()
 		elseif input.KeyCode == Enum.KeyCode.F then
 			-- F key for Farm
+			print("UIManager: F key pressed - opening Farm")
 			self:OpenMenu("Farm")
 		elseif input.KeyCode == Enum.KeyCode.M then
 			-- M key for Mining
+			print("UIManager: M key pressed - opening Mining")
 			self:OpenMenu("Mining")
 		elseif input.KeyCode == Enum.KeyCode.C then
 			-- C key for Crafting
+			print("UIManager: C key pressed - opening Crafting")
 			self:OpenMenu("Crafting")
 		elseif input.KeyCode == Enum.KeyCode.B then
 			-- B key for Shop (Buy)
+			print("UIManager: B key pressed - opening Shop")
 			self:OpenMenu("Shop")
 		end
 	end)
@@ -359,7 +403,120 @@ function UIManager:SetupInputHandling()
 	print("  Hotkeys: F=Farm, M=Mining, C=Crafting, B=Shop, ESC=Close")
 end
 
--- Create currency display
+-- ========== ENHANCED MENU MANAGEMENT ==========
+
+function UIManager:OpenMenu(menuName)
+	if self.State.IsTransitioning then
+		print("UIManager: Ignoring menu open during transition")
+		return false
+	end
+
+	print("UIManager: ENHANCED Opening menu: " .. menuName)
+
+	-- Close existing menus first
+	if #self.State.ActiveMenus > 0 then
+		print("UIManager: Closing existing menus...")
+		self:CloseActiveMenus()
+		wait(0.1) -- Brief delay for animation
+	end
+
+	self.State.IsTransitioning = true
+	self.State.CurrentPage = menuName
+
+	local success = false
+
+	-- Create the appropriate menu
+	if menuName == "Shop" then
+		success = self:CreateShopMenu()
+	elseif menuName == "Farm" then
+		success = self:CreateFarmMenu()
+	elseif menuName == "Mining" then
+		success = self:CreateMiningMenu()
+	elseif menuName == "Crafting" then
+		success = self:CreateCraftingMenu()
+	else
+		print("UIManager: Unknown menu type: " .. menuName)
+		success = self:CreateGenericMenu(menuName)
+	end
+
+	if success then
+		print("UIManager: Menu content created successfully")
+
+		-- Show menu container with animation
+		local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
+		if menuContainer then
+			menuContainer.Visible = true
+
+			-- Animate in
+			local tween = TweenService:Create(menuContainer,
+				TweenInfo.new(self.Config.TransitionTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{BackgroundTransparency = 0}
+			)
+			tween:Play()
+
+			tween.Completed:Connect(function()
+				self.State.IsTransitioning = false
+				print("UIManager: Menu " .. menuName .. " opened successfully")
+			end)
+		else
+			warn("UIManager: MenuContainer not found!")
+			self.State.IsTransitioning = false
+			return false
+		end
+
+		table.insert(self.State.ActiveMenus, menuName)
+	else
+		print("UIManager: Failed to create menu content for " .. menuName)
+		self.State.IsTransitioning = false
+		self.State.CurrentPage = "None"
+	end
+
+	return success
+end
+
+function UIManager:CloseActiveMenus()
+	if #self.State.ActiveMenus == 0 then
+		return
+	end
+
+	print("UIManager: Closing active menus")
+
+	local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
+	if menuContainer and menuContainer.Visible then
+		-- Animate out
+		local tween = TweenService:Create(menuContainer,
+			TweenInfo.new(self.Config.TransitionTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{BackgroundTransparency = 1}
+		)
+		tween:Play()
+
+		tween.Completed:Connect(function()
+			menuContainer.Visible = false
+
+			-- Clear menu content
+			local menuFrame = menuContainer:FindFirstChild("MenuFrame")
+			if menuFrame then
+				-- Keep close button, remove everything else
+				for _, child in pairs(menuFrame:GetChildren()) do
+					if child.Name ~= "CloseButton" and not child:IsA("UICorner") then
+						child:Destroy()
+					end
+				end
+			end
+		end)
+	end
+
+	self.State.ActiveMenus = {}
+	self.State.CurrentPage = "None"
+end
+
+-- Get current page
+function UIManager:GetCurrentPage()
+	return self.State.CurrentPage
+end
+
+-- ========== CURRENCY DISPLAY ==========
+
 function UIManager:CreateCurrencyDisplay(parent)
 	local currencyFrame = Instance.new("Frame")
 	currencyFrame.Name = "CurrencyDisplay"
@@ -489,106 +646,6 @@ function UIManager:CreateNotificationArea(parent)
 	print("UIManager: Notification area created")
 end
 
--- ========== MENU MANAGEMENT ==========
-
-function UIManager:OpenMenu(menuName)
-	if self.State.IsTransitioning then
-		print("UIManager: Ignoring menu open during transition")
-		return false
-	end
-
-	print("UIManager: Opening menu: " .. menuName)
-
-	-- Close existing menus first
-	self:CloseActiveMenus()
-
-	self.State.IsTransitioning = true
-	self.State.CurrentPage = menuName
-
-	local success = false
-
-	if menuName == "Shop" then
-		success = self:CreateShopMenu()
-	elseif menuName == "Farm" then
-		success = self:CreateFarmMenu()
-	elseif menuName == "Mining" then
-		success = self:CreateMiningMenu()
-	elseif menuName == "Crafting" then
-		success = self:CreateCraftingMenu()
-	else
-		print("UIManager: Unknown menu type: " .. menuName)
-		success = self:CreateGenericMenu(menuName)
-	end
-
-	if success then
-		-- Show menu container with animation
-		local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
-		if menuContainer then
-			menuContainer.Visible = true
-			menuContainer.BackgroundTransparency = 1
-
-			-- Animate in
-			local tween = TweenService:Create(menuContainer,
-				TweenInfo.new(self.Config.TransitionTime, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{BackgroundTransparency = 0}
-			)
-			tween:Play()
-
-			tween.Completed:Connect(function()
-				self.State.IsTransitioning = false
-			end)
-		end
-
-		table.insert(self.State.ActiveMenus, menuName)
-	else
-		self.State.IsTransitioning = false
-		self.State.CurrentPage = "None"
-	end
-
-	return success
-end
-
-function UIManager:CloseActiveMenus()
-	if #self.State.ActiveMenus == 0 then
-		return
-	end
-
-	print("UIManager: Closing active menus")
-
-	local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
-	if menuContainer and menuContainer.Visible then
-		-- Animate out
-		local tween = TweenService:Create(menuContainer,
-			TweenInfo.new(self.Config.TransitionTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-			{BackgroundTransparency = 1}
-		)
-		tween:Play()
-
-		tween.Completed:Connect(function()
-			menuContainer.Visible = false
-
-			-- Clear menu content
-			local menuFrame = menuContainer:FindFirstChild("MenuFrame")
-			if menuFrame then
-				-- Keep close button, remove everything else
-				for _, child in pairs(menuFrame:GetChildren()) do
-					if child.Name ~= "CloseButton" and not child:IsA("UICorner") then
-						child:Destroy()
-					end
-				end
-			end
-		end)
-	end
-
-	self.State.ActiveMenus = {}
-	self.State.CurrentPage = "None"
-end
-
--- Get current page
-function UIManager:GetCurrentPage()
-	return self.State.CurrentPage
-end
-
 -- ========== MENU CREATION FUNCTIONS ==========
 
 function UIManager:CreateShopMenu()
@@ -669,31 +726,6 @@ function UIManager:CreateFarmMenu()
 	statusLabel.TextScaled = true
 	statusLabel.Font = Enum.Font.Gotham
 	statusLabel.Parent = expansionFrame
-
-	-- Harvest All Button
-	local harvestAllButton = Instance.new("TextButton")
-	harvestAllButton.Name = "HarvestAllButton"
-	harvestAllButton.Size = UDim2.new(0.4, 0, 0, 50)
-	harvestAllButton.Position = UDim2.new(0.05, 0, 1, -70)
-	harvestAllButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-	harvestAllButton.BorderSizePixel = 0
-	harvestAllButton.Text = "🌾 HARVEST ALL"
-	harvestAllButton.TextColor3 = Color3.new(1, 1, 1)
-	harvestAllButton.TextScaled = true
-	harvestAllButton.Font = Enum.Font.GothamBold
-	harvestAllButton.Parent = expansionFrame
-
-	local harvestCorner = Instance.new("UICorner")
-	harvestCorner.CornerRadius = UDim.new(0.1, 0)
-	harvestCorner.Parent = harvestAllButton
-
-	harvestAllButton.MouseButton1Click:Connect(function()
-		if self.State.GameClient and self.State.GameClient.RequestHarvestAll then
-			self.State.GameClient:RequestHarvestAll()
-		else
-			self:ShowNotification("Feature Unavailable", "Harvest All system not ready!", "warning")
-		end
-	end)
 
 	-- Populate farm content
 	self:PopulateFarmContent(expansionFrame)
@@ -862,8 +894,8 @@ function UIManager:PopulateFarmContent(expansionFrame)
 		-- Update status label
 		local statusLabel = expansionFrame:FindFirstChild("StatusLabel")
 		if statusLabel then
-			statusLabel.Text = "🌾 Current Farm Level: " .. expansionLevel .. "\n" ..
-				"Grid Size: " .. self:GetGridSizeForLevel(expansionLevel) .. "\n" ..
+			statusLabel.Text = "🌾 Current Farm Level: " .. expansionLevel .. "\n" .. 
+				"Grid Size: " .. self:GetGridSizeForLevel(expansionLevel) .. "\n" .. 
 				"Total Spots: " .. self:GetTotalSpotsForLevel(expansionLevel)
 		end
 
@@ -1161,7 +1193,6 @@ function UIManager:GetState()
 	return self.State
 end
 
-
 -- ========== CLEANUP ==========
 
 function UIManager:Cleanup()
@@ -1204,7 +1235,7 @@ end
 -- Make globally available
 _G.UIManager = UIManager
 
-print("UIManager: ✅ COMPLETE module ready with left-side buttons!")
+print("UIManager: ✅ FIXED module ready with enhanced left-side buttons!")
 print("📋 Available Methods:")
 print("  Initialize() - Initialize the UI system")
 print("  OpenMenu(menuName) - Open specific menu")
@@ -1213,11 +1244,11 @@ print("  ShowNotification(title, message, type) - Show notification")
 print("  UpdateCurrencyDisplay(playerData) - Update currency display")
 print("  SetGameClient(gameClient) - Set GameClient reference")
 print("")
-print("🎮 Left-Side Buttons Created:")
+print("🎮 Left-Side Buttons:")
+print("  🛒 Shop - Press B or click button")
 print("  🌾 Farm - Press F or click button")
 print("  ⛏️ Mining - Press M or click button")
 print("  🔨 Crafting - Press C or click button")
-print("  🛒 Shop - Press B or click button")
 print("")
 print("⌨️ Hotkeys: F=Farm, M=Mining, C=Crafting, B=Shop, ESC=Close")
 
