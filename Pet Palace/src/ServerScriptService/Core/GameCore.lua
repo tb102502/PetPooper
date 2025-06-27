@@ -1106,113 +1106,6 @@ function GameCore:InitializeFarmingSystem()
 	print("GameCore: Enhanced farming system initialized")
 end
 
-function GameCore:PlantSeed(player, plotModel, seedId)
-	print("🌱 GameCore: Enhanced plant seed request - " .. player.Name .. " wants to plant " .. seedId)
-
-	local playerData = self:GetPlayerData(player)
-	if not playerData then 
-		self:SendNotification(player, "Error", "Player data not found", "error")
-		return false
-	end
-
-	-- Check if player has farming data
-	if not playerData.farming or not playerData.farming.inventory then
-		self:SendNotification(player, "No Farming Data", "You need to set up farming first!", "error")
-		return false
-	end
-
-	-- Check if player has the seed
-	local seedCount = playerData.farming.inventory[seedId] or 0
-	if seedCount <= 0 then
-		local seedInfo = ItemConfig.ShopItems[seedId]
-		local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
-		self:SendNotification(player, "No Seeds", "You don't have any " .. seedName .. "!", "error")
-		return false
-	end
-
-	-- Validate the plot model
-	if not plotModel or not plotModel.Parent then
-		self:SendNotification(player, "Invalid Plot", "Plot not found or invalid!", "error")
-		return false
-	end
-
-	-- Check if plot is empty
-	local isEmpty = plotModel:GetAttribute("IsEmpty")
-	if not isEmpty then
-		self:SendNotification(player, "Plot Occupied", "This plot already has something planted!", "error")
-		return false
-	end
-
-	-- Check if this is the player's plot
-	local plotOwner = self:GetPlotOwner(plotModel)
-	if plotOwner ~= player.Name then
-		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
-		return false
-	end
-
-	-- Get seed data from ItemConfig
-	local seedData = ItemConfig.GetSeedData(seedId)
-	if not seedData then
-		self:SendNotification(player, "Invalid Seed", "Seed data not found for " .. seedId .. "!", "error")
-		return false
-	end
-
-	-- RARITY SYSTEM: Determine crop rarity at planting time
-	local playerBoosters = self:GetPlayerBoosters(playerData)
-	local cropRarity = ItemConfig.GetCropRarity(seedId, playerBoosters)
-
-	print("🌟 GameCore: Determined rarity for " .. seedId .. ": " .. cropRarity)
-
-	-- Plant the seed
-	local success = self:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
-	if not success then
-		self:SendNotification(player, "Planting Failed", "Could not plant seed on plot!", "error")
-		return false
-	end
-
-	-- Remove seed from inventory
-	playerData.farming.inventory[seedId] = playerData.farming.inventory[seedId] - 1
-
-	-- Update plot attributes with enhanced data
-	plotModel:SetAttribute("IsEmpty", false)
-	plotModel:SetAttribute("PlantType", seedData.resultCropId)
-	plotModel:SetAttribute("SeedType", seedId)
-	plotModel:SetAttribute("GrowthStage", 0)
-	plotModel:SetAttribute("PlantedTime", os.time())
-	plotModel:SetAttribute("Rarity", cropRarity)
-
-	-- Use boosters if applicable
-	if playerBoosters.rarity_booster then
-		playerData.boosters = playerData.boosters or {}
-		playerData.boosters.rarity_booster = (playerData.boosters.rarity_booster or 0) - 1
-		if playerData.boosters.rarity_booster <= 0 then
-			playerData.boosters.rarity_booster = nil
-		end
-	end
-
-	-- Update stats
-	playerData.stats = playerData.stats or {}
-	playerData.stats.seedsPlanted = (playerData.stats.seedsPlanted or 0) + 1
-
-	-- Save and notify
-	self:SavePlayerData(player)
-
-	if self.RemoteEvents.PlayerDataUpdated then
-		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-	end
-
-	local seedInfo = ItemConfig.ShopItems[seedId]
-	local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
-	local rarityColor = ItemConfig.GetRarityColor(cropRarity)
-	local rarityName = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].name or cropRarity
-
-	self:SendNotification(player, "🌱 Seed Planted!", 
-		"Successfully planted " .. seedName .. "!\n🌟 Rarity: " .. rarityName .. "\n⏰ Ready in " .. math.floor(seedData.growTime/60) .. " minutes.", "success")
-
-	print("🌱 GameCore: Successfully planted " .. seedId .. " (" .. cropRarity .. ") for " .. player.Name)
-	return true
-end
-
 function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 	local success, error = pcall(function()
 		local spotPart = plotModel:FindFirstChild("SpotPart")
@@ -2108,6 +2001,226 @@ function GameCore:CountTable(t)
 	end
 	return count
 end
+-- ========== FIXED PLOT OWNER METHOD ==========
+
+function GameCore:GetPlotOwner(plotModel)
+	-- Check if this is an expandable farm plot
+	local expandableOwner = self:GetExpandablePlotOwner(plotModel)
+	if expandableOwner then
+		return expandableOwner
+	end
+
+	-- Fallback for old-style plots
+	local parent = plotModel.Parent
+	local attempts = 0
+
+	while parent and parent.Parent and attempts < 10 do
+		attempts = attempts + 1
+
+		-- Check for old-style farm structure
+		if parent.Name:find("_Farm") and not parent.Name:find("_ExpandableFarm") then
+			return parent.Name:gsub("_Farm", "")
+		end
+
+		-- Check for expandable farm structure
+		if parent.Name:find("_ExpandableFarm") then
+			return parent.Name:gsub("_ExpandableFarm", "")
+		end
+
+		parent = parent.Parent
+	end
+
+	warn("GameCore: Could not determine plot owner for " .. plotModel.Name)
+	return nil
+end
+
+-- ========== FIXED PLANTING METHOD ==========
+
+function GameCore:PlantSeed(player, plotModel, seedId)
+	print("🌱 GameCore: FIXED plant seed request - " .. player.Name .. " wants to plant " .. seedId)
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then 
+		self:SendNotification(player, "Error", "Player data not found", "error")
+		return false
+	end
+
+	-- Check if player has farming data
+	if not playerData.farming or not playerData.farming.inventory then
+		self:SendNotification(player, "No Farming Data", "You need to set up farming first!", "error")
+		return false
+	end
+
+	-- Check if player has the seed
+	local seedCount = playerData.farming.inventory[seedId] or 0
+	if seedCount <= 0 then
+		local seedInfo = ItemConfig.ShopItems[seedId]
+		local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
+		self:SendNotification(player, "No Seeds", "You don't have any " .. seedName .. "!", "error")
+		return false
+	end
+
+	-- Validate the plot model
+	if not plotModel or not plotModel.Parent then
+		self:SendNotification(player, "Invalid Plot", "Plot not found or invalid!", "error")
+		return false
+	end
+
+	-- FIXED: Better plot occupancy check
+	local isEmpty = self:IsPlotActuallyEmpty(plotModel)
+	local isUnlocked = plotModel:GetAttribute("IsUnlocked")
+
+	-- For expandable farms, check if spot is unlocked
+	if isUnlocked ~= nil and not isUnlocked then
+		self:SendNotification(player, "Locked Plot", "This plot area is locked! Purchase farm expansion to unlock it.", "error")
+		return false
+	end
+
+	-- FIXED: Only show "plot occupied" if there's actually a crop there
+	if not isEmpty then
+		self:SendNotification(player, "Plot Occupied", "This plot already has a crop growing!", "error")
+		return false
+	end
+
+	-- Check plot ownership
+	local plotOwner = self:GetPlotOwner(plotModel)
+	if plotOwner ~= player.Name then
+		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
+		return false
+	end
+
+	-- Get seed data from ItemConfig
+	local seedData = ItemConfig.GetSeedData(seedId)
+	if not seedData then
+		self:SendNotification(player, "Invalid Seed", "Seed data not found for " .. seedId .. "!", "error")
+		return false
+	end
+
+	-- RARITY SYSTEM: Determine crop rarity at planting time
+	local playerBoosters = self:GetPlayerBoosters(playerData)
+	local cropRarity = ItemConfig.GetCropRarity(seedId, playerBoosters)
+
+	print("🌟 GameCore: Determined rarity for " .. seedId .. ": " .. cropRarity)
+
+	-- Plant the seed
+	local success = self:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
+	if not success then
+		self:SendNotification(player, "Planting Failed", "Could not plant seed on plot!", "error")
+		return false
+	end
+
+	-- Remove seed from inventory
+	playerData.farming.inventory[seedId] = playerData.farming.inventory[seedId] - 1
+
+	-- Update plot attributes with enhanced data
+	plotModel:SetAttribute("IsEmpty", false)
+	plotModel:SetAttribute("PlantType", seedData.resultCropId)
+	plotModel:SetAttribute("SeedType", seedId)
+	plotModel:SetAttribute("GrowthStage", 0)
+	plotModel:SetAttribute("PlantedTime", os.time())
+	plotModel:SetAttribute("Rarity", cropRarity)
+
+	-- Use boosters if applicable
+	if playerBoosters.rarity_booster then
+		playerData.boosters = playerData.boosters or {}
+		playerData.boosters.rarity_booster = (playerData.boosters.rarity_booster or 0) - 1
+		if playerData.boosters.rarity_booster <= 0 then
+			playerData.boosters.rarity_booster = nil
+		end
+	end
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.seedsPlanted = (playerData.stats.seedsPlanted or 0) + 1
+
+	-- Save and notify
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	local seedInfo = ItemConfig.ShopItems[seedId]
+	local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
+	local rarityColor = ItemConfig.GetRarityColor(cropRarity)
+	local rarityName = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].name or cropRarity
+
+	self:SendNotification(player, "🌱 Seed Planted!", 
+		"Successfully planted " .. seedName .. "!\n🌟 Rarity: " .. rarityName .. "\n⏰ Ready in " .. math.floor(seedData.growTime/60) .. " minutes.", "success")
+
+	print("🌱 GameCore: Successfully planted " .. seedId .. " (" .. cropRarity .. ") for " .. player.Name)
+	return true
+end
+
+-- NEW: Robust method to check if a plot is actually empty
+function GameCore:IsPlotActuallyEmpty(plotModel)
+	print("🔍 GameCore: Checking if plot is actually empty: " .. plotModel.Name)
+
+	-- Method 1: Check for physical crop model (most reliable)
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if cropModel then
+		local crop = cropModel:FindFirstChild("Crop")
+		if crop then
+			print("🔍 Found physical crop - plot is OCCUPIED")
+			return false
+		end
+	end
+
+	-- Method 2: Check IsEmpty attribute (if set)
+	local isEmptyAttr = plotModel:GetAttribute("IsEmpty")
+	if isEmptyAttr == false then
+		print("🔍 IsEmpty attribute = false - plot is OCCUPIED")
+		return false
+	end
+
+	-- Method 3: Check if there's a plant type set
+	local plantType = plotModel:GetAttribute("PlantType")
+	if plantType and plantType ~= "" then
+		print("🔍 PlantType attribute set - plot is OCCUPIED")
+		return false
+	end
+
+	-- Method 4: Check growth stage
+	local growthStage = plotModel:GetAttribute("GrowthStage")
+	if growthStage and growthStage > 0 then
+		print("🔍 GrowthStage > 0 - plot is OCCUPIED")
+		return false
+	end
+
+	-- If all checks pass, plot is empty
+	print("🔍 All checks passed - plot is EMPTY")
+	return true
+end
+
+-- ENHANCED: Method to properly clear a plot (use this when harvesting)
+function GameCore:ClearPlotProperly(plotModel)
+	print("🧹 GameCore: Properly clearing plot: " .. plotModel.Name)
+
+	-- Remove physical crop
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if cropModel then
+		cropModel:Destroy()
+		print("🧹 Removed CropModel")
+	end
+
+	-- Clear all crop-related attributes
+	plotModel:SetAttribute("IsEmpty", true)
+	plotModel:SetAttribute("PlantType", "")
+	plotModel:SetAttribute("SeedType", "")
+	plotModel:SetAttribute("GrowthStage", 0)
+	plotModel:SetAttribute("PlantedTime", 0)
+	plotModel:SetAttribute("Rarity", "common")
+
+	-- Restore green indicator if it exists
+	local indicator = plotModel:FindFirstChild("Indicator")
+	if indicator then
+		indicator.Color = Color3.fromRGB(100, 255, 100)
+	end
+
+	print("🧹 Plot cleared successfully")
+end
+
+-- UPDATED: Fixed HarvestCrop method to use proper clearing
 function GameCore:HarvestCrop(player, plotModel)
 	print("🌾 GameCore: Enhanced harvest request from " .. player.Name .. " for plot " .. plotModel.Name)
 
@@ -2120,6 +2233,13 @@ function GameCore:HarvestCrop(player, plotModel)
 	local plotOwner = self:GetPlotOwner(plotModel)
 	if plotOwner ~= player.Name then
 		self:SendNotification(player, "Not Your Plot", "You can only harvest your own crops!", "error")
+		return false
+	end
+
+	-- FIXED: Better crop readiness check
+	local isActuallyEmpty = self:IsPlotActuallyEmpty(plotModel)
+	if isActuallyEmpty then
+		self:SendNotification(player, "Nothing to Harvest", "This plot doesn't have any crops to harvest!", "warning")
 		return false
 	end
 
@@ -2157,34 +2277,12 @@ function GameCore:HarvestCrop(player, plotModel)
 		playerData.farming.inventory = {}
 	end
 
-	-- Add crops to inventory with rarity suffix for display
-	local harvestItemId = plantType
-	if cropRarity ~= "common" then
-		harvestItemId = plantType .. "_" .. cropRarity
-	end
-
+	-- Add crops to inventory
 	local currentAmount = playerData.farming.inventory[plantType] or 0
 	playerData.farming.inventory[plantType] = currentAmount + finalYield
 
-	-- Reset plot
-	plotModel:SetAttribute("IsEmpty", true)
-	plotModel:SetAttribute("PlantType", "")
-	plotModel:SetAttribute("SeedType", "")
-	plotModel:SetAttribute("GrowthStage", 0)
-	plotModel:SetAttribute("PlantedTime", 0)
-	plotModel:SetAttribute("Rarity", "common")
-
-	-- Remove crop model
-	local cropModel = plotModel:FindFirstChild("CropModel")
-	if cropModel then
-		cropModel:Destroy()
-	end
-
-	-- Restore visual indicator
-	local indicator = plotModel:FindFirstChild("Indicator")
-	if indicator then
-		indicator.Color = Color3.fromRGB(100, 255, 100)
-	end
+	-- FIXED: Use proper plot clearing method
+	self:ClearPlotProperly(plotModel)
 
 	-- Update stats
 	playerData.stats = playerData.stats or {}
@@ -2213,6 +2311,145 @@ function GameCore:HarvestCrop(player, plotModel)
 	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
 	return true
 end
+
+print("GameCore: ✅ PLOT OCCUPIED LOGIC FIXED!")
+print("🔧 FIXES APPLIED:")
+print("  ✅ Added robust IsPlotActuallyEmpty method")
+print("  ✅ Fixed plot occupancy check to look for actual crops")
+print("  ✅ Added proper plot clearing method")
+print("  ✅ Enhanced harvest method with better validation")
+print("  ✅ Prevents false 'plot occupied' messages on empty plots")
+
+-- ========== FIXED FARM PLOT CREATION METHOD ==========
+
+function GameCore:CreatePlayerFarmPlot(player, totalPlots)
+	print("🌾 GameCore: FIXED CreatePlayerFarmPlot for " .. player.Name .. " with " .. totalPlots .. " plots")
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then
+		return false
+	end
+
+	-- Always use expandable farm system for new plots
+	return self:CreateExpandableFarmPlot(player)
+end
+
+-- ========== FIXED FARM EXPANSION PURCHASE ==========
+
+function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
+	print("🌾 GameCore: FIXED ProcessFarmPlotPurchase for " .. player.Name)
+
+	-- Handle different types of farm expansions
+	if item.effects and item.effects.type == "farm_expansion" then
+		print("🌾 Processing farm expansion via ShopSystem")
+		-- This will be handled by ShopSystem:HandleFarmExpansionPurchase
+		return true
+	end
+
+	-- Handle farm plot starter (first-time farm creation)
+	if item.id == "farm_plot_starter" then
+		print("🌾 Processing farm plot starter")
+
+		-- Initialize farming data
+		if not playerData.farming then
+			playerData.farming = {
+				plots = 1,
+				expansionLevel = 1,
+				inventory = {
+					-- Give starter seeds
+					carrot_seeds = 5,
+					corn_seeds = 3
+				}
+			}
+		else
+			playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+			playerData.farming.expansionLevel = playerData.farming.expansionLevel or 1
+		end
+
+		-- Create the physical expandable farm plot
+		local success = self:CreateExpandableFarmPlot(player)
+		if not success then
+			-- Revert changes on failure
+			if playerData.farming.plots then
+				playerData.farming.plots = playerData.farming.plots - quantity
+			end
+			return false
+		end
+
+		print("🌾 Created starter farm plot for " .. player.Name)
+		return true
+	end
+
+	-- Regular farm plot purchase (legacy support)
+	if not playerData.farming then
+		playerData.farming = {plots = 0, inventory = {}}
+	end
+
+	playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+
+	-- Create the physical farm plot using expandable system
+	local success = self:CreateExpandableFarmPlot(player)
+	if not success then
+		playerData.farming.plots = playerData.farming.plots - quantity
+		return false
+	end
+
+	print("🌾 Added " .. quantity .. " farm plot(s), total: " .. playerData.farming.plots)
+	return true
+end
+
+-- ========== ENSURE PLAYER HAS EXPANDABLE FARM ==========
+
+function GameCore:EnsurePlayerHasExpandableFarm(player)
+	print("🌾 GameCore: Ensuring " .. player.Name .. " has expandable farm")
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then
+		return false
+	end
+
+	-- Check if player should have a farm
+	local hasFarmItem = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+	local hasFarmingData = playerData.farming and playerData.farming.plots and playerData.farming.plots > 0
+
+	if not hasFarmItem and not hasFarmingData then
+		print("🌾 Player " .. player.Name .. " doesn't have farm access")
+		return false
+	end
+
+	-- Ensure farming data is initialized
+	if not playerData.farming then
+		playerData.farming = {
+			plots = 1,
+			expansionLevel = 1,
+			inventory = {}
+		}
+		self:SavePlayerData(player)
+	end
+
+	if not playerData.farming.expansionLevel then
+		playerData.farming.expansionLevel = 1
+		self:SavePlayerData(player)
+	end
+
+	-- Check if physical farm exists
+	local existingFarm = self:GetPlayerExpandableFarm(player)
+	if not existingFarm then
+		print("🌾 Creating missing expandable farm for " .. player.Name)
+		return self:CreateExpandableFarmPlot(player)
+	end
+
+	print("🌾 Player " .. player.Name .. " already has expandable farm")
+	return true
+end
+
+print("GameCore: ✅ PLANTING AND EXPANSION FIXES LOADED!")
+print("🔧 FIXES APPLIED:")
+print("  ✅ Added missing GetPlotOwner method")
+print("  ✅ Fixed PlantSeed method for expandable farms")
+print("  ✅ Fixed farm plot creation to use expandable system")
+print("  ✅ Enhanced farm expansion purchase handling")
+print("  ✅ Added farm existence verification")
 
 function GameCore:GetPlayerBoosters(playerData)
 	local boosters = {}
@@ -3027,12 +3264,301 @@ end
 -- Add this admin command to your existing admin commands:
 function GameCore:SetupAdminCommands()
 	-- ... your existing admin commands ...
-
 	Players.PlayerAdded:Connect(function(player)
 		player.Chatted:Connect(function(message)
 			if player.Name == "TommySalami311" then -- Replace with your username
 				local args = string.split(message:lower(), " ")
 				local command = args[1]
+
+				-- FARMING DEBUG COMMANDS
+				if command == "/debugplanting" then
+					print("=== PLANTING SYSTEM DEBUG ===")
+					local playerData = self:GetPlayerData(player)
+
+					if playerData then
+						print("Player farming data:")
+						if playerData.farming then
+							print("  Plots: " .. (playerData.farming.plots or 0))
+							print("  Expansion Level: " .. (playerData.farming.expansionLevel or 1))
+							print("  Inventory items:")
+							if playerData.farming.inventory then
+								for item, count in pairs(playerData.farming.inventory) do
+									if item:find("seeds") then
+										print("    " .. item .. ": " .. count)
+									end
+								end
+							else
+								print("    No farming inventory")
+							end
+						else
+							print("  No farming data")
+						end
+
+						print("Purchase history:")
+						if playerData.purchaseHistory then
+							if playerData.purchaseHistory.farm_plot_starter then
+								print("  ✅ Has farm_plot_starter")
+							else
+								print("  ❌ Missing farm_plot_starter")
+							end
+						else
+							print("  No purchase history")
+						end
+					end
+
+					-- Check physical farm
+					local farm = self:GetPlayerExpandableFarm(player)
+					if farm then
+						print("Physical farm: ✅ EXISTS")
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local totalSpots = 0
+							local unlockedSpots = 0
+							local occupiedSpots = 0
+
+							for _, spot in pairs(plantingSpots:GetChildren()) do
+								if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+									totalSpots = totalSpots + 1
+									if spot:GetAttribute("IsUnlocked") then
+										unlockedSpots = unlockedSpots + 1
+									end
+									if not spot:GetAttribute("IsEmpty") then
+										occupiedSpots = occupiedSpots + 1
+									end
+								end
+							end
+
+							print("Planting spots: " .. unlockedSpots .. " unlocked / " .. totalSpots .. " total")
+							print("Occupied spots: " .. occupiedSpots)
+						else
+							print("❌ No PlantingSpots folder found")
+						end
+					else
+						print("Physical farm: ❌ MISSING")
+					end
+					print("==============================")
+
+				elseif command == "/testplanting" then
+					print("Testing planting system...")
+					local playerData = self:GetPlayerData(player)
+
+					-- Give test seeds
+					if not playerData.farming then
+						playerData.farming = {inventory = {}}
+					end
+					if not playerData.farming.inventory then
+						playerData.farming.inventory = {}
+					end
+
+					playerData.farming.inventory.carrot_seeds = 10
+					playerData.farming.inventory.corn_seeds = 5
+					self:SavePlayerData(player)
+
+					print("✅ Gave test seeds to " .. player.Name)
+					print("Now click on an unlocked plot to test planting")
+
+				elseif command == "/fixfarm" then
+					print("Fixing farm for " .. player.Name)
+					local playerData = self:GetPlayerData(player)
+
+					-- Ensure farming data
+					if not playerData.farming then
+						playerData.farming = {
+							plots = 1,
+							expansionLevel = 1,
+							inventory = {
+								carrot_seeds = 5,
+								corn_seeds = 3
+							}
+						}
+					end
+
+					-- Ensure purchase history
+					if not playerData.purchaseHistory then
+						playerData.purchaseHistory = {}
+					end
+					playerData.purchaseHistory.farm_plot_starter = true
+
+					-- Create/update farm
+					local success = self:CreateExpandableFarmPlot(player)
+					if success then
+						self:SavePlayerData(player)
+						print("✅ Farm fixed for " .. player.Name)
+					else
+						print("❌ Failed to fix farm")
+					end
+
+				elseif command == "/testexpansion" then
+					local targetLevel = tonumber(args[2]) or 2
+					if targetLevel < 1 or targetLevel > 5 then
+						print("Usage: /testexpansion [level 1-5]")
+						return
+					end
+
+					print("Testing expansion to level " .. targetLevel)
+					local playerData = self:GetPlayerData(player)
+
+					-- Ensure farming data
+					if not playerData.farming then
+						playerData.farming = {expansionLevel = 1}
+					end
+
+					-- Force expansion
+					playerData.farming.expansionLevel = targetLevel
+					local success = self:CreateExpandableFarmPlot(player)
+
+					if success then
+						self:SavePlayerData(player)
+						local config = self:GetExpansionConfig(targetLevel)
+						print("✅ Expanded to " .. config.name .. " (" .. config.totalSpots .. " spots)")
+					else
+						print("❌ Expansion failed")
+					end
+
+				elseif command == "/checkplotowner" then
+					print("Testing plot owner detection...")
+					local farm = self:GetPlayerExpandableFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local firstSpot = plantingSpots:FindFirstChild("PlantingSpot_1")
+							if firstSpot then
+								local owner = self:GetPlotOwner(firstSpot)
+								print("First plot owner: " .. tostring(owner))
+								print("Expected owner: " .. player.Name)
+								print("Match: " .. tostring(owner == player.Name))
+							else
+								print("❌ No PlantingSpot_1 found")
+							end
+						else
+							print("❌ No PlantingSpots found")
+						end
+					else
+						print("❌ No farm found")
+					end
+
+				elseif command == "/givefarmstarter" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						local playerData = self:GetPlayerData(targetPlayer)
+						if playerData then
+							-- Give farm starter and basic setup
+							playerData.purchaseHistory = playerData.purchaseHistory or {}
+							playerData.purchaseHistory.farm_plot_starter = true
+
+							playerData.farming = {
+								plots = 1,
+								expansionLevel = 1,
+								inventory = {
+									carrot_seeds = 10,
+									corn_seeds = 5,
+									potato_seeds = 3
+								}
+							}
+
+							playerData.coins = (playerData.coins or 0) + 10000 -- Give coins for testing
+
+							local success = self:CreateExpandableFarmPlot(targetPlayer)
+							if success then
+								self:SavePlayerData(targetPlayer)
+								print("✅ Gave farm starter to " .. targetPlayer.Name)
+
+								if self.RemoteEvents.PlayerDataUpdated then
+									self.RemoteEvents.PlayerDataUpdated:FireClient(targetPlayer, playerData)
+								end
+							else
+								print("❌ Failed to create farm for " .. targetPlayer.Name)
+							end
+						end
+					else
+						print("Player " .. targetName .. " not found")
+					end
+
+				elseif command == "/resetfarm" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						-- Remove physical farm
+						local farm = self:GetPlayerExpandableFarm(targetPlayer)
+						if farm then
+							farm:Destroy()
+						end
+
+						-- Reset player data
+						local playerData = self:GetPlayerData(targetPlayer)
+						if playerData then
+							playerData.farming = nil
+							playerData.purchaseHistory = playerData.purchaseHistory or {}
+							playerData.purchaseHistory.farm_plot_starter = nil
+							self:SavePlayerData(targetPlayer)
+						end
+
+						print("✅ Reset farm for " .. targetPlayer.Name)
+					end
+
+				elseif command == "/inspectfarm" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						print("=== FARM INSPECTION FOR " .. targetPlayer.Name .. " ===")
+
+						local farm = self:GetPlayerExpandableFarm(targetPlayer)
+						if farm then
+							print("✅ Physical farm exists: " .. farm.Name)
+							print("Position: " .. tostring(farm.PrimaryPart and farm.PrimaryPart.Position or "NO PRIMARY PART"))
+
+							local plantingSpots = farm:FindFirstChild("PlantingSpots")
+							if plantingSpots then
+								print("PlantingSpots folder exists")
+
+								local spotsByStatus = {unlocked = 0, locked = 0, occupied = 0, empty = 0}
+
+								for _, spot in pairs(plantingSpots:GetChildren()) do
+									if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+										if spot:GetAttribute("IsUnlocked") then
+											spotsByStatus.unlocked = spotsByStatus.unlocked + 1
+
+											if spot:GetAttribute("IsEmpty") == false then
+												spotsByStatus.occupied = spotsByStatus.occupied + 1
+											else
+												spotsByStatus.empty = spotsByStatus.empty + 1
+											end
+										else
+											spotsByStatus.locked = spotsByStatus.locked + 1
+										end
+									end
+								end
+
+								print("Spot status:")
+								print("  Unlocked: " .. spotsByStatus.unlocked)
+								print("  Locked: " .. spotsByStatus.locked)
+								print("  Occupied: " .. spotsByStatus.occupied)
+								print("  Empty: " .. spotsByStatus.empty)
+							else
+								print("❌ No PlantingSpots folder")
+							end
+						else
+							print("❌ No physical farm found")
+						end
+
+						print("=============================================")
+					end
+				end
+			
+						print("GameCore: ✅ ENHANCED DEBUG COMMANDS LOADED!")
+						print("🔧 Available Debug Commands:")
+						print("  /debugplanting - Show detailed planting system status")
+						print("  /testplanting - Give test seeds for planting")
+						print("  /fixfarm - Fix/create farm for player")
+						print("  /testexpansion [level] - Test farm expansion to specific level")
+						print("  /checkplotowner - Test plot owner detection")
+						print("  /givefarmstarter [player] - Give farm starter to player")
+						print("  /resetfarm [player] - Reset player's farm completely")
+						print("  /inspectfarm [player] - Detailed farm inspection")
 
 				-- ... your existing commands ...
 

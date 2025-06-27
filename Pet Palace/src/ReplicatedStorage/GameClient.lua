@@ -418,15 +418,35 @@ function GameClient:HandlePlayerDataUpdate(newData)
 		if self.UIManager then self.UIManager:RefreshMenuContent("Crafting") end
 	end
 
-	-- Update planting mode if seeds changed
-	if self.FarmingState.isPlantingMode then
+	-- FIXED: Smart planting mode seed check
+	if self.FarmingState.isPlantingMode and self.FarmingState.selectedSeed then
 		local currentSeeds = newData.farming and newData.farming.inventory or {}
-		local seedCount = currentSeeds[self.FarmingState.selectedSeed] or 0
+		local newSeedCount = currentSeeds[self.FarmingState.selectedSeed] or 0
 
-		if seedCount <= 0 then
-			self:ExitPlantingMode()
-			if self.UIManager then
-				self.UIManager:ShowNotification("Out of Seeds", "You ran out of " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. "!", "warning")
+		-- Get old seed count for comparison
+		local oldSeeds = oldData and oldData.farming and oldData.farming.inventory or {}
+		local oldSeedCount = oldSeeds[self.FarmingState.selectedSeed] or 0
+
+		-- Only show "out of seeds" if:
+		-- 1. We have 0 seeds now, AND
+		-- 2. We had 0 seeds before (meaning no successful planting just happened)
+		-- This prevents the error when successfully planting the last seed
+		if newSeedCount <= 0 then
+			if oldSeedCount <= 0 then
+				-- We already had no seeds and still have no seeds - this is a real "no seeds" situation
+				self:ExitPlantingMode()
+				if self.UIManager then
+					self.UIManager:ShowNotification("Out of Seeds", 
+						"You don't have any " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. " to plant!", "warning")
+				end
+			else
+				-- We had seeds before but now have 0 - this means we just planted our last seed successfully
+				-- Don't show error, but do exit planting mode
+				self:ExitPlantingMode()
+				if self.UIManager then
+					self.UIManager:ShowNotification("Last Seed Planted", 
+						"You planted your last " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. "! Buy more seeds to continue planting.", "info")
+				end
 			end
 		end
 	end
