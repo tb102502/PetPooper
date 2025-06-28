@@ -77,58 +77,6 @@ local function hasPlayerSeenInstructions(player)
 	return false
 end
 
--- Give new player completion bonus
-local function giveNewPlayerBonus(player)
-	print("InstructionSupport: Giving new player bonus to " .. player.Name)
-
-	-- Give starter bonus if GameCore is available
-	if GameCore then
-		pcall(function()
-			-- Give starting coins
-			local playerData = GameCore:GetPlayerData(player) or {}
-			if not playerData.farming then
-				playerData.farming = {coins = 0}
-			end
-
-			-- Bonus coins for completing tutorial
-			playerData.farming.coins = (playerData.farming.coins or 0) + 500
-
-			-- Give starter seeds
-			if not playerData.farming.inventory then
-				playerData.farming.inventory = {}
-			end
-			playerData.farming.inventory.wheat_seeds = (playerData.farming.inventory.wheat_seeds or 0) + 5
-
-			-- Save the data
-			GameCore:SavePlayerData(player, playerData)
-
-			-- Notify player
-			if GameCore.SendNotification then
-				GameCore:SendNotification(player, "🎉 Tutorial Complete!", 
-					"You earned 500 coins and 5 wheat seeds for completing the tutorial!", "success")
-			end
-
-			-- Update player data on client
-			if GameCore.RemoteEvents and GameCore.RemoteEvents.PlayerDataUpdated then
-				GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-			end
-		end)
-	else
-		-- Fallback notification
-		print("InstructionSupport: GameCore not available, using basic notification")
-
-		pcall(function()
-			local ReplicatedStorage = game:GetService("ReplicatedStorage")
-			local notifyEvent = ReplicatedStorage:FindFirstChild("SendNotification")
-			if notifyEvent then
-				notifyEvent:FireClient(player, "🎉 Tutorial Complete!", 
-					"Welcome to Farm Defense! You're ready to start farming!", "success")
-				giveNewPlayerBonus(player)	
-			end
-		end)
-	end
-end
-
 -- Remote event handlers
 markInstructionsRead.OnServerEvent:Connect(function(player)
 	markPlayerInstructionsRead(player)
@@ -247,7 +195,6 @@ end)
 print("=== INSTRUCTION SUPPORT SYSTEM READY ===")
 print("Features:")
 print("✅ Tracks instruction completion per player")
-print("✅ Gives new player bonuses")
 print("✅ Integrates with GameCore save system")
 print("✅ Admin commands for management")
 print("")
@@ -256,7 +203,4 @@ print("  /resetinstructions [player] - Reset instruction status")
 print("  /instructionstats - Show completion statistics")
 print("  /forceinstructions [player] - Force show instructions")
 print("")
-print("New Player Bonus:")
-print("  💰 500 starting coins")
-print("  🌾 5 wheat seeds")
 print("  🎉 Welcome notification")

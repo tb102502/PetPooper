@@ -476,15 +476,15 @@ ItemConfig.ShopItems = {
 
 	farm_plot_starter = {
 		id = "farm_plot_starter",
-		name = "🌾 Your First Farm Plot",
-		description = "🎯 ESSENTIAL PURCHASE! Start your farming journey!\n\n🎁 Includes FREE starter package:\n• 5x Carrot Seeds\n• 3x Corn Seeds\n• Access to entire farming system\n\n🌾 This unlocks everything - buy this first!",
+		name = "🌾 Your Farm Plot",
+		description = "🎯 ESSENTIAL PURCHASE! Start your farming journey!\n\n🎁 Get a complete 10x10 farming grid:\n• 100 planting spots (all unlocked!)\n• FREE starter package:\n  - 5x Carrot Seeds\n  - 3x Corn Seeds\n• Access to entire farming system\n\n🌾 This unlocks everything - buy this first!",
 		price = 100,
 		currency = "coins",
 		category = "farm",
 		icon = "🌾",
 		maxQuantity = 1,
 		type = "farmPlot",
-		purchaseOrder = 1, -- MUST be first farm purchase
+		purchaseOrder = 1, -- FIRST and ONLY farm purchase needed
 		effects = {
 			enableFarming = true,
 			starterSeeds = {
@@ -493,21 +493,6 @@ ItemConfig.ShopItems = {
 			}
 		}
 	},
-
-	farm_plot_expansion = {
-		id = "farm_plot_expansion",
-		name = "🚜 Farm Plot Expansion",
-		description = "Expand your farming empire! More plots = more crops = more profit!\n\n📈 Benefits:\n• +9 planting spots per plot\n• Increase total farming capacity\n• Support up to 10 plots maximum\n\n🚜 Essential for scaling your operation!",
-		price = 1000,
-		currency = "coins",
-		category = "farm",
-		icon = "🚜",
-		maxQuantity = 9,
-		type = "farmPlot",
-		purchaseOrder = 2, -- After getting started
-		requiresPurchase = "farm_plot_starter"
-	},
-
 	-- ========== DEFENSE CATEGORY (Pest Control & Protection) ==========
 
 	organic_pesticide = {
@@ -887,39 +872,6 @@ ItemConfig.ShopItems = {
 		}
 	},
 
-	pasture_expansion_1 = {
-		id = "pasture_expansion_1",
-		name = "🌿 Pasture Expansion I",
-		description = "Expand your cow capacity!\n\n📈 Capacity Benefits:\n• +2 cow slots\n• Better grazing areas\n• Permanent upgrade\n• Total capacity: 7 cows\n\n🌿 Room to grow!",
-		price = 2000,
-		currency = "coins",
-		category = "farm",
-		icon = "🌿",
-		maxQuantity = 1,
-		type = "upgrade",
-		purchaseOrder = 12, -- Capacity upgrade
-		effects = {
-			maxCowIncrease = 2
-		}
-	},
-
-	pasture_expansion_2 = {
-		id = "pasture_expansion_2", 
-		name = "🌿 Pasture Expansion II",
-		description = "Further expand your dairy operation!\n\n📈 Enhanced Capacity:\n• +3 additional cow slots\n• Premium grazing areas\n• Professional setup\n• Total capacity: 10 cows\n\n🌿 Serious dairy farming!",
-		price = 5000,
-		currency = "coins",
-		category = "farm",
-		icon = "🌿",
-		maxQuantity = 1,
-		type = "upgrade",
-		purchaseOrder = 13, -- More capacity
-		requiresPurchase = "pasture_expansion_1",
-		effects = {
-			maxCowIncrease = 3
-		}
-	},
-
 	rainbow_cow_upgrade = {
 		id = "rainbow_cow_upgrade",
 		name = "🌈 Rainbow Cow Upgrade", 
@@ -941,22 +893,6 @@ ItemConfig.ShopItems = {
 		}
 	},
 
-	mega_pasture = {
-		id = "mega_pasture",
-		name = "🏆 Mega Pasture",
-		description = "🏆 ULTIMATE CAPACITY EXPANSION 🏆\nThe largest possible dairy operation!\n\n📈 Ultimate Capacity:\n• +5 cow slots\n• Luxury grazing areas\n• Premium facilities\n• Total capacity: 15 cows\n\n🏆 Dairy empire achieved!",
-		price = 500,
-		currency = "farmTokens",
-		category = "farm",
-		icon = "🏆", 
-		maxQuantity = 1,
-		type = "upgrade",
-		purchaseOrder = 15, -- Ultimate capacity
-		requiresPurchase = "pasture_expansion_2",
-		effects = {
-			maxCowIncrease = 5
-		}
-	},
 
 	cosmic_cow_upgrade = {
 		id = "cosmic_cow_upgrade",
@@ -1163,106 +1099,8 @@ ItemConfig.ShopItems = {
 		maxQuantity = 20,
 		type = "tool",
 		purchaseOrder = 17 -- Utility tool
-	},
-ExpansionShopItems = {
-		farm_expansion_level_2 = {
-			id = "farm_expansion_level_2",
-			name = "Small Farm Expansion",
-			description = "Expand your farm to 5x5 grid (25 planting spots)",
-			price = 5000,
-			currency = "coins",
-			category = "Farm Expansions",
-			icon = "🌾",
-			purchaseLimit = 1,
-			requirements = {
-				expansionLevel = 1, -- Must be level 1 to buy level 2
-				farmPlotStarter = true -- Must have initial farm
-			},
-			effects = {
-				type = "farm_expansion",
-				targetLevel = 2,
-				unlocksSpots = 16 -- 25 - 9 = 16 new spots
-			},
-			shopDisplay = {
-				featured = true,
-				order = 1
-			}
-		},
-
-		farm_expansion_level_3 = {
-			id = "farm_expansion_level_3",
-			name = "Medium Farm Expansion",
-			description = "Expand your farm to 7x7 grid (49 planting spots)",
-			price = 15000,
-			currency = "coins",
-			category = "Farm Expansions", 
-			icon = "🏡",
-			purchaseLimit = 1,
-			requirements = {
-				expansionLevel = 2,
-				farmPlotStarter = true
-			},
-			effects = {
-				type = "farm_expansion",
-				targetLevel = 3,
-				unlocksSpots = 24 -- 49 - 25 = 24 new spots
-			},
-			shopDisplay = {
-				featured = true,
-				order = 2
-			}
-		},
-
-		farm_expansion_level_4 = {
-			id = "farm_expansion_level_4",
-			name = "Large Farm Expansion",
-			description = "Expand your farm to 9x9 grid (81 planting spots)",
-			price = 35000,
-			currency = "coins",
-			category = "Farm Expansions",
-			icon = "🏞️",
-			purchaseLimit = 1,
-			requirements = {
-				expansionLevel = 3,
-				farmPlotStarter = true
-			},
-			effects = {
-				type = "farm_expansion",
-				targetLevel = 4,
-				unlocksSpots = 32 // 81 - 49
-			},
-			shopDisplay = {
-				featured = true,
-				order = 3
-			}
-		},
-
-		farm_expansion_level_5 = {
-			id = "farm_expansion_level_5",
-			name = "Mega Farm Expansion",
-			description = "Expand your farm to ultimate 11x11 grid (121 planting spots)",
-			price = 75000,
-			currency = "coins",
-			category = "Farm Expansions",
-			icon = "🏰",
-			purchaseLimit = 1,
-			requirements = {
-				expansionLevel = 4,
-				farmPlotStarter = true
-			},
-			effects = {
-				type = "farm_expansion",
-				targetLevel = 5,
-				unlocksSpots = 40 // 121 - 81
-			},
-			shopDisplay = {
-				featured = true,
-				order = 4,
-				highlight = "ULTIMATE"
-			}
-		}
 	}
-	}
+}
 -- ========== RARITY FUNCTIONS ==========
 
 function ItemConfig.GetCropRarity(seedId, playerBoosters)
@@ -1484,6 +1322,18 @@ end
 
 -- ========== PURCHASE ORDER DEBUGGING ==========
 
+function ItemConfig.GetExpansionConfig(level)
+	-- Return simple config for compatibility
+	return {
+		name = "Simple Farm",
+		gridSize = 10,
+		totalSpots = 100,
+		baseSize = Vector3.new(60, 1, 60),
+		cost = 0,
+		description = "Full 10x10 farming grid (100 planting spots)"
+	}
+end
+
 function ItemConfig.DebugPurchaseOrder(category)
 	print("=== PURCHASE ORDER DEBUG for " .. (category or "ALL") .. " ===")
 
@@ -1512,14 +1362,16 @@ function ItemConfig.DebugPurchaseOrder(category)
 		print(i .. ". " .. orderInfo .. " " .. item.name .. " - " .. item.price .. " " .. item.currency)
 	end
 
+	print("🌾 SIMPLIFIED: Farm expansion items removed - only starter plot needed!")
 	print("========================================")
 end
 
-print("✅ REORDERED ItemConfig loaded with logical purchase progression!")
+print("✅ SIMPLIFIED ItemConfig loaded - no expansion system!")
 print("📦 Total shop items: " .. (function() local count = 0; for _ in pairs(ItemConfig.ShopItems) do count = count + 1 end return count end)())
+print("🌾 Farm system: SIMPLIFIED - One purchase gives full 10x10 grid")
 print("⛏️ Mining ores: " .. ItemConfig.CountOresByCategory())
 print("🔨 Mining tools: " .. ItemConfig.CountToolsByCategory())
-print("🎯 Categories with purchase order:")
+print("🎯 Categories available:")
 local counts = ItemConfig.CountItemsByCategory()
 for category, count in pairs(counts) do
 	print("  " .. category .. ": " .. count .. " items")
@@ -1532,5 +1384,11 @@ print("")
 print("🔧 DEBUG COMMANDS:")
 print("  ItemConfig.DebugPurchaseOrder() - Show all items ordered")
 print("  ItemConfig.DebugPurchaseOrder('seeds') - Show specific category")
+print("")
+print("🚫 REMOVED FEATURES:")
+print("  ❌ Farm expansion levels (2-5)")
+print("  ❌ Plot unlocking system")
+print("  ❌ Expansion costs and requirements")
+print("  ✅ Now: Single purchase = Full 10x10 grid!")
 
 return ItemConfig

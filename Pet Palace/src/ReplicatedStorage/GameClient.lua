@@ -1101,10 +1101,6 @@ function GameClient:GetItemDisplayName(itemId)
 		guinea_egg = "Guinea Fowl Eggs",
 		rooster_egg = "Rooster Eggs",
 
-		-- Farm items
-		farm_plot_starter = "Your First Farm Plot",
-		farm_plot_expansion = "Farm Plot Expansion",
-
 		-- Defense items
 		basic_chicken = "Basic Chicken",
 		guinea_fowl = "Guinea Fowl",

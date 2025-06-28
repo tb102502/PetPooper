@@ -33,62 +33,22 @@ if not remoteFolder then
 end
 
 -- FARM PLOT POSITION CONFIGURATION
-GameCore.ExpandableFarmConfig = {
+GameCore.SimpleFarmConfig = {
 	basePosition = Vector3.new(-366.118, -2.793, 75.731),
-	playerSeparation = Vector3.new(150, 0, 0), -- Increased for larger plots
+	playerSeparation = Vector3.new(150, 0, 0),
 	plotRotation = Vector3.new(0, 0, 0),
 
-	-- Expansion levels configuration
-	expansionLevels = {
-		[1] = {
-			name = "Starter Plot",
-			gridSize = 3,      -- 3x3 grid = 9 spots
-			totalSpots = 9,
-			baseSize = Vector3.new(20, 1, 20),
-			cost = 0,          -- Free starter
-			description = "Basic 3x3 farming plot"
-		},
-		[2] = {
-			name = "Small Farm",
-			gridSize = 5,      -- 5x5 grid = 25 spots
-			totalSpots = 25,
-			baseSize = Vector3.new(32, 1, 32),
-			cost = 5000,
-			description = "Expanded 5x5 farming area"
-		},
-		[3] = {
-			name = "Medium Farm",
-			gridSize = 7,      -- 7x7 grid = 49 spots
-			totalSpots = 49,
-			baseSize = Vector3.new(44, 1, 44),
-			cost = 15000,
-			description = "Large 7x7 farming complex"
-		},
-		[4] = {
-			name = "Large Farm",
-			gridSize = 9,      -- 9x9 grid = 81 spots
-			totalSpots = 81,
-			baseSize = Vector3.new(56, 1, 56),
-			cost = 35000,
-			description = "Massive 9x9 agricultural zone"
-		},
-		[5] = {
-			name = "Mega Farm",
-			gridSize = 11,     -- 11x11 grid = 121 spots
-			totalSpots = 121,
-			baseSize = Vector3.new(68, 1, 68),
-			cost = 75000,
-			description = "Ultimate 11x11 farming empire"
-		}
-	},
+	-- Single configuration - always 10x10 grid
+	gridSize = 10,      -- 10x10 grid = 100 spots
+	totalSpots = 100,
+	baseSize = Vector3.new(60, 1, 60),
+	description = "Full 10x10 farming grid (100 planting spots)",
 
 	-- Visual settings
 	spotSize = 3,
 	spotSpacing = 5,
-	lockedSpotColor = Color3.fromRGB(100, 100, 100),
-	unlockedSpotColor = Color3.fromRGB(91, 154, 76),
-	lockedSpotTransparency = 0.6,
-	unlockedSpotTransparency = 0
+	spotColor = Color3.fromRGB(91, 154, 76),
+	spotTransparency = 0
 }
 
 -- Core Data Management
@@ -402,25 +362,9 @@ end
 
 -- ========== EXPANDABLE FARM PLOT SYSTEM ==========
 
--- Get player's current expansion level
-function GameCore:GetPlayerExpansionLevel(player)
-	local playerData = self:GetPlayerData(player)
-	if not playerData or not playerData.farming then
-		return 1 -- Default to starter level
-	end
-
-	return playerData.farming.expansionLevel or 1
-end
-
--- Get expansion level configuration
-function GameCore:GetExpansionConfig(level)
-	return self.ExpandableFarmConfig.expansionLevels[level] or self.ExpandableFarmConfig.expansionLevels[1]
-end
-
--- Calculate expandable farm position
-function GameCore:GetExpandableFarmPosition(player)
-	if not self.ExpandableFarmConfig then
-		warn("GameCore: ExpandableFarmConfig not initialized!")
+function GameCore:GetSimpleFarmPosition(player)
+	if not self.SimpleFarmConfig then
+		warn("GameCore: SimpleFarmConfig not initialized!")
 		return CFrame.new(0, 0, 0)
 	end
 
@@ -440,11 +384,11 @@ function GameCore:GetExpandableFarmPosition(player)
 	end
 
 	-- Calculate position
-	local basePos = self.ExpandableFarmConfig.basePosition
-	local playerOffset = self.ExpandableFarmConfig.playerSeparation * playerIndex
+	local basePos = self.SimpleFarmConfig.basePosition
+	local playerOffset = self.SimpleFarmConfig.playerSeparation * playerIndex
 	local finalPosition = basePos + playerOffset
 
-	local rotation = self.ExpandableFarmConfig.plotRotation
+	local rotation = self.SimpleFarmConfig.plotRotation
 	local cframe = CFrame.new(finalPosition) * CFrame.Angles(
 		math.rad(rotation.X), 
 		math.rad(rotation.Y), 
@@ -454,9 +398,9 @@ function GameCore:GetExpandableFarmPosition(player)
 	return cframe
 end
 
--- Create expandable farm plot for player
-function GameCore:CreateExpandableFarmPlot(player)
-	print("GameCore: Creating expandable farm plot for " .. player.Name)
+-- Create simple farm plot for player (always 10x10)
+function GameCore:CreateSimpleFarmPlot(player)
+	print("GameCore: Creating simple 10x10 farm plot for " .. player.Name)
 
 	local playerData = self:GetPlayerData(player)
 	if not playerData then
@@ -467,18 +411,11 @@ function GameCore:CreateExpandableFarmPlot(player)
 	-- Initialize farming data if needed
 	if not playerData.farming then
 		playerData.farming = {
-			expansionLevel = 1,
-			unlockedSpots = {},
 			inventory = {}
 		}
 	end
-	if not playerData.farming.expansionLevel then
-		playerData.farming.expansionLevel = 1
-	end
 
-	local expansionLevel = playerData.farming.expansionLevel
-	local config = self:GetExpansionConfig(expansionLevel)
-	local plotCFrame = self:GetExpandableFarmPosition(player)
+	local plotCFrame = self:GetSimpleFarmPosition(player)
 
 	-- Find or create the farm area structure
 	local areas = workspace:FindFirstChild("Areas")
@@ -502,118 +439,73 @@ function GameCore:CreateExpandableFarmPlot(player)
 		farmArea.Parent = starterMeadow
 	end
 
-	-- Create/update player-specific expandable farm
-	local playerFarmName = player.Name .. "_ExpandableFarm"
+	-- Create/update player-specific simple farm
+	local playerFarmName = player.Name .. "_SimpleFarm"
 	local playerFarm = farmArea:FindFirstChild(playerFarmName)
 
 	if playerFarm then
-		-- Update existing farm
-		return self:UpdateExpandableFarmPlot(player, playerFarm, expansionLevel, plotCFrame)
+		-- Farm already exists, just ensure it's correct
+		print("GameCore: Farm already exists for " .. player.Name)
+		return true
 	else
-		-- Create new expandable farm
-		return self:CreateNewExpandableFarmPlot(player, farmArea, playerFarmName, expansionLevel, plotCFrame)
+		-- Create new simple farm
+		return self:CreateNewSimpleFarmPlot(player, farmArea, playerFarmName, plotCFrame)
 	end
 end
 
--- Create new expandable farm plot
-function GameCore:CreateNewExpandableFarmPlot(player, farmArea, farmName, expansionLevel, plotCFrame)
-	print("GameCore: Creating new expandable farm for " .. player.Name .. " at level " .. expansionLevel)
+-- Create new simple farm plot (always 10x10, all unlocked)
+function GameCore:CreateNewSimpleFarmPlot(player, farmArea, farmName, plotCFrame)
+	print("GameCore: Creating new simple farm for " .. player.Name)
 
-	local config = self:GetExpansionConfig(expansionLevel)
+	local config = self.SimpleFarmConfig
 
-	-- Create the expandable farm model
-	local expandableFarm = Instance.new("Model")
-	expandableFarm.Name = farmName
-	expandableFarm.Parent = farmArea
+	-- Create the simple farm model
+	local simpleFarm = Instance.new("Model")
+	simpleFarm.Name = farmName
+	simpleFarm.Parent = farmArea
 
-	-- Create the main base platform (shows full potential size)
-	local maxConfig = self:GetExpansionConfig(5) -- Max level
+	-- Create the main base platform
 	local basePart = Instance.new("Part")
 	basePart.Name = "BasePart"
-	basePart.Size = maxConfig.baseSize
+	basePart.Size = config.baseSize
 	basePart.Material = Enum.Material.Ground
 	basePart.Color = Color3.fromRGB(101, 67, 33)
 	basePart.Anchored = true
 	basePart.CFrame = plotCFrame
-	basePart.Parent = expandableFarm
+	basePart.Parent = simpleFarm
 
-	expandableFarm.PrimaryPart = basePart
+	simpleFarm.PrimaryPart = basePart
 
-	-- Create expansion indicator (shows current boundaries)
-	self:CreateExpansionIndicator(expandableFarm, plotCFrame, config)
-
-	-- Create all possible planting spots (max grid), but lock/unlock based on level
+	-- Create all planting spots (10x10 grid, all unlocked)
 	local plantingSpots = Instance.new("Folder")
 	plantingSpots.Name = "PlantingSpots"
-	plantingSpots.Parent = expandableFarm
+	plantingSpots.Parent = simpleFarm
 
-	self:CreateExpandablePlantingGrid(player, expandableFarm, plantingSpots, plotCFrame, expansionLevel)
+	self:CreateSimplePlantingGrid(player, simpleFarm, plantingSpots, plotCFrame)
 
-	-- Create expansion border and info
-	self:CreateExpansionBorder(expandableFarm, plotCFrame, config)
-	self:CreateExpansionInfoSign(expandableFarm, plotCFrame, player, expansionLevel)
+	-- Create border and info sign
+	self:CreateSimpleBorder(simpleFarm, plotCFrame, config)
+	self:CreateSimpleInfoSign(simpleFarm, plotCFrame, player)
 
-	print("GameCore: Created expandable farm for " .. player.Name .. " with " .. config.totalSpots .. " total spots")
+	print("GameCore: Created simple farm for " .. player.Name .. " with " .. config.totalSpots .. " unlocked spots")
 	return true
 end
 
--- Update existing expandable farm plot
-function GameCore:UpdateExpandableFarmPlot(player, farmModel, expansionLevel, plotCFrame)
-	print("GameCore: Updating expandable farm for " .. player.Name .. " to level " .. expansionLevel)
-
-	local config = self:GetExpansionConfig(expansionLevel)
-
-	-- Update expansion indicator
-	local indicator = farmModel:FindFirstChild("ExpansionIndicator")
-	if indicator then
-		indicator:Destroy()
-	end
-	self:CreateExpansionIndicator(farmModel, plotCFrame, config)
-
-	-- Update planting spots availability
-	local plantingSpots = farmModel:FindFirstChild("PlantingSpots")
-	if plantingSpots then
-		self:UpdatePlantingSpotAvailability(plantingSpots, expansionLevel)
-	else
-		-- Create new planting spots if missing
-		plantingSpots = Instance.new("Folder")
-		plantingSpots.Name = "PlantingSpots"
-		plantingSpots.Parent = farmModel
-		self:CreateExpandablePlantingGrid(player, farmModel, plantingSpots, plotCFrame, expansionLevel)
-	end
-
-	-- Update border and info sign
-	local border = farmModel:FindFirstChild("ExpansionBorder")
-	if border then border:Destroy() end
-	self:CreateExpansionBorder(farmModel, plotCFrame, config)
-
-	local infoSign = farmModel:FindFirstChild("InfoSign")
-	if infoSign then infoSign:Destroy() end
-	self:CreateExpansionInfoSign(farmModel, plotCFrame, player, expansionLevel)
-
-	return true
-end
-
--- Create expandable planting grid (all spots, locked/unlocked based on level)
-function GameCore:CreateExpandablePlantingGrid(player, farmModel, plantingSpots, plotCFrame, expansionLevel)
-	local config = self:GetExpansionConfig(expansionLevel)
-	local maxConfig = self:GetExpansionConfig(5) -- Always create max grid
-	local maxGridSize = maxConfig.gridSize
-
-	local spotSize = self.ExpandableFarmConfig.spotSize
-	local spacing = self.ExpandableFarmConfig.spotSpacing
+-- Create simple planting grid (10x10, all unlocked)
+function GameCore:CreateSimplePlantingGrid(player, farmModel, plantingSpots, plotCFrame)
+	local config = self.SimpleFarmConfig
+	local gridSize = config.gridSize
+	local spotSize = config.spotSize
+	local spacing = config.spotSpacing
 
 	-- Calculate grid offset to center it
-	local gridOffset = (maxGridSize - 1) * spacing / 2
+	local gridOffset = (gridSize - 1) * spacing / 2
 
 	local spotIndex = 0
-	for row = 1, maxGridSize do
-		for col = 1, maxGridSize do
+	for row = 1, gridSize do
+		for col = 1, gridSize do
 			spotIndex = spotIndex + 1
 			local spotName = "PlantingSpot_" .. spotIndex
-
-			-- Calculate if this spot should be unlocked
-			local isUnlocked = self:IsSpotUnlockedAtLevel(row, col, config.gridSize, maxGridSize)
 
 			local spotModel = Instance.new("Model")
 			spotModel.Name = spotName
@@ -633,308 +525,51 @@ function GameCore:CreateExpandablePlantingGrid(player, farmModel, plantingSpots,
 
 			spotModel.PrimaryPart = spotPart
 
-			-- Set spot attributes
+			-- Set spot attributes (all spots are unlocked and empty)
 			spotModel:SetAttribute("IsEmpty", true)
 			spotModel:SetAttribute("PlantType", "")
 			spotModel:SetAttribute("SeedType", "")
 			spotModel:SetAttribute("GrowthStage", 0)
 			spotModel:SetAttribute("PlantedTime", 0)
 			spotModel:SetAttribute("Rarity", "common")
-			spotModel:SetAttribute("IsUnlocked", isUnlocked)
+			spotModel:SetAttribute("IsUnlocked", true)  -- All spots always unlocked
 			spotModel:SetAttribute("GridRow", row)
 			spotModel:SetAttribute("GridCol", col)
 
-			-- Visual styling based on locked/unlocked state
-			if isUnlocked then
-				spotPart.Color = self.ExpandableFarmConfig.unlockedSpotColor
-				spotPart.Transparency = self.ExpandableFarmConfig.unlockedSpotTransparency
+			-- All spots get unlocked styling
+			spotPart.Color = config.spotColor
+			spotPart.Transparency = config.spotTransparency
 
-				-- Create interaction indicator for unlocked spots
-				local indicator = Instance.new("Part")
-				indicator.Name = "Indicator"
-				indicator.Size = Vector3.new(0.5, 2, 0.5)
-				indicator.Material = Enum.Material.Neon
-				indicator.Color = Color3.fromRGB(100, 255, 100)
-				indicator.Anchored = true
-				indicator.CFrame = spotPart.CFrame + Vector3.new(0, 1.5, 0)
-				indicator.Parent = spotModel
+			-- Create interaction indicator for all spots
+			local indicator = Instance.new("Part")
+			indicator.Name = "Indicator"
+			indicator.Size = Vector3.new(0.5, 2, 0.5)
+			indicator.Material = Enum.Material.Neon
+			indicator.Color = Color3.fromRGB(100, 255, 100)
+			indicator.Anchored = true
+			indicator.CFrame = spotPart.CFrame + Vector3.new(0, 1.5, 0)
+			indicator.Parent = spotModel
 
-				-- Add click detector for unlocked spots
-				local clickDetector = Instance.new("ClickDetector")
-				clickDetector.MaxActivationDistance = 10
-				clickDetector.Parent = spotPart
+			-- Add click detector for all spots
+			local clickDetector = Instance.new("ClickDetector")
+			clickDetector.MaxActivationDistance = 10
+			clickDetector.Parent = spotPart
 
-				clickDetector.MouseClick:Connect(function(clickingPlayer)
-					if clickingPlayer.UserId == player.UserId then
-						self:HandlePlotClick(clickingPlayer, spotModel)
-					end
-				end)
-			else
-				-- Locked spot styling
-				spotPart.Color = self.ExpandableFarmConfig.lockedSpotColor
-				spotPart.Transparency = self.ExpandableFarmConfig.lockedSpotTransparency
-
-				-- Create lock indicator
-				local lockIndicator = Instance.new("Part")
-				lockIndicator.Name = "LockIndicator"
-				lockIndicator.Size = Vector3.new(0.8, 0.8, 0.8)
-				lockIndicator.Material = Enum.Material.Neon
-				lockIndicator.Color = Color3.fromRGB(255, 100, 100)
-				lockIndicator.Shape = Enum.PartType.Ball
-				lockIndicator.Anchored = true
-				lockIndicator.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
-				lockIndicator.Parent = spotModel
-
-				-- Add click detector to show upgrade message
-				local clickDetector = Instance.new("ClickDetector")
-				clickDetector.MaxActivationDistance = 10
-				clickDetector.Parent = spotPart
-
-				clickDetector.MouseClick:Connect(function(clickingPlayer)
-					if clickingPlayer.UserId == player.UserId then
-						self:HandleLockedSpotClick(clickingPlayer, expansionLevel)
-					end
-				end)
-			end
+			clickDetector.MouseClick:Connect(function(clickingPlayer)
+				if clickingPlayer.UserId == player.UserId then
+					self:HandleSimplePlotClick(clickingPlayer, spotModel)
+				end
+			end)
 		end
 	end
+
+	print("GameCore: Created " .. spotIndex .. " unlocked planting spots in 10x10 grid")
 end
 
--- Check if a spot should be unlocked at the given expansion level
-function GameCore:IsSpotUnlockedAtLevel(row, col, currentGridSize, maxGridSize)
-	-- Calculate center of the max grid
-	local center = math.ceil(maxGridSize / 2)
-
-	-- Calculate current grid boundaries from center
-	local halfGrid = math.floor(currentGridSize / 2)
-	local minPos = center - halfGrid
-	local maxPos = center + halfGrid
-
-	-- Check if this spot is within the current grid boundaries
-	return row >= minPos and row <= maxPos and col >= minPos and col <= maxPos
-end
-
--- Update planting spot availability based on new expansion level
-function GameCore:UpdatePlantingSpotAvailability(plantingSpots, newExpansionLevel)
-	local config = self:GetExpansionConfig(newExpansionLevel)
-	local maxConfig = self:GetExpansionConfig(5)
-
-	print("GameCore: Updating spot availability for expansion level " .. newExpansionLevel)
-
-	for _, spot in pairs(plantingSpots:GetChildren()) do
-		if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
-			local row = spot:GetAttribute("GridRow") or 1
-			local col = spot:GetAttribute("GridCol") or 1
-
-			local shouldBeUnlocked = self:IsSpotUnlockedAtLevel(row, col, config.gridSize, maxConfig.gridSize)
-			local currentlyUnlocked = spot:GetAttribute("IsUnlocked") or false
-
-			if shouldBeUnlocked and not currentlyUnlocked then
-				-- Unlock this spot
-				self:UnlockPlantingSpot(spot)
-			elseif not shouldBeUnlocked and currentlyUnlocked then
-				-- Lock this spot (shouldn't normally happen, but for safety)
-				self:LockPlantingSpot(spot)
-			end
-		end
-	end
-end
-
--- Unlock a planting spot
-function GameCore:UnlockPlantingSpot(spotModel)
-	spotModel:SetAttribute("IsUnlocked", true)
-
-	local spotPart = spotModel:FindFirstChild("SpotPart")
-	if spotPart then
-		spotPart.Color = self.ExpandableFarmConfig.unlockedSpotColor
-		spotPart.Transparency = self.ExpandableFarmConfig.unlockedSpotTransparency
-	end
-
-	-- Remove lock indicator
-	local lockIndicator = spotModel:FindFirstChild("LockIndicator")
-	if lockIndicator then
-		lockIndicator:Destroy()
-	end
-
-	-- Add green indicator for unlocked spot
-	local indicator = Instance.new("Part")
-	indicator.Name = "Indicator"
-	indicator.Size = Vector3.new(0.5, 2, 0.5)
-	indicator.Material = Enum.Material.Neon
-	indicator.Color = Color3.fromRGB(100, 255, 100)
-	indicator.Anchored = true
-	indicator.CFrame = spotPart.CFrame + Vector3.new(0, 1.5, 0)
-	indicator.Parent = spotModel
-
-	-- Create unlock effect
-	self:CreateUnlockEffect(spotPart.Position)
-
-	print("GameCore: Unlocked planting spot " .. spotModel.Name)
-end
-
--- Lock a planting spot
-function GameCore:LockPlantingSpot(spotModel)
-	spotModel:SetAttribute("IsUnlocked", false)
-
-	local spotPart = spotModel:FindFirstChild("SpotPart")
-	if spotPart then
-		spotPart.Color = self.ExpandableFarmConfig.lockedSpotColor
-		spotPart.Transparency = self.ExpandableFarmConfig.lockedSpotTransparency
-	end
-
-	-- Remove green indicator
-	local indicator = spotModel:FindFirstChild("Indicator")
-	if indicator then
-		indicator:Destroy()
-	end
-
-	-- Add lock indicator
-	local lockIndicator = Instance.new("Part")
-	lockIndicator.Name = "LockIndicator"
-	lockIndicator.Size = Vector3.new(0.8, 0.8, 0.8)
-	lockIndicator.Material = Enum.Material.Neon
-	lockIndicator.Color = Color3.fromRGB(255, 100, 100)
-	lockIndicator.Shape = Enum.PartType.Ball
-	lockIndicator.Anchored = true
-	lockIndicator.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
-	lockIndicator.Parent = spotModel
-end
-
--- Create unlock effect when new spots become available
-function GameCore:CreateUnlockEffect(position)
-	-- Golden sparkle effect for newly unlocked spots
-	for i = 1, 8 do
-		local sparkle = Instance.new("Part")
-		sparkle.Name = "UnlockSparkle"
-		sparkle.Size = Vector3.new(0.3, 0.3, 0.3)
-		sparkle.Shape = Enum.PartType.Ball
-		sparkle.Material = Enum.Material.Neon
-		sparkle.Color = Color3.fromRGB(255, 215, 0) -- Gold
-		sparkle.CanCollide = false
-		sparkle.Anchored = true
-		sparkle.Position = position + Vector3.new(
-			math.random(-2, 2),
-			math.random(0, 3),
-			math.random(-2, 2)
-		)
-		sparkle.Parent = workspace
-
-		local tween = TweenService:Create(sparkle,
-			TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Position = sparkle.Position + Vector3.new(0, 5, 0),
-				Transparency = 1,
-				Size = Vector3.new(0.1, 0.1, 0.1)
-			}
-		)
-		tween:Play()
-		tween.Completed:Connect(function()
-			sparkle:Destroy()
-		end)
-	end
-end
-
--- Handle click on locked spots
-function GameCore:HandleLockedSpotClick(player, currentLevel)
-	local nextLevel = currentLevel + 1
-	local nextConfig = self:GetExpansionConfig(nextLevel)
-
-	if nextConfig then
-		local cost = nextConfig.cost
-		self:SendNotification(player, "🔒 Locked Area", 
-			"Expand your farm to " .. nextConfig.name .. " for " .. cost .. " coins to unlock this area!", "info")
-	else
-		self:SendNotification(player, "🏆 Max Level", 
-			"Your farm is already at maximum expansion level!", "info")
-	end
-end
-
--- Expand farm to next level
-function GameCore:ExpandFarmToNextLevel(player)
-	local playerData = self:GetPlayerData(player)
-	if not playerData or not playerData.farming then
-		return false, "No farming data found"
-	end
-
-	local currentLevel = playerData.farming.expansionLevel or 1
-	local nextLevel = currentLevel + 1
-	local nextConfig = self:GetExpansionConfig(nextLevel)
-
-	if not nextConfig then
-		return false, "Already at maximum expansion level"
-	end
-
-	-- Check if player can afford expansion
-	local cost = nextConfig.cost
-	if playerData.coins < cost then
-		return false, "Insufficient coins. Need " .. cost .. " coins"
-	end
-
-	-- Deduct cost and update expansion level
-	playerData.coins = playerData.coins - cost
-	playerData.farming.expansionLevel = nextLevel
-
-	-- Update the physical farm plot
-	local success = self:CreateExpandableFarmPlot(player)
-
-	if success then
-		-- Save data and notify
-		self:SavePlayerData(player)
-
-		if self.RemoteEvents.PlayerDataUpdated then
-			self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-		end
-
-		self:SendNotification(player, "🎉 Farm Expanded!", 
-			"Upgraded to " .. nextConfig.name .. "! Unlocked " .. (nextConfig.totalSpots - self:GetExpansionConfig(currentLevel).totalSpots) .. " new planting spots!", "success")
-
-		print("GameCore: Expanded " .. player.Name .. "'s farm from level " .. currentLevel .. " to " .. nextLevel)
-		return true, "Farm expanded successfully"
-	else
-		-- Refund on failure
-		playerData.coins = playerData.coins + cost
-		playerData.farming.expansionLevel = currentLevel
-		return false, "Failed to create expanded farm plot"
-	end
-end
-
--- Create expansion indicator (shows current usable area)
-function GameCore:CreateExpansionIndicator(farmModel, plotCFrame, config)
-	local indicator = Instance.new("Part")
-	indicator.Name = "ExpansionIndicator"
-	indicator.Size = config.baseSize + Vector3.new(0, 0.1, 0)
-	indicator.Material = Enum.Material.Neon
-	indicator.Color = Color3.fromRGB(100, 255, 100)
-	indicator.Transparency = 0.8
-	indicator.CanCollide = false
-	indicator.Anchored = true
-	indicator.CFrame = plotCFrame + Vector3.new(0, 0.5, 0)
-	indicator.Parent = farmModel
-
-	-- Pulsing effect to show active area
-	spawn(function()
-		while indicator and indicator.Parent do
-			local pulseUp = TweenService:Create(indicator,
-				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{Transparency = 0.6}
-			)
-			local pulseDown = TweenService:Create(indicator,
-				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{Transparency = 0.9}
-			)
-
-			pulseUp:Play()
-			pulseUp.Completed:Wait()
-			pulseDown:Play()
-			pulseDown.Completed:Wait()
-		end
-	end)
-end
-
--- Create expansion border
-function GameCore:CreateExpansionBorder(farmModel, plotCFrame, config)
+-- Create simple border
+function GameCore:CreateSimpleBorder(farmModel, plotCFrame, config)
 	local borderContainer = Instance.new("Model")
-	borderContainer.Name = "ExpansionBorder"
+	borderContainer.Name = "SimpleBorder"
 	borderContainer.Parent = farmModel
 
 	local borderHeight = 1
@@ -960,9 +595,9 @@ function GameCore:CreateExpansionBorder(farmModel, plotCFrame, config)
 	end
 end
 
--- Create expansion info sign
-function GameCore:CreateExpansionInfoSign(farmModel, plotCFrame, player, expansionLevel)
-	local config = self:GetExpansionConfig(expansionLevel)
+-- Create simple info sign
+function GameCore:CreateSimpleInfoSign(farmModel, plotCFrame, player)
+	local config = self.SimpleFarmConfig
 
 	local signContainer = Instance.new("Model")
 	signContainer.Name = "InfoSign"
@@ -993,10 +628,10 @@ function GameCore:CreateExpansionInfoSign(farmModel, plotCFrame, player, expansi
 	local textLabel = Instance.new("TextLabel")
 	textLabel.Size = UDim2.new(1, 0, 1, 0)
 	textLabel.BackgroundTransparency = 1
-	textLabel.Text = player.Name .. "'s " .. config.name .. "\n" .. 
+	textLabel.Text = player.Name .. "'s Farm\n" .. 
 		config.gridSize .. "x" .. config.gridSize .. " Grid\n" .. 
 		config.totalSpots .. " Total Spots\n" .. 
-		"Level " .. expansionLevel .. "/5"
+		"All Unlocked!"
 	textLabel.TextColor3 = Color3.new(1, 1, 1)
 	textLabel.TextScaled = true
 	textLabel.Font = Enum.Font.GothamBold
@@ -1005,8 +640,8 @@ function GameCore:CreateExpansionInfoSign(farmModel, plotCFrame, player, expansi
 	textLabel.Parent = surfaceGui
 end
 
--- Get player's expandable farm model
-function GameCore:GetPlayerExpandableFarm(player)
+-- Get player's simple farm model
+function GameCore:GetPlayerSimpleFarm(player)
 	local areas = workspace:FindFirstChild("Areas")
 	if not areas then return nil end
 
@@ -1016,18 +651,17 @@ function GameCore:GetPlayerExpandableFarm(player)
 	local farmArea = starterMeadow:FindFirstChild("Farm")
 	if not farmArea then return nil end
 
-	return farmArea:FindFirstChild(player.Name .. "_ExpandableFarm")
+	return farmArea:FindFirstChild(player.Name .. "_SimpleFarm")
 end
 
--- Enhanced plot click handler for expandable system
-function GameCore:HandlePlotClick(player, spotModel)
+-- Simple plot click handler
+function GameCore:HandleSimplePlotClick(player, spotModel)
 	local isEmpty = spotModel:GetAttribute("IsEmpty")
 	local isUnlocked = spotModel:GetAttribute("IsUnlocked")
 
+	-- All spots should be unlocked in simple system
 	if not isUnlocked then
-		local playerData = self:GetPlayerData(player)
-		local currentLevel = playerData and playerData.farming and playerData.farming.expansionLevel or 1
-		self:HandleLockedSpotClick(player, currentLevel)
+		self:SendNotification(player, "Error", "This spot should be unlocked! Please report this bug.", "error")
 		return
 	end
 
@@ -1042,7 +676,7 @@ function GameCore:HandlePlotClick(player, spotModel)
 		return
 	end
 
-	local plotOwner = self:GetExpandablePlotOwner(spotModel)
+	local plotOwner = self:GetSimplePlotOwner(spotModel)
 	if plotOwner ~= player.Name then
 		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
 		return
@@ -1070,34 +704,177 @@ function GameCore:HandlePlotClick(player, spotModel)
 	self.RemoteEvents.PlantSeed:FireClient(player, spotModel)
 end
 
--- Get expandable plot owner
-function GameCore:GetExpandablePlotOwner(spotModel)
+-- Get simple plot owner
+function GameCore:GetSimplePlotOwner(spotModel)
 	local parent = spotModel.Parent
 	local attempts = 0
 
 	while parent and parent.Parent and attempts < 10 do
 		attempts = attempts + 1
 
-		if parent.Name:find("_ExpandableFarm") then
-			return parent.Name:gsub("_ExpandableFarm", "")
+		if parent.Name:find("_SimpleFarm") then
+			return parent.Name:gsub("_SimpleFarm", "")
 		end
 
 		parent = parent.Parent
 	end
 
-	warn("GameCore: Could not determine expandable plot owner for " .. spotModel.Name)
+	warn("GameCore: Could not determine simple plot owner for " .. spotModel.Name)
 	return nil
 end
 
-print("GameCore: ✅ Expandable Farm Plot System loaded!")
-print("🌱 NEW FEATURES:")
-print("  📏 Single expandable plot system (3x3 → 11x11)")
-print("  🔓 Progressive unlocking of planting spots")
-print("  💰 Expansion costs and level progression")
-print("  🎨 Visual locked/unlocked area indicators")
-print("  ✨ Unlock effects and smooth transitions")
-print("  📊 Enhanced info signs and borders")
+-- ========== UPDATE EXISTING METHODS ==========
 
+-- Replace the old expandable farm creation with simple farm creation
+function GameCore:CreateExpandableFarmPlot(player)
+	return self:CreateSimpleFarmPlot(player)
+end
+
+function GameCore:GetPlayerExpandableFarm(player)
+	return self:GetPlayerSimpleFarm(player)
+end
+
+function GameCore:GetPlotOwner(plotModel)
+	-- Try simple farm first
+	local simpleOwner = self:GetSimplePlotOwner(plotModel)
+	if simpleOwner then
+		return simpleOwner
+	end
+
+	-- Fallback for any remaining old-style plots
+	local parent = plotModel.Parent
+	local attempts = 0
+
+	while parent and parent.Parent and attempts < 10 do
+		attempts = attempts + 1
+
+		if parent.Name:find("_Farm") then
+			return parent.Name:gsub("_Farm", "")
+		end
+
+		parent = parent.Parent
+	end
+
+	warn("GameCore: Could not determine plot owner for " .. plotModel.Name)
+	return nil
+end
+
+-- ========== SIMPLIFIED FARM PLOT CREATION METHOD ==========
+
+function GameCore:CreatePlayerFarmPlot(player, totalPlots)
+	print("🌾 GameCore: Creating simple farm plot for " .. player.Name)
+	return self:CreateSimpleFarmPlot(player)
+end
+
+-- ========== SIMPLIFIED FARM PLOT PURCHASE ==========
+
+function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
+	print("🌾 GameCore: Simplified ProcessFarmPlotPurchase for " .. player.Name)
+
+	-- Handle farm plot starter (first-time farm creation)
+	if item.id == "farm_plot_starter" then
+		print("🌾 Processing farm plot starter")
+
+		-- Initialize farming data
+		if not playerData.farming then
+			playerData.farming = {
+				plots = 1,
+				inventory = {
+					-- Give starter seeds
+					carrot_seeds = 5,
+					corn_seeds = 3
+				}
+			}
+		else
+			playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+		end
+
+		-- Create the physical simple farm plot
+		local success = self:CreateSimpleFarmPlot(player)
+		if not success then
+			-- Revert changes on failure
+			if playerData.farming.plots then
+				playerData.farming.plots = playerData.farming.plots - quantity
+			end
+			return false
+		end
+
+		print("🌾 Created simple farm plot for " .. player.Name)
+		return true
+	end
+
+	-- Regular farm plot purchase (legacy support)
+	if not playerData.farming then
+		playerData.farming = {plots = 0, inventory = {}}
+	end
+
+	playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+
+	-- Create the physical farm plot using simple system
+	local success = self:CreateSimpleFarmPlot(player)
+	if not success then
+		playerData.farming.plots = playerData.farming.plots - quantity
+		return false
+	end
+
+	print("🌾 Added " .. quantity .. " farm plot(s), total: " .. playerData.farming.plots)
+	return true
+end
+
+-- ========== ENSURE PLAYER HAS SIMPLE FARM ==========
+
+function GameCore:EnsurePlayerHasSimpleFarm(player)
+	print("🌾 GameCore: Ensuring " .. player.Name .. " has simple farm")
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then
+		return false
+	end
+
+	-- Check if player should have a farm
+	local hasFarmItem = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+	local hasFarmingData = playerData.farming and playerData.farming.plots and playerData.farming.plots > 0
+
+	if not hasFarmItem and not hasFarmingData then
+		print("🌾 Player " .. player.Name .. " doesn't have farm access")
+		return false
+	end
+
+	-- Ensure farming data is initialized
+	if not playerData.farming then
+		playerData.farming = {
+			plots = 1,
+			inventory = {}
+		}
+		self:SavePlayerData(player)
+	end
+
+	-- Check if physical farm exists
+	local existingFarm = self:GetPlayerSimpleFarm(player)
+	if not existingFarm then
+		print("🌾 Creating missing simple farm for " .. player.Name)
+		return self:CreateSimpleFarmPlot(player)
+	end
+
+	print("🌾 Player " .. player.Name .. " already has simple farm")
+	return true
+end
+
+print("GameCore: ✅ SIMPLIFIED FARM SYSTEM LOADED!")
+print("🌾 SIMPLE FARM FEATURES:")
+print("  📏 Always 10x10 grid (100 planting spots)")
+print("  🔓 All spots unlocked immediately")
+print("  🚫 No expansion system or purchases needed")
+print("  🎨 Clean, simple farm layout")
+print("  ✨ No locked spots or expansion requirements")
+print("  📊 Simplified farm management")
+print("")
+print("🔧 COMPATIBILITY:")
+print("  ✅ Works with existing farming system")
+print("  ✅ Works with existing crop growing")
+print("  ✅ Works with existing seed planting")
+print("  ✅ Works with existing harvest system")
+print("  ✅ Replaces expandable farm methods")
 -- ========== ENHANCED FARMING SYSTEM WITH RARITY ==========
 
 function GameCore:InitializeFarmingSystem()
@@ -2001,38 +1778,6 @@ function GameCore:CountTable(t)
 	end
 	return count
 end
--- ========== FIXED PLOT OWNER METHOD ==========
-
-function GameCore:GetPlotOwner(plotModel)
-	-- Check if this is an expandable farm plot
-	local expandableOwner = self:GetExpandablePlotOwner(plotModel)
-	if expandableOwner then
-		return expandableOwner
-	end
-
-	-- Fallback for old-style plots
-	local parent = plotModel.Parent
-	local attempts = 0
-
-	while parent and parent.Parent and attempts < 10 do
-		attempts = attempts + 1
-
-		-- Check for old-style farm structure
-		if parent.Name:find("_Farm") and not parent.Name:find("_ExpandableFarm") then
-			return parent.Name:gsub("_Farm", "")
-		end
-
-		-- Check for expandable farm structure
-		if parent.Name:find("_ExpandableFarm") then
-			return parent.Name:gsub("_ExpandableFarm", "")
-		end
-
-		parent = parent.Parent
-	end
-
-	warn("GameCore: Could not determine plot owner for " .. plotModel.Name)
-	return nil
-end
 
 -- ========== FIXED PLANTING METHOD ==========
 
@@ -2319,84 +2064,6 @@ print("  ✅ Fixed plot occupancy check to look for actual crops")
 print("  ✅ Added proper plot clearing method")
 print("  ✅ Enhanced harvest method with better validation")
 print("  ✅ Prevents false 'plot occupied' messages on empty plots")
-
--- ========== FIXED FARM PLOT CREATION METHOD ==========
-
-function GameCore:CreatePlayerFarmPlot(player, totalPlots)
-	print("🌾 GameCore: FIXED CreatePlayerFarmPlot for " .. player.Name .. " with " .. totalPlots .. " plots")
-
-	local playerData = self:GetPlayerData(player)
-	if not playerData then
-		return false
-	end
-
-	-- Always use expandable farm system for new plots
-	return self:CreateExpandableFarmPlot(player)
-end
-
--- ========== FIXED FARM EXPANSION PURCHASE ==========
-
-function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
-	print("🌾 GameCore: FIXED ProcessFarmPlotPurchase for " .. player.Name)
-
-	-- Handle different types of farm expansions
-	if item.effects and item.effects.type == "farm_expansion" then
-		print("🌾 Processing farm expansion via ShopSystem")
-		-- This will be handled by ShopSystem:HandleFarmExpansionPurchase
-		return true
-	end
-
-	-- Handle farm plot starter (first-time farm creation)
-	if item.id == "farm_plot_starter" then
-		print("🌾 Processing farm plot starter")
-
-		-- Initialize farming data
-		if not playerData.farming then
-			playerData.farming = {
-				plots = 1,
-				expansionLevel = 1,
-				inventory = {
-					-- Give starter seeds
-					carrot_seeds = 5,
-					corn_seeds = 3
-				}
-			}
-		else
-			playerData.farming.plots = (playerData.farming.plots or 0) + quantity
-			playerData.farming.expansionLevel = playerData.farming.expansionLevel or 1
-		end
-
-		-- Create the physical expandable farm plot
-		local success = self:CreateExpandableFarmPlot(player)
-		if not success then
-			-- Revert changes on failure
-			if playerData.farming.plots then
-				playerData.farming.plots = playerData.farming.plots - quantity
-			end
-			return false
-		end
-
-		print("🌾 Created starter farm plot for " .. player.Name)
-		return true
-	end
-
-	-- Regular farm plot purchase (legacy support)
-	if not playerData.farming then
-		playerData.farming = {plots = 0, inventory = {}}
-	end
-
-	playerData.farming.plots = (playerData.farming.plots or 0) + quantity
-
-	-- Create the physical farm plot using expandable system
-	local success = self:CreateExpandableFarmPlot(player)
-	if not success then
-		playerData.farming.plots = playerData.farming.plots - quantity
-		return false
-	end
-
-	print("🌾 Added " .. quantity .. " farm plot(s), total: " .. playerData.farming.plots)
-	return true
-end
 
 -- ========== ENSURE PLAYER HAS EXPANDABLE FARM ==========
 
@@ -3043,7 +2710,7 @@ function GameCore:CreateNewCowSafely(player, cowType, cowConfig)
 
 	if currentCowCount >= maxCows then
 		self:SendNotification(player, "Cow Limit Reached", 
-			"You have " .. currentCowCount .. "/" .. maxCows .. " cows! Buy pasture expansions for more.", "error")
+			"You have " .. currentCowCount .. "/" .. maxCows .. " cows! ")
 		return false
 	end
 
@@ -3622,7 +3289,7 @@ function GameCore:CreateNewCow(player, cowType, cowConfig)
 
 	if currentCowCount >= maxCows then
 		self:SendNotification(player, "Cow Limit Reached", 
-			"You have " .. currentCowCount .. "/" .. maxCows .. " cows! Buy pasture expansions for more.", "error")
+			"You have " .. currentCowCount .. "/" .. maxCows .. " cows!")
 		return false
 	end
 
@@ -4130,12 +3797,6 @@ end
 function GameCore:GetPlayerMaxCows(playerData)
 	local baseCows = 5
 	local bonusCows = 0
-
-	if playerData.upgrades then
-		if playerData.upgrades.pasture_expansion_1 then bonusCows = bonusCows + 2 end
-		if playerData.upgrades.pasture_expansion_2 then bonusCows = bonusCows + 3 end
-		if playerData.upgrades.mega_pasture then bonusCows = bonusCows + 5 end
-	end
 
 	return baseCows + bonusCows
 end

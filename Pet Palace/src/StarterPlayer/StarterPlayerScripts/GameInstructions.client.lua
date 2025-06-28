@@ -28,66 +28,47 @@ local INSTRUCTION_PAGES = {
 		title = "🌾 Welcome to Farm Defense!",
 		icon = "🎮",
 		content = {
-			"Welcome to the ultimate farming survival experience!",
+			"Welcome to the a nice calm farming simulator...  Until the aliens attack!",
 			"",
 			"🎯 YOUR GOAL:",
 			"• Build and expand your farm",
-			"• Grow crops to earn coins", 
+			"• Milk cows to start making money for your first seeds and upgrades",
+			"• Grow crops to earn even more coins", 
 			"• Defend against pests and UFO attacks",
-			"• Become the most successful farmer!",
+			"• Become the most successful farmer, and send those pesky aliens away once and for all!",
 			"",
 			"💡 This tutorial will teach you everything you need to know.",
 			"You can reopen this guide anytime by typing /help in chat.",
 			"",
-			"🚀 Ready to become a farming legend? Let's start!"
+			"🚀 Ready to become a farming legend? Let's make those pesky aliens sorry they ever invaded!"
 		}
 	},
 	{
-		title = "🌱 Farming Basics",
-		icon = "🚜",
+		title = "💰 Economy & Strategy",
+		icon = "📊",
 		content = {
-			"Learn the fundamentals of farming:",
+			"Master the game's economy:",
 			"",
-			"🏪 BUYING SEEDS:",
-			"• Open the shop (💰 Shop button)",
-			"• Purchase seeds with your coins",
-			"• Different seeds have different growth times and values",
+			"💎 DUAL CURRENCY SYSTEM:",
+			"• 🪙 Coins - Primary currency from crops",
+			"• 🎫 Farm Tokens - Premium currency for special items",
 			"",
-			"🌱 PLANTING:",
-			"• Walk to an empty farm plot (green indicator)",
-			"• Click the plot to plant your selected seed",
-			"• Watch your crops grow over time!",
+			"📈 INCOME SOURCES:",
+			"• Milking cows (upgrade for greater quantity and sell price)",
+			"• Harvesting crops (the longer a seed takes to grow, the more it will be worth)",
+			"• Selling eggs from chickens",
+			"• Pig breeding and products",
+			"• Daily bonuses and achievements",
 			"",
-			"🏆 HARVESTING:",
-			"• Wait for crops to fully mature",
-			"• Click mature crops to harvest them",
-			"• Earn coins based on crop type and quality",
+			"🎯 EARLY GAME STRATEGY:",
+			"1. Plant carrots for quick returns",
+			"3. Get 1-2 basic chickens for pest control",
+			"4. Save for roof protection",
 			"",
-			"💡 TIP: Start with wheat - it's cheap and grows quickly!"
-		}
-	},
-	{
-		title = "🏗️ Farm Expansion",
-		icon = "🔨",
-		content = {
-			"Grow your farming empire:",
-			"",
-			"📦 BUYING PLOTS:",
-			"• Purchase additional farm plots from the shop",
-			"• Each plot lets you grow more crops simultaneously",
-			"• More plots = more income potential!",
-			"",
-			"🏠 ROOF PROTECTION:",
-			"• Buy roof protection for your plots",
-			"• Protects crops from UFO attacks",
-			"• Essential for late-game survival!",
-			"",
-			"⚡ UPGRADES:",
-			"• Upgrade your tools for faster actions",
-			"• Improve plot efficiency",
-			"• Unlock special farming bonuses",
-			"",
-			"💰 STRATEGY: Reinvest your profits to expand faster!"
+			"🏆 LATE GAME GOALS:",
+			"• Full roof protection on all plots",
+			"• Diverse chicken defense force",
+			"• Automated pig manure system"
 		}
 	},
 	{
@@ -110,8 +91,6 @@ local INSTRUCTION_PAGES = {
 			"• Use chickens for natural pest control",
 			"• Apply pig manure for pest deterrent",
 			"• Monitor weather - affects pest activity",
-			"",
-			"🌦️ Weather impacts pest spawning and spread rates!"
 		}
 	},
 	{
@@ -190,34 +169,7 @@ local INSTRUCTION_PAGES = {
 			"💡 Invest in roof protection early - it's your best defense!"
 		}
 	},
-	{
-		title = "💰 Economy & Strategy",
-		icon = "📊",
-		content = {
-			"Master the game's economy:",
-			"",
-			"💎 DUAL CURRENCY SYSTEM:",
-			"• 🪙 Coins - Primary currency from crops",
-			"• 🎫 Farm Tokens - Premium currency for special items",
-			"",
-			"📈 INCOME SOURCES:",
-			"• Harvesting crops (main income)",
-			"• Selling eggs from chickens",
-			"• Pig breeding and products",
-			"• Daily bonuses and achievements",
-			"",
-			"🎯 EARLY GAME STRATEGY:",
-			"1. Plant wheat for quick returns",
-			"2. Buy more plots as soon as possible",
-			"3. Get 1-2 basic chickens for pest control",
-			"4. Save for roof protection",
-			"",
-			"🏆 LATE GAME GOALS:",
-			"• Full roof protection on all plots",
-			"• Diverse chicken defense force",
-			"• Automated pig manure system"
-		}
-	},
+	
 	{
 		title = "🎮 Controls & Commands",
 		icon = "⌨️",
@@ -231,7 +183,6 @@ local INSTRUCTION_PAGES = {
 			"",
 			"💬 CHAT COMMANDS:",
 			"• /help - Reopen this instruction guide",
-			"• /stats - Show your farming statistics",
 			"• /save - Manually save your progress",
 			"",
 			"🎯 QUICK TIPS:",
@@ -244,36 +195,7 @@ local INSTRUCTION_PAGES = {
 			"• Large buttons for touch controls",
 			"• Optimized for mobile gameplay",
 			"• Tap anywhere to interact"
-		}
-	},
-	{
-		title = "🏆 Advanced Tips",
-		icon = "💡",
-		content = {
-			"Pro strategies for farming success:",
-			"",
-			"⏰ TIMING STRATEGIES:",
-			"• Plant fast crops during UFO attacks",
-			"• Use weather forecasts to plan planting",
-			"• Harvest before severe weather",
-			"",
-			"🎯 OPTIMIZATION TIPS:",
-			"• Balance plot count with protection",
-			"• Diversify crops for stable income",
-			"• Position chickens for maximum coverage",
-			"",
-			"💪 RESOURCE MANAGEMENT:",
-			"• Always keep emergency funds",
-			"• Stockpile feed for chickens",
-			"• Plan expansion in phases",
-			"",
-			"🧠 PRO SECRETS:",
-			"• Guinea fowl detect UFOs early",
-			"• Roosters boost nearby chickens",
-			"• Pig manure stacks with roof protection",
-			"• Weather affects pest spawn rates",
-			"",
-			"🎉 Remember: Have fun and experiment!"
+	
 		}
 	}
 }
