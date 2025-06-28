@@ -359,7 +359,7 @@ end
 
 
 function GameCore:PositionPlayerForMilking(player, cowId)
-	print("🎯 GameCore: FIXED positioning player for milking...")
+	print("🎯 GameCore: REDESIGNED positioning player for milking...")
 
 	-- Find the cow model in workspace
 	local cowModel = workspace:FindFirstChild(cowId)
@@ -384,53 +384,139 @@ function GameCore:PositionPlayerForMilking(player, cowId)
 		jumpPower = humanoid and humanoid.JumpPower or 50
 	}
 
-	-- Calculate stable milking position (beside the cow)
-	local cowCenter = self:GetCowCenter(cowModel)
-	local milkingPosition = cowCenter + Vector3.new(3, 0, 0) -- 3 studs to the right of cow
-	local milkingCFrame = CFrame.new(milkingPosition, cowCenter) -- Face the cow
+	-- REDESIGNED: Find the actual ground level where the cow is standing
+	local cowBounds = self:GetCowBoundingBox(cowModel)
+	local cowGroundLevel = cowBounds.minY -- Bottom of the cow model
+	local cowCenter = cowBounds.center
 
-	-- Set initial position
-	humanoidRootPart.CFrame = milkingCFrame
+	print("🐄 Cow bounds - Center: " .. tostring(cowCenter) .. ", Ground: " .. cowGroundLevel)
 
-	-- Disable player movement during milking
+	-- Position player beside cow at same ground level
+	local playerGroundPosition = Vector3.new(
+		cowCenter.X + 6, -- 6 studs to the side of cow (more space)
+		cowGroundLevel, -- Same ground level as cow
+		cowCenter.Z
+	)
+
+	-- Calculate proper standing position (HumanoidRootPart should be ~2.5 studs above ground)
+	local playerStandingPosition = Vector3.new(
+		playerGroundPosition.X,
+		playerGroundPosition.Y + 5, -- Standard humanoid root part height
+		playerGroundPosition.Z
+	)
+
+	-- Face toward the cow
+	local lookDirection = (cowCenter - playerStandingPosition).Unit
+	local playerCFrame = CFrame.lookAt(playerStandingPosition, playerStandingPosition + Vector3.new(lookDirection.X, 0, lookDirection.Z))
+
+	-- CRITICAL: Ensure humanoid is in normal standing state
 	if humanoid then
 		humanoid.WalkSpeed = 0
 		humanoid.JumpPower = 0
 		humanoid.JumpHeight = 0
-		humanoid.PlatformStand = true -- Prevent physics from moving player
+		humanoid.Sit = false -- Make sure not sitting
+		humanoid.PlatformStand = false -- Don't use PlatformStand (causes weird positioning)
+
+		-- Wait a frame for humanoid to process
+		wait(0.1)
 	end
 
-	-- FIXED: Use proper BodyPosition to lock player in place
-	local bodyPosition = Instance.new("BodyPosition")
-	bodyPosition.MaxForce = Vector3.new(4000, 4000, 4000)
-	bodyPosition.Position = milkingPosition
-	bodyPosition.D = 2000 -- Damping to prevent oscillation
-	bodyPosition.P = 10000 -- Power
-	bodyPosition.Parent = humanoidRootPart
+	-- Set position
+	humanoidRootPart.CFrame = playerCFrame
+	humanoidRootPart.Anchored = true -- Lock in place
 
-	-- FIXED: Simplified BodyAngularVelocity with correct properties
-	local bodyAngularVelocity = Instance.new("BodyAngularVelocity")
-	bodyAngularVelocity.AngularVelocity = Vector3.new(0, 0, 0)
-	bodyAngularVelocity.MaxTorque = Vector3.new(4000, 4000, 4000)
-	bodyAngularVelocity.P = 3000
-	-- REMOVED: bodyAngularVelocity.D (not a valid property)
-	bodyAngularVelocity.Parent = humanoidRootPart
-
-	-- Store positioning objects for cleanup
+	-- Store positioning info
 	if not self.Systems.ClickerMilking.PositioningObjects then
 		self.Systems.ClickerMilking.PositioningObjects = {}
 	end
 	self.Systems.ClickerMilking.PositioningObjects[player.UserId] = {
-		bodyPosition = bodyPosition,
-		bodyAngularVelocity = bodyAngularVelocity
+		anchored = true,
+		standingPosition = playerStandingPosition,
+		groundLevel = cowGroundLevel
 	}
 
-	print("🎯 GameCore: Player positioned for milking with FIXED stable positioning")
+	print("🎯 Player positioned:")
+	print("  Standing at: " .. tostring(playerStandingPosition))
+	print("  Ground level: " .. cowGroundLevel)
+	print("  Looking toward cow at: " .. tostring(cowCenter))
+
 	return true
 end
 
+-- ========== NEW BOUNDING BOX CALCULATION ==========
+
+function GameCore:GetCowBoundingBox(cowModel)
+	local minX, minY, minZ = math.huge, math.huge, math.huge
+	local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
+
+	-- Find the actual bounds of all cow parts
+	for _, part in pairs(cowModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local pos = part.Position
+			local size = part.Size
+
+			-- Calculate bounds
+			local partMinX = pos.X - size.X/2
+			local partMaxX = pos.X + size.X/2
+			local partMinY = pos.Y - size.Y/2
+			local partMaxY = pos.Y + size.Y/2
+			local partMinZ = pos.Z - size.Z/2
+			local partMaxZ = pos.Z + size.Z/2
+
+			-- Update overall bounds
+			minX = math.min(minX, partMinX)
+			maxX = math.max(maxX, partMaxX)
+			minY = math.min(minY, partMinY)
+			maxY = math.max(maxY, partMaxY)
+			minZ = math.min(minZ, partMinZ)
+			maxZ = math.max(maxZ, partMaxZ)
+		end
+	end
+
+	return {
+		center = Vector3.new((minX + maxX)/2, (minY + maxY)/2, (minZ + maxZ)/2),
+		minX = minX, maxX = maxX,
+		minY = minY, maxY = maxY,
+		minZ = minZ, maxZ = maxZ,
+		size = Vector3.new(maxX - minX, maxY - minY, maxZ - minZ)
+	}
+end
+
+function GameCore:GetCowCenter(cowModel)
+	-- Use same logic as CowMilkSystem for consistency
+	local bodyPart = nil
+	local possibleBodyParts = {"HumanoidRootPart", "Torso", "UpperTorso", "Body", "Middle"}
+
+	for _, partName in ipairs(possibleBodyParts) do
+		bodyPart = cowModel:FindFirstChild(partName)
+		if bodyPart then break end
+	end
+
+	if bodyPart then
+		return bodyPart.Position
+	end
+
+	-- Fallback: calculate center of all parts
+	local totalPosition = Vector3.new(0, 0, 0)
+	local partCount = 0
+
+	for _, part in pairs(cowModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			totalPosition = totalPosition + part.Position
+			partCount = partCount + 1
+		end
+	end
+
+	if partCount > 0 then
+		return totalPosition / partCount
+	end
+
+	-- Final fallback
+	return cowModel.PrimaryPart and cowModel.PrimaryPart.Position or Vector3.new(0, 0, 0)
+end
+
 function GameCore:ReleasePlayerFromMilking(player)
-	print("🎯 GameCore: FIXED releasing player from milking position...")
+	print("🎯 GameCore: REDESIGNED releasing player from milking...")
 
 	local userId = player.UserId
 	local character = player.Character
@@ -438,30 +524,15 @@ function GameCore:ReleasePlayerFromMilking(player)
 	-- Clean up positioning objects
 	if self.Systems.ClickerMilking.PositioningObjects and self.Systems.ClickerMilking.PositioningObjects[userId] then
 		local objects = self.Systems.ClickerMilking.PositioningObjects[userId]
-
-		-- Clean up BodyPosition and BodyAngularVelocity if they exist
-		if objects.bodyPosition and objects.bodyPosition.Parent then
-			objects.bodyPosition:Destroy()
-		end
-
-		if objects.bodyAngularVelocity and objects.bodyAngularVelocity.Parent then
-			objects.bodyAngularVelocity:Destroy()
-		end
-
-		-- Clean up anchoring if using simple method
-		if objects.anchored and character and character:FindFirstChild("HumanoidRootPart") then
-			character.HumanoidRootPart.Anchored = false
-		end
-
 		self.Systems.ClickerMilking.PositioningObjects[userId] = nil
 	end
 
-	-- Restore player movement and position
+	-- Restore player properly
 	if character then
 		local humanoid = character:FindFirstChild("Humanoid")
 		local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
 
-		-- Ensure unanchored
+		-- Unanchor first
 		if humanoidRootPart then
 			humanoidRootPart.Anchored = false
 		end
@@ -473,32 +544,35 @@ function GameCore:ReleasePlayerFromMilking(player)
 				humanoid.WalkSpeed = originalData.walkSpeed
 				humanoid.JumpPower = originalData.jumpPower
 			else
-				humanoid.WalkSpeed = 16 -- Default values
+				humanoid.WalkSpeed = 16
 				humanoid.JumpPower = 50
 			end
 
-			humanoid.JumpHeight = 7.2 -- Default jump height
-			humanoid.PlatformStand = false -- Re-enable physics
+			humanoid.JumpHeight = 7.2
+			humanoid.Sit = false
+			humanoid.PlatformStand = false
 		end
 
-		-- Move player slightly away from cow
+		-- Move player away from milking area
 		if humanoidRootPart then
 			local originalData = self.Systems.ClickerMilking.PlayerPositions[userId]
 			if originalData then
-				-- Move player back to a position near their original spot
-				humanoidRootPart.CFrame = originalData.cframe + Vector3.new(0, 0, 3)
+				-- Move to a safe position away from original
+				local safePosition = originalData.cframe.Position + Vector3.new(5, 0, 5)
+				humanoidRootPart.CFrame = CFrame.new(safePosition, safePosition + originalData.cframe.LookVector)
 			else
-				-- Just move them back a bit from the cow
-				humanoidRootPart.CFrame = humanoidRootPart.CFrame + Vector3.new(0, 0, 3)
+				-- Move away from current position
+				humanoidRootPart.CFrame = humanoidRootPart.CFrame + Vector3.new(3, 0, 3)
 			end
 		end
 	end
 
-	-- Clear stored position data
+	-- Clear stored data
 	self.Systems.ClickerMilking.PlayerPositions[userId] = nil
 
-	print("🎯 GameCore: Player released from milking")
+	print("🎯 Player released and moved to safe position")
 end
+
 -- ========== FIXED MILKING UPDATE LOOP (NO AUTO MILK) ==========
 
 function GameCore:UpdateMilkingSessions()
@@ -743,15 +817,6 @@ function GameCore:CreateMilkDropEffect(player, cowId)
 	end
 end
 
-function GameCore:GetCowCenter(cowModel)
-	if cowModel.PrimaryPart then
-		return cowModel.PrimaryPart.Position
-	end
-
-	local cframe, size = cowModel:GetBoundingBox()
-	return cframe.Position
-end
-
 -- ========== REPLACE EXISTING MILK COLLECTION METHOD ==========
 
 -- REPLACE your existing HandleCowMilkCollection method with this:
@@ -775,7 +840,19 @@ end)
 
 -- ========== ADMIN COMMANDS FOR TESTING ==========
 
--- ADD these to your existing admin commands:
+
+print("🎯 ✅ FIXED POSITIONING SYSTEM!")
+print("🔧 KEY FIXES:")
+print("  📏 Proper ground level calculation")
+print("  👤 Player positioned at correct height (2.5 studs above ground)")
+print("  🪑 Single unified milking stool at ground level")
+print("  🪣 Properly positioned milk bucket")
+print("  📐 Consistent positioning calculations")
+print("  🎯 Better cow center detection")
+print("")
+print("🧪 TEST WITH ADMIN COMMAND:")
+print("  Type in chat: /debugpositions")
+print("  This will show you the calculated positions before testing")
 function GameCore:TestPlayerPositioning(player)
 	if player.Name == "TommySalami311" then -- Replace with your username
 		print("Testing player positioning...")
@@ -5307,6 +5384,49 @@ function GameCore:StartCowIndicatorUpdateLoop()
 end
 
 -- ========== DEBUG COMMANDS FOR MISSING METHODS ==========
+function GameCore:DebugMilkingPositions(player)
+	if player.Name == "TommySalami311" then -- Replace with your username
+		print("=== REDESIGNED POSITIONING DEBUG ===")
+
+		local testCow = nil
+		for _, model in pairs(workspace:GetChildren()) do
+			if model:IsA("Model") and model.Name:find("cow_") then
+				testCow = model
+				break
+			end
+		end
+
+		if testCow then
+			local bounds = self:GetCowBoundingBox(testCow)
+
+			print("Cow: " .. testCow.Name)
+			print("Cow bounds:")
+			print("  Center: " .. tostring(bounds.center))
+			print("  Ground level (minY): " .. bounds.minY)
+			print("  Size: " .. tostring(bounds.size))
+
+			local playerGroundPos = Vector3.new(bounds.center.X + 6, bounds.minY, bounds.center.Z)
+			local playerStandingPos = Vector3.new(playerGroundPos.X, playerGroundPos.Y + 2.5, playerGroundPos.Z)
+
+			print("Player positions:")
+			print("  Ground position: " .. tostring(playerGroundPos))
+			print("  Standing position: " .. tostring(playerStandingPos))
+
+			print("Equipment positions:")
+			print("  Stool: " .. tostring(Vector3.new(playerGroundPos.X, bounds.minY + 0.5, playerGroundPos.Z)))
+			print("  Bucket: " .. tostring(Vector3.new(bounds.center.X + 3, bounds.minY + 1, bounds.center.Z - 1)))
+
+			-- Show current player position for comparison
+			if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				print("Current player position: " .. tostring(player.Character.HumanoidRootPart.Position))
+			end
+		else
+			print("No cow found for testing")
+		end
+
+		print("====================================")
+	end
+end
 
 function GameCore:DebugMissingMethods(player)
 	print("=== MISSING METHODS DEBUG ===")

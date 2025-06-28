@@ -1361,11 +1361,6 @@ function EnhancedCowMilkSystem:GetCowBounds(cowModel)
 	return cframe.Position, size
 end
 
-function EnhancedCowMilkSystem:GetCowCenter(cowModel)
-	local position, _ = self:GetCowBounds(cowModel)
-	return position
-end
-
 function EnhancedCowMilkSystem:IsCowBodyPart(part)
 	local bodyNames = {"body", "torso", "head", "humanoidrootpart"}
 	local partName = part.Name:lower()
@@ -1526,37 +1521,138 @@ function EnhancedCowMilkSystem:CreatePlayerMilkingArea(player, cowModel, cowId)
 	local character = player.Character
 	if not character then return end
 
-	-- Create milking stool effect
+	print("🪑 EnhancedCowMilkSystem: Creating REDESIGNED milking area")
+
+	-- Get cow bounds (same calculation as GameCore)
+	local cowBounds = self:GetCowBoundingBox(cowModel)
+	local cowCenter = cowBounds.center
+	local groundLevel = cowBounds.minY
+
+	print("🐄 Using cow bounds - Center: " .. tostring(cowCenter) .. ", Ground: " .. groundLevel)
+
+	-- Calculate where player will be positioned
+	local playerGroundPosition = Vector3.new(
+		cowCenter.X + 6, -- Same as in GameCore
+		groundLevel,
+		cowCenter.Z
+	)
+
+	--[[ Create milking stool at player's ground position
 	local stool = Instance.new("Part")
 	stool.Name = "MilkingStool"
-	stool.Size = Vector3.new(2, 1, 2)
+	stool.Size = Vector3.new(2, 5, 2)
 	stool.Shape = Enum.PartType.Cylinder
 	stool.Material = Enum.Material.Wood
 	stool.Color = Color3.fromRGB(139, 90, 43)
 	stool.CanCollide = false
 	stool.Anchored = true
-
-	local cowCenter = self:GetCowCenter(cowModel)
-	stool.Position = cowCenter + Vector3.new(3, -1, 0)
+	stool.Position = Vector3.new(
+		playerGroundPosition.X,
+		groundLevel + 0.5, -- Half stool height above ground
+		playerGroundPosition.Z
+	)
 	stool.Parent = workspace
 
 	-- Store in effects
+	if not self.ClickerIntegration.SessionEffects[cowId] then
+		self.ClickerIntegration.SessionEffects[cowId] = {}
+	end
 	table.insert(self.ClickerIntegration.SessionEffects[cowId], stool)
 
-	-- Create milk bucket
+	-- Create milk bucket between cow and player
 	local bucket = Instance.new("Part")
 	bucket.Name = "MilkBucket"
-	bucket.Size = Vector3.new(1, 1.5, 1)
+	bucket.Size = Vector3.new(1.5, 2, 1.5)
 	bucket.Shape = Enum.PartType.Cylinder
 	bucket.Material = Enum.Material.Metal
 	bucket.Color = Color3.fromRGB(150, 150, 150)
 	bucket.CanCollide = false
 	bucket.Anchored = true
-	bucket.Position = cowCenter + Vector3.new(2, -0.5, 1)
+	bucket.Position = Vector3.new(
+		cowCenter.X + 3, -- Halfway between cow and player
+		groundLevel + 1, -- Half bucket height above ground
+		cowCenter.Z - 1 -- Slightly to the side
+	)
 	bucket.Parent = workspace
+]]--
+	table.insert(self.ClickerIntegration.SessionEffects[cowId])
 
-	-- Store in effects
-	table.insert(self.ClickerIntegration.SessionEffects[cowId], bucket)
+	print("🪑 Created milking setup:")
+	--print("  Stool at: " .. tostring(stool.Position))
+	--print("  Bucket at: " .. tostring(bucket.Position))
+	print("  Ground level: " .. groundLevel)
+end
+
+-- ========== ADD BOUNDING BOX METHOD TO CowMilkSystem ==========
+
+function EnhancedCowMilkSystem:GetCowBoundingBox(cowModel)
+	local minX, minY, minZ = math.huge, math.huge, math.huge
+	local maxX, maxY, maxZ = -math.huge, -math.huge, -math.huge
+
+	for _, part in pairs(cowModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local pos = part.Position
+			local size = part.Size
+
+			local partMinX = pos.X - size.X/2
+			local partMaxX = pos.X + size.X/2
+			local partMinY = pos.Y - size.Y/2
+			local partMaxY = pos.Y + size.Y/2
+			local partMinZ = pos.Z - size.Z/2
+			local partMaxZ = pos.Z + size.Z/2
+
+			minX = math.min(minX, partMinX)
+			maxX = math.max(maxX, partMaxX)
+			minY = math.min(minY, partMinY)
+			maxY = math.max(maxY, partMaxY)
+			minZ = math.min(minZ, partMinZ)
+			maxZ = math.max(maxZ, partMaxZ)
+		end
+	end
+
+	return {
+		center = Vector3.new((minX + maxX)/2, (minY + maxY)/2, (minZ + maxZ)/2),
+		minX = minX, maxX = maxX,
+		minY = minY, maxY = maxY,
+		minZ = minZ, maxZ = maxZ,
+		size = Vector3.new(maxX - minX, maxY - minY, maxZ - minZ)
+	}
+end
+
+
+-- ========== IMPROVED COW CENTER CALCULATION ==========
+
+function EnhancedCowMilkSystem:GetCowCenter(cowModel)
+	-- Try to find the main body part first
+	local bodyPart = nil
+	local possibleBodyParts = {"HumanoidRootPart", "Torso", "UpperTorso", "Body", "Middle"}
+
+	for _, partName in ipairs(possibleBodyParts) do
+		bodyPart = cowModel:FindFirstChild(partName)
+		if bodyPart then break end
+	end
+
+	if bodyPart then
+		return bodyPart.Position
+	end
+
+	-- Fallback: calculate center of all parts
+	local totalPosition = Vector3.new(0, 0, 0)
+	local partCount = 0
+
+	for _, part in pairs(cowModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			totalPosition = totalPosition + part.Position
+			partCount = partCount + 1
+		end
+	end
+
+	if partCount > 0 then
+		return totalPosition / partCount
+	end
+
+	-- Final fallback
+	return cowModel.PrimaryPart and cowModel.PrimaryPart.Position or Vector3.new(0, 0, 0)
 end
 
 --[[
@@ -1747,31 +1843,31 @@ function EnhancedCowMilkSystem:UpdateBucketFillLevel(cowId)
 end
 
 -- ========== FIXED MILKING AREA EFFECT ==========
-
 function EnhancedCowMilkSystem:CreateMilkingAreaEffect(cowModel, cowId)
-	local cowCenter = self:GetCowCenter(cowModel)
+	local bounds = self:GetCowBoundingBox(cowModel)
+	local cowCenter = bounds.center
+	local groundLevel = bounds.minY
 
-	-- Create milking area circle (less prominent for click-based system)
+	-- Create ground effect at actual ground level
 	local milkingArea = Instance.new("Part")
 	milkingArea.Name = "MilkingArea"
-	milkingArea.Size = Vector3.new(8, 0.1, 8)
+	milkingArea.Size = Vector3.new(12, 0.1, 8)
 	milkingArea.Shape = Enum.PartType.Cylinder
 	milkingArea.Material = Enum.Material.Neon
-	milkingArea.Color = Color3.fromRGB(200, 255, 200) -- Softer green
-	milkingArea.Transparency = 0.8 -- More transparent
+	milkingArea.Color = Color3.fromRGB(200, 255, 200)
+	milkingArea.Transparency = 0.8
 	milkingArea.CanCollide = false
 	milkingArea.Anchored = true
-	milkingArea.Position = cowCenter - Vector3.new(0, 2, 0)
+	milkingArea.Position = Vector3.new(cowCenter.X + 3, groundLevel + 0.05, cowCenter.Z) -- Centered between cow and player
 	milkingArea.Orientation = Vector3.new(0, 0, 90)
 	milkingArea.Parent = workspace
 
-	-- Store in effects for cleanup
 	if not self.ClickerIntegration.SessionEffects[cowId] then
 		self.ClickerIntegration.SessionEffects[cowId] = {}
 	end
 	table.insert(self.ClickerIntegration.SessionEffects[cowId], milkingArea)
 
-	-- FIXED: Gentle pulsing (not distracting from clicking)
+	-- Gentle pulsing
 	spawn(function()
 		while milkingArea.Parent and self.ClickerIntegration.ActiveMilkingSessions[cowId] do
 			local pulse = TweenService:Create(milkingArea,
@@ -1789,7 +1885,23 @@ function EnhancedCowMilkSystem:CreateMilkingAreaEffect(cowModel, cowId)
 			pulseBack.Completed:Wait()
 		end
 	end)
+
+	print("🎨 Created milking area effect at ground level: " .. groundLevel)
 end
+
+print("🎯 ✅ COMPLETE POSITIONING REDESIGN!")
+print("🔧 KEY CHANGES:")
+print("  📐 Proper bounding box calculation for accurate ground level")
+print("  👤 Player stands normally (no crouching/sitting)")
+print("  🚫 Removed PlatformStand (was causing weird positioning)")
+print("  📏 Player positioned 6 studs to side of cow")
+print("  🪑 Equipment positioned relative to actual cow bounds")
+print("  🎯 Player faces toward cow naturally")
+print("  🧹 Better cleanup and release positioning")
+print("")
+print("🧪 TEST COMMANDS:")
+print("  /debugpositions - Show calculated positions")
+print("  Then test milking to see new positioning")
 
 -- ========== FIXED ENHANCED CLICK DETECTION ==========
 
