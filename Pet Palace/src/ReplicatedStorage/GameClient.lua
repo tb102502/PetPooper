@@ -134,7 +134,789 @@ function GameClient:Initialize(uiManager)
 	print("GameClient: 🎉 Enhanced initialization complete with tabbed shop support!")
 	return true
 end
+-- ========== CLICKER MILKING UI SYSTEM ==========
 
+function GameClient:InitializeClickerMilkingUI()
+	print("GameClient: Initializing clicker milking UI system...")
+
+	-- Initialize milking UI state
+	self.MilkingUI = {
+		isActive = false,
+		currentSession = nil,
+		progressUI = nil,
+		clickFeedback = {},
+		lastClickTime = 0,
+		clickCooldown = 0.1 -- Prevent spam clicking
+	}
+
+	-- Setup milking remote handlers
+	self:SetupMilkingRemoteHandlers()
+	self:InitializeEnhancedMilking()
+	print("GameClient: ✅ Enhanced with milking UI system!")
+	print("GameClient: Clicker milking UI system initialized!")
+end
+
+function GameClient:SetupMilkingRemoteHandlers()
+	-- Handle milking session updates from server
+	if self.RemoteEvents.MilkingSessionUpdate then
+		self.RemoteEvents.MilkingSessionUpdate.OnClientEvent:Connect(function(updateType, data)
+			pcall(function()
+				self:HandleMilkingSessionUpdate(updateType, data)
+			end)
+		end)
+		print("✅ Connected MilkingSessionUpdate handler")
+	end
+end
+
+-- ========== MILKING SESSION UI MANAGEMENT ==========
+
+function GameClient:HandleMilkingSessionUpdate(updateType, data)
+	print("🥛 GameClient: Received milking session update: " .. updateType)
+
+	if updateType == "started" then
+		self:StartMilkingUI(data)
+	elseif updateType == "progress" then
+		self:UpdateMilkingProgress(data)
+	elseif updateType == "ended" then
+		self:EndMilkingUI()
+	end
+end
+
+--[[
+    GameClient.lua - FIXED CLICK-BASED UI UPDATES
+    Replace these methods in your existing GameClient.lua
+    
+    FIXES:
+    ✅ UI reflects 1 click = 1 milk system
+    ✅ Clear instructions for click-based milking
+    ✅ Proper click feedback for each milk collection
+    ✅ Updated progress tracking
+]]
+
+-- REPLACE these methods in your existing GameClient.lua:
+
+-- ========== FIXED MILKING UI CREATION ==========
+
+function GameClient:CreateMilkingProgressUI(sessionData)
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Remove existing milking UI
+	local existingUI = playerGui:FindFirstChild("MilkingProgressUI")
+	if existingUI then existingUI:Destroy() end
+
+	-- Create new milking UI
+	local milkingUI = Instance.new("ScreenGui")
+	milkingUI.Name = "MilkingProgressUI"
+	milkingUI.ResetOnSpawn = false
+	milkingUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	milkingUI.Parent = playerGui
+
+	-- Main frame
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Name = "MainFrame"
+	mainFrame.Size = UDim2.new(0, 450, 0, 220)
+	mainFrame.Position = UDim2.new(0.5, -225, 0, 100)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = milkingUI
+
+	-- Add corner rounding
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = mainFrame
+
+	-- Add subtle shadow
+	local shadow = Instance.new("Frame")
+	shadow.Size = UDim2.new(1, 6, 1, 6)
+	shadow.Position = UDim2.new(0, -3, 0, 3)
+	shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	shadow.BackgroundTransparency = 0.8
+	shadow.ZIndex = mainFrame.ZIndex - 1
+	shadow.Parent = mainFrame
+
+	local shadowCorner = Instance.new("UICorner")
+	shadowCorner.CornerRadius = UDim.new(0, 12)
+	shadowCorner.Parent = shadow
+
+	-- Title
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Size = UDim2.new(1, 0, 0, 40)
+	title.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
+	title.BorderSizePixel = 0
+	title.Text = "🥛 CLICK-TO-MILK SESSION"
+	title.TextColor3 = Color3.new(1, 1, 1)
+	title.TextScaled = true
+	title.Font = Enum.Font.GothamBold
+	title.Parent = mainFrame
+
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0, 12)
+	titleCorner.Parent = title
+
+	-- Progress info container
+	local progressContainer = Instance.new("Frame")
+	progressContainer.Name = "ProgressContainer"
+	progressContainer.Size = UDim2.new(1, -20, 1, -60)
+	progressContainer.Position = UDim2.new(0, 10, 0, 50)
+	progressContainer.BackgroundTransparency = 1
+	progressContainer.Parent = mainFrame
+
+	-- Milk collected counter (larger, more prominent)
+	local milkCounter = Instance.new("TextLabel")
+	milkCounter.Name = "MilkCounter"
+	milkCounter.Size = UDim2.new(1, 0, 0.35, 0)
+	milkCounter.Position = UDim2.new(0, 0, 0, 0)
+	milkCounter.BackgroundTransparency = 1
+	milkCounter.Text = "🥛 Milk Collected: 0"
+	milkCounter.TextColor3 = Color3.fromRGB(255, 255, 100)
+	milkCounter.TextScaled = true
+	milkCounter.Font = Enum.Font.GothamBold
+	milkCounter.Parent = progressContainer
+
+	-- Click counter
+	local clickCounter = Instance.new("TextLabel")
+	clickCounter.Name = "ClickCounter"
+	clickCounter.Size = UDim2.new(1, 0, 0.25, 0)
+	clickCounter.Position = UDim2.new(0, 0, 0.35, 0)
+	clickCounter.BackgroundTransparency = 1
+	clickCounter.Text = "👆 Total Clicks: 0"
+	clickCounter.TextColor3 = Color3.fromRGB(200, 255, 200)
+	clickCounter.TextScaled = true
+	clickCounter.Font = Enum.Font.Gotham
+	clickCounter.Parent = progressContainer
+
+	-- Session timer
+	local timer = Instance.new("TextLabel")
+	timer.Name = "Timer"
+	timer.Size = UDim2.new(0.5, 0, 0.2, 0)
+	timer.Position = UDim2.new(0, 0, 0.6, 0)
+	timer.BackgroundTransparency = 1
+	timer.Text = "⏱️ Session: 0s"
+	timer.TextColor3 = Color3.fromRGB(200, 200, 255)
+	timer.TextScaled = true
+	timer.Font = Enum.Font.Gotham
+	timer.Parent = progressContainer
+
+	-- Last click timer
+	local lastClickTimer = Instance.new("TextLabel")
+	lastClickTimer.Name = "LastClickTimer"
+	lastClickTimer.Size = UDim2.new(0.5, 0, 0.2, 0)
+	lastClickTimer.Position = UDim2.new(0.5, 0, 0.6, 0)
+	lastClickTimer.BackgroundTransparency = 1
+	lastClickTimer.Text = "🖱️ Last Click: Now"
+	lastClickTimer.TextColor3 = Color3.fromRGB(255, 200, 100)
+	lastClickTimer.TextScaled = true
+	lastClickTimer.Font = Enum.Font.Gotham
+	lastClickTimer.Parent = progressContainer
+
+	-- FIXED: Click instruction for 1-click-1-milk system
+	local instruction = Instance.new("TextLabel")
+	instruction.Name = "Instruction"
+	instruction.Size = UDim2.new(1, 0, 0.2, 0)
+	instruction.Position = UDim2.new(0, 0, 0.8, 0)
+	instruction.BackgroundTransparency = 1
+	instruction.Text = "🖱️ EACH CLICK = 1 MILK! Session ends after 3 seconds of no clicks."
+	instruction.TextColor3 = Color3.fromRGB(100, 255, 100)
+	instruction.TextScaled = true
+	instruction.Font = Enum.Font.GothamBold
+	instruction.Parent = progressContainer
+
+	-- Stop button
+	local stopButton = Instance.new("TextButton")
+	stopButton.Name = "StopButton"
+	stopButton.Size = UDim2.new(0, 100, 0, 30)
+	stopButton.Position = UDim2.new(1, -110, 1, -40)
+	stopButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	stopButton.BorderSizePixel = 0
+	stopButton.Text = "STOP MILKING"
+	stopButton.TextColor3 = Color3.new(1, 1, 1)
+	stopButton.TextScaled = true
+	stopButton.Font = Enum.Font.Gotham
+	stopButton.Parent = mainFrame
+
+	local stopCorner = Instance.new("UICorner")
+	stopCorner.CornerRadius = UDim.new(0, 8)
+	stopCorner.Parent = stopButton
+
+	-- Stop button functionality
+	stopButton.MouseButton1Click:Connect(function()
+		self:StopMilkingSession()
+	end)
+
+	-- Store UI reference
+	self.MilkingUI.progressUI = milkingUI
+
+	-- Start UI update loop
+	self:StartMilkingUIUpdateLoop()
+
+	print("🥛 GameClient: FIXED milking progress UI created")
+end
+
+-- ========== FIXED PROGRESS UPDATE ==========
+
+function GameClient:UpdateMilkingProgress(progressData)
+	print("📊 GameClient: FIXED updating milking progress")
+
+	if not self.MilkingUI.progressUI then return end
+
+	local progressContainer = self.MilkingUI.progressUI:FindFirstChild("MainFrame"):FindFirstChild("ProgressContainer")
+
+	local milkCounter = progressContainer:FindFirstChild("MilkCounter")
+	local clickCounter = progressContainer:FindFirstChild("ClickCounter")
+	local timer = progressContainer:FindFirstChild("Timer")
+	local lastClickTimer = progressContainer:FindFirstChild("LastClickTimer")
+
+	-- Update milk counter with exciting animation
+	if milkCounter then
+		milkCounter.Text = "🥛 Milk Collected: " .. (progressData.milkCollected or 0)
+
+		-- Flash effect for new milk
+		local flash = game:GetService("TweenService"):Create(milkCounter,
+			TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				TextColor3 = Color3.fromRGB(100, 255, 100),
+				TextStrokeTransparency = 0,
+				TextStrokeColor3 = Color3.fromRGB(255, 255, 255)
+			}
+		)
+		flash:Play()
+		flash.Completed:Connect(function()
+			local restore = game:GetService("TweenService"):Create(milkCounter,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					TextColor3 = Color3.fromRGB(255, 255, 100),
+					TextStrokeTransparency = 1
+				}
+			)
+			restore:Play()
+		end)
+	end
+
+	-- Update click counter (same as milk count in 1:1 system)
+	if clickCounter then
+		clickCounter.Text = "👆 Total Clicks: " .. (progressData.milkCollected or 0)
+
+		-- Quick flash for click feedback
+		local clickFlash = game:GetService("TweenService"):Create(clickCounter,
+			TweenInfo.new(0.1, Enum.EasingStyle.Quad),
+			{TextColor3 = Color3.fromRGB(255, 255, 255)}
+		)
+		clickFlash:Play()
+		clickFlash.Completed:Connect(function()
+			local restore = game:GetService("TweenService"):Create(clickCounter,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+				{TextColor3 = Color3.fromRGB(200, 255, 200)}
+			)
+			restore:Play()
+		end)
+	end
+
+	-- Update session timer
+	if timer then
+		timer.Text = "⏱️ Session: " .. (progressData.sessionDuration or 0) .. "s"
+	end
+
+	-- Update last click timer
+	if lastClickTimer then
+		lastClickTimer.Text = "🖱️ Last Click: Now"
+		lastClickTimer.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+		-- Start countdown to show when session will timeout
+		spawn(function()
+			for i = 1, 3 do
+				wait(1)
+				if lastClickTimer and lastClickTimer.Parent then
+					local timeLeft = 3 - i
+					if timeLeft > 0 then
+						lastClickTimer.Text = "🖱️ Timeout in: " .. timeLeft .. "s"
+						lastClickTimer.TextColor3 = Color3.fromRGB(255, 200 - (i * 50), 100)
+					else
+						lastClickTimer.Text = "🖱️ Timing out..."
+						lastClickTimer.TextColor3 = Color3.fromRGB(255, 100, 100)
+					end
+				else
+					break
+				end
+			end
+		end)
+	end
+
+	-- Create enhanced visual feedback for each click
+	self:CreateEnhancedMilkCollectionFeedback()
+end
+
+-- ========== ENHANCED CLICK FEEDBACK ==========
+
+function GameClient:CreateEnhancedMilkCollectionFeedback()
+	print("✨ GameClient: Creating ENHANCED milk collection feedback")
+
+	-- Create multiple floating milk icons for more satisfying feedback
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	for i = 1, 3 do
+		local feedback = Instance.new("ScreenGui")
+		feedback.Name = "MilkFeedback"
+		feedback.Parent = playerGui
+
+		local milkIcon = Instance.new("TextLabel")
+		milkIcon.Size = UDim2.new(0, 80, 0, 80)
+		milkIcon.Position = UDim2.new(0.5, math.random(-150, 150), 0.5, math.random(-100, 50))
+		milkIcon.BackgroundTransparency = 1
+		milkIcon.Text = "🥛+1"
+		milkIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+		milkIcon.TextScaled = true
+		milkIcon.Font = Enum.Font.GothamBold
+		milkIcon.TextStrokeTransparency = 0
+		milkIcon.TextStrokeColor3 = Color3.fromRGB(100, 255, 100)
+		milkIcon.Parent = feedback
+
+		-- Different animation for each icon
+		local animationVariations = {
+			-- Bounce up
+			function()
+				return game:GetService("TweenService"):Create(milkIcon,
+					TweenInfo.new(1.5, Enum.EasingStyle.Bounce, Enum.EasingDirection.Out),
+					{
+						Position = milkIcon.Position + UDim2.new(0, 0, 0, -150),
+						TextTransparency = 1,
+						TextStrokeTransparency = 1,
+						Rotation = math.random(-30, 30)
+					}
+				)
+			end,
+			-- Float up smoothly
+			function()
+				return game:GetService("TweenService"):Create(milkIcon,
+					TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{
+						Position = milkIcon.Position + UDim2.new(0, 0, 0, -120),
+						TextTransparency = 1,
+						TextStrokeTransparency = 1
+					}
+				)
+			end,
+			-- Arc motion
+			function()
+				local tween1 = game:GetService("TweenService"):Create(milkIcon,
+					TweenInfo.new(0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{Position = milkIcon.Position + UDim2.new(0, math.random(-50, 50), 0, -80)}
+				)
+				local tween2 = game:GetService("TweenService"):Create(milkIcon,
+					TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					{
+						Position = milkIcon.Position + UDim2.new(0, math.random(-100, 100), 0, -160),
+						TextTransparency = 1,
+						TextStrokeTransparency = 1
+					}
+				)
+				tween1:Play()
+				tween1.Completed:Connect(function() tween2:Play() end)
+				return tween2
+			end
+		}
+
+		local tween = animationVariations[i]()
+		tween.Completed:Connect(function()
+			feedback:Destroy()
+		end)
+
+		wait(0.1) -- Small delay between each feedback element
+	end
+end
+
+-- ========== FIXED START MILKING UI ==========
+
+function GameClient:StartMilkingUI(sessionData)
+	print("🥛 GameClient: Starting FIXED milking UI")
+
+	self.MilkingUI.isActive = true
+	self.MilkingUI.currentSession = sessionData
+
+	-- Create milking progress UI
+	self:CreateMilkingProgressUI(sessionData)
+
+	-- Don't start click monitoring loop (we handle clicks individually)
+
+	-- Show initial instruction for click-based system
+	if self.UIManager then
+		self.UIManager:ShowNotification("🥛 Milking Started!", 
+			"Click the cow for each milk!\n1 Click = 1 Milk\nSession ends after 3 seconds of no clicks.", "success")
+	end
+end
+
+-- ========== FIXED CLICK HANDLING ==========
+
+function GameClient:HandleCowClick(cowModel)
+	print("🐄 GameClient: FIXED handling cow click for milking system")
+
+	-- If currently milking, this is a milk collection click
+	if self.MilkingUI.isActive then
+		-- Send continue signal (which gives 1 milk)
+		if self.RemoteEvents.ContinueMilking then
+			self.RemoteEvents.ContinueMilking:FireServer()
+		end
+
+		-- Create enhanced click feedback
+		local mouse = game:GetService("Players").LocalPlayer:GetMouse()
+		self:CreateClickFeedback(Vector2.new(mouse.X, mouse.Y))
+
+		-- Play click sound for satisfaction
+		self:PlayClickSound()
+
+		return
+	end
+
+	-- Otherwise, start new milking session
+	local cowId = cowModel.Name
+	if self.RemoteEvents.StartMilkingSession then
+		self.RemoteEvents.StartMilkingSession:FireServer(cowId)
+	end
+end
+
+-- ========== CLICK SOUND FEEDBACK ==========
+
+function GameClient:PlayClickSound()
+	-- Create satisfying click sound
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://131961136" -- Default click sound, replace with better one
+	sound.Volume = 0.3
+	--sound.Pitch = 1.2 + math.random(-20, 20) / 100 -- Slight pitch variation
+	sound.Parent = workspace
+	sound:Play()
+
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
+end
+
+-- ========== ENHANCED CLICK FEEDBACK ==========
+
+function GameClient:CreateClickFeedback(clickPosition)
+	print("👆 GameClient: Creating ENHANCED click feedback")
+
+	local currentTime = tick()
+
+	-- Create enhanced click ripple effect
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	local clickFeedback = Instance.new("ScreenGui")
+	clickFeedback.Name = "ClickFeedback"
+	clickFeedback.Parent = playerGui
+
+	-- Multiple ripple rings for more impact
+	for i = 1, 3 do
+		local ripple = Instance.new("Frame")
+		ripple.Size = UDim2.new(0, 20, 0, 20)
+		ripple.Position = UDim2.new(0, clickPosition.X - 10, 0, clickPosition.Y - 10)
+		ripple.BackgroundColor3 = Color3.fromRGB(100, 255, 100)
+		ripple.BackgroundTransparency = 0.3 + (i * 0.1)
+		ripple.BorderSizePixel = 0
+		ripple.Parent = clickFeedback
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0)
+		corner.Parent = ripple
+
+		-- Delayed expansion for layered effect
+		spawn(function()
+			wait((i - 1) * 0.05)
+
+			local expand = game:GetService("TweenService"):Create(ripple,
+				TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Size = UDim2.new(0, 80 + (i * 10), 0, 80 + (i * 10)),
+					Position = UDim2.new(0, clickPosition.X - (40 + (i * 5)), 0, clickPosition.Y - (40 + (i * 5))),
+					BackgroundTransparency = 1
+				}
+			)
+			expand:Play()
+		end)
+	end
+
+	-- Clean up after animation
+	spawn(function()
+		wait(1)
+		clickFeedback:Destroy()
+	end)
+end
+
+-- ========== FIXED UI UPDATE LOOP ==========
+
+function GameClient:StartMilkingUIUpdateLoop()
+	spawn(function()
+		local startTime = tick()
+
+		while self.MilkingUI.isActive and self.MilkingUI.progressUI do
+			wait(0.1)
+
+			-- Update timer display
+			local elapsed = math.floor(tick() - startTime)
+			local timer = self.MilkingUI.progressUI:FindFirstChild("MainFrame"):FindFirstChild("ProgressContainer"):FindFirstChild("Timer")
+
+			if timer then
+				timer.Text = "⏱️ Session: " .. elapsed .. "s"
+			end
+
+			-- Animate instruction text to encourage clicking
+			local instruction = self.MilkingUI.progressUI:FindFirstChild("MainFrame"):FindFirstChild("ProgressContainer"):FindFirstChild("Instruction")
+			if instruction then
+				local pulse = game:GetService("TweenService"):Create(instruction,
+					TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+					{TextTransparency = 0.3}
+				)
+				pulse:Play()
+			end
+		end
+	end)
+end
+
+print("GameClient: ✅ FIXED CLICK-BASED UI SYSTEM!")
+print("🔧 KEY FIXES:")
+print("  🖱️ UI shows 1 click = 1 milk clearly")
+print("  📊 Enhanced progress tracking and feedback")
+print("  ✨ Multiple visual feedback elements per click")
+print("  🔊 Click sound feedback for satisfaction")
+print("  ⏱️ Timeout countdown display")
+print("  📱 Better mobile touch feedback")
+
+function GameClient:StartClickMonitoring()
+	print("🖱️ GameClient: Starting click monitoring for milking")
+
+	-- Enable enhanced click detection
+	self.MilkingUI.clickMonitoring = true
+
+	-- Monitor for clicks to send continue signals
+	spawn(function()
+		while self.MilkingUI.isActive and self.MilkingUI.clickMonitoring do
+			wait(0.5) -- Check every 0.5 seconds
+
+			-- Send continue signal to maintain session
+			if self.RemoteEvents.ContinueMilking then
+				self.RemoteEvents.ContinueMilking:FireServer()
+			end
+		end
+	end)
+end
+
+function GameClient:CreateMilkCollectionFeedback()
+	print("✨ GameClient: Creating milk collection feedback")
+
+	-- Create floating milk icon
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	local feedback = Instance.new("ScreenGui")
+	feedback.Name = "MilkFeedback"
+	feedback.Parent = playerGui
+
+	local milkIcon = Instance.new("TextLabel")
+	milkIcon.Size = UDim2.new(0, 60, 0, 60)
+	milkIcon.Position = UDim2.new(0.5, math.random(-100, 100), 0.5, math.random(-50, 50))
+	milkIcon.BackgroundTransparency = 1
+	milkIcon.Text = "🥛+1"
+	milkIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+	milkIcon.TextScaled = true
+	milkIcon.Font = Enum.Font.GothamBold
+	milkIcon.TextStrokeTransparency = 0
+	milkIcon.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	milkIcon.Parent = feedback
+
+	-- Animate feedback
+	local tween = game:GetService("TweenService"):Create(milkIcon,
+		TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Position = milkIcon.Position + UDim2.new(0, 0, 0, -100),
+			TextTransparency = 1,
+			TextStrokeTransparency = 1
+		}
+	)
+	tween:Play()
+	tween.Completed:Connect(function()
+		feedback:Destroy()
+	end)
+end
+
+function GameClient:EndMilkingUI()
+	print("🥛 GameClient: Ending milking UI")
+
+	self.MilkingUI.isActive = false
+	self.MilkingUI.clickMonitoring = false
+	self.MilkingUI.currentSession = nil
+
+	-- Remove progress UI with animation
+	if self.MilkingUI.progressUI then
+		local mainFrame = self.MilkingUI.progressUI:FindFirstChild("MainFrame")
+		if mainFrame then
+			local fadeOut = game:GetService("TweenService"):Create(mainFrame,
+				TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Position = mainFrame.Position + UDim2.new(0, 0, 0, -100),
+					Transparency = 1
+				}
+			)
+			fadeOut:Play()
+			fadeOut.Completed:Connect(function()
+				self.MilkingUI.progressUI:Destroy()
+				self.MilkingUI.progressUI = nil
+			end)
+		else
+			self.MilkingUI.progressUI:Destroy()
+			self.MilkingUI.progressUI = nil
+		end
+	end
+
+	-- Show completion message
+	if self.UIManager then
+		self.UIManager:ShowNotification("🥛 Milking Complete!", 
+			"Milking session ended. Check your inventory for collected milk!", "success")
+	end
+end
+
+function GameClient:StopMilkingSession()
+	print("🛑 GameClient: Player manually stopping milking session")
+
+	-- Send stop signal to server
+	if self.RemoteEvents.StopMilkingSession then
+		self.RemoteEvents.StopMilkingSession:FireServer()
+	end
+
+	-- End UI immediately
+	self:EndMilkingUI()
+end
+
+-- ========== KEYBOARD SHORTCUTS ==========
+
+function GameClient:SetupMilkingKeyboardShortcuts()
+	local UserInputService = game:GetService("UserInputService")
+
+	UserInputService.InputBegan:Connect(function(input, gameProcessed)
+		if gameProcessed then return end
+
+		-- Stop milking with Escape
+		if input.KeyCode == Enum.KeyCode.Escape and self.MilkingUI.isActive then
+			self:StopMilkingSession()
+		end
+
+		-- Continue milking with Spacebar (alternative to clicking)
+		if input.KeyCode == Enum.KeyCode.Space and self.MilkingUI.isActive then
+			if self.RemoteEvents.ContinueMilking then
+				self.RemoteEvents.ContinueMilking:FireServer()
+			end
+
+			-- Show spacebar feedback
+			local screenCenter = Vector2.new(workspace.CurrentCamera.ViewportSize.X/2, workspace.CurrentCamera.ViewportSize.Y/2)
+			self:CreateClickFeedback(screenCenter)
+		end
+	end)
+end
+
+-- ========== MOBILE TOUCH SUPPORT ==========
+
+function GameClient:SetupMobileMilkingSupport()
+	local UserInputService = game:GetService("UserInputService")
+
+	-- Handle touch input for mobile milking
+	UserInputService.TouchTapInWorld:Connect(function(position, gameProcessedEvent)
+		if gameProcessedEvent then return end
+
+		if self.MilkingUI.isActive then
+			-- Convert touch to continue milking
+			if self.RemoteEvents.ContinueMilking then
+				self.RemoteEvents.ContinueMilking:FireServer()
+			end
+
+			-- Create touch feedback
+			local camera = workspace.CurrentCamera
+			local screenPoint = camera:WorldToScreenPoint(position)
+			self:CreateClickFeedback(Vector2.new(screenPoint.X, screenPoint.Y))
+		end
+	end)
+end
+
+-- ========== INITIALIZATION UPDATES ==========
+
+-- ADD these to your existing GameClient:Initialize() method:
+function GameClient:InitializeEnhancedMilking()
+	-- Initialize clicker milking UI
+	self:InitializeClickerMilkingUI()
+
+	-- Setup keyboard shortcuts
+	self:SetupMilkingKeyboardShortcuts()
+
+	-- Setup mobile support
+	self:SetupMobileMilkingSupport()
+
+	print("GameClient: Enhanced milking system initialized!")
+end
+
+-- ========== ERROR HANDLING ==========
+
+function GameClient:HandleMilkingError(errorMsg)
+	warn("GameClient: Milking error - " .. tostring(errorMsg))
+
+	-- Clean up UI on error
+	if self.MilkingUI.isActive then
+		self:EndMilkingUI()
+	end
+
+	-- Show error notification
+	if self.UIManager then
+		self.UIManager:ShowNotification("Milking Error", 
+			"Milking session encountered an error and was stopped.", "error")
+	end
+end
+
+-- ========== DEBUG COMMANDS ==========
+
+function GameClient:DebugMilkingUI()
+	print("=== MILKING UI DEBUG ===")
+	print("UI Active:", self.MilkingUI.isActive)
+	print("Current Session:", self.MilkingUI.currentSession ~= nil)
+	print("Progress UI exists:", self.MilkingUI.progressUI ~= nil)
+	print("Click Monitoring:", self.MilkingUI.clickMonitoring)
+	print("Last Click Time:", self.MilkingUI.lastClickTime)
+	print("========================")
+end
+
+-- Make debug function global
+_G.DebugMilkingUI = function()
+	if _G.GameClient and _G.GameClient.DebugMilkingUI then
+		_G.GameClient:DebugMilkingUI()
+	end
+end
+
+-- ========== CLEANUP ==========
+
+function GameClient:CleanupMilkingUI()
+	-- Clean up milking UI when player leaves or resets
+	if self.MilkingUI.progressUI then
+		self.MilkingUI.progressUI:Destroy()
+	end
+
+	self.MilkingUI.isActive = false
+	self.MilkingUI.clickMonitoring = false
+	self.MilkingUI.currentSession = nil
+	self.MilkingUI.progressUI = nil
+
+	print("GameClient: Milking UI cleaned up")
+end
+
+-- Add cleanup to existing cleanup method
+-- ADD this to your existing GameClient:Cleanup() method:
+-- self:CleanupMilkingUI()
+
+print("GameClient: ✅ CLICKER MILKING UI LOADED!")
+print("🥛 NEW UI FEATURES:")
+print("  📊 Real-time milking progress display")
+print("  🖱️ Click feedback and visual effects")
+print("  ⏱️ Session timer and milk counter")
+print("  📱 Mobile touch support")
+print("  ⌨️ Keyboard shortcuts (ESC to stop, SPACE to continue)")
+print("  ✨ Floating milk collection feedback")
+print("  🎨 Smooth animations and transitions")
+print("")
+print("🔧 Debug Command:")
+print("  _G.DebugMilkingUI() - Show milking UI debug info")
 -- ========== INPUT HANDLING ==========
 
 function GameClient:SetupInputHandling()
@@ -1281,6 +2063,7 @@ function GameClient:Cleanup()
 		ShopTabCache = {},
 		LastShopRefresh = 0
 	}
+	self:CleanupMilkingUI()
 
 	print("GameClient: Cleaned up")
 end

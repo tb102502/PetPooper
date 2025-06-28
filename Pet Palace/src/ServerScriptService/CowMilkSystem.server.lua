@@ -44,7 +44,7 @@ print("=== ENHANCED COW MILK SYSTEM STARTING ===")
 local EnhancedCowMilkSystem = {}
 
 -- Configuration
-local AUTO_MILK_INTERVAL = 30 -- seconds
+local AUTO_MILK_INTERVAL = 1 -- seconds
 local MILK_INDICATOR_HEIGHT = 8
 
 -- State tracking
@@ -53,14 +53,12 @@ EnhancedCowMilkSystem.CowIndicators = {} -- [cowId] = indicatorModel
 EnhancedCowMilkSystem.AutoMilkers = {} -- [userId] = true
 EnhancedCowMilkSystem.PlayerCooldowns = {} -- [userId][cowId] = lastCollection
 
--- ========== INITIALIZATION ==========
-
 function EnhancedCowMilkSystem:Initialize()
 	print("EnhancedCowMilkSystem: Initializing advanced cow management...")
 
 	-- Setup remote events
 	self:SetupRemoteEvents()
-
+	self:InitializeClickerIntegration()
 	-- Start monitoring systems
 	self:StartCowMonitoring()
 	self:StartAutoMilking()
@@ -129,8 +127,6 @@ function EnhancedCowMilkSystem:ScanForExistingCows()
 	print("EnhancedCowMilkSystem: Registered " .. cowCount .. " existing cows")
 end
 
--- ========== COW REGISTRATION AND MANAGEMENT ==========
-
 function EnhancedCowMilkSystem:RegisterCow(cowModel, cowId, ownerName)
 	print("EnhancedCowMilkSystem: Registering cow " .. cowId .. " for " .. ownerName)
 
@@ -148,68 +144,6 @@ function EnhancedCowMilkSystem:RegisterCow(cowModel, cowId, ownerName)
 	self:ApplyTierEffects(cowModel, tier)
 
 	print("EnhancedCowMilkSystem: Successfully registered cow " .. cowId)
-end
-
-function EnhancedCowMilkSystem:SetupEnhancedClickDetection(cowModel, cowId, ownerName)
-	-- Remove existing detectors
-	for _, obj in pairs(cowModel:GetDescendants()) do
-		if obj:IsA("ClickDetector") then
-			obj:Destroy()
-		end
-	end
-
-	-- Find all clickable parts
-	local clickableParts = {}
-
-	-- Priority parts
-	local priorityNames = {"humanoidrootpart", "torso", "body", "middle"}
-	for _, name in ipairs(priorityNames) do
-		for _, part in pairs(cowModel:GetDescendants()) do
-			if part:IsA("BasePart") and part.Name:lower() == name then
-				table.insert(clickableParts, {part = part, priority = 10})
-			end
-		end
-	end
-
-	-- Large parts as backup
-	if #clickableParts < 2 then
-		for _, part in pairs(cowModel:GetDescendants()) do
-			if part:IsA("BasePart") then
-				local volume = part.Size.X * part.Size.Y * part.Size.Z
-				if volume > 8 then
-					table.insert(clickableParts, {part = part, priority = 5})
-				end
-			end
-		end
-	end
-
-	-- Add click detectors
-	for _, entry in ipairs(clickableParts) do
-		local detector = Instance.new("ClickDetector")
-		detector.MaxActivationDistance = 30
-		detector.Parent = entry.part
-
-		detector.MouseClick:Connect(function(player)
-			if player.Name == ownerName then
-				self:HandleCowMilkCollection(player, cowId)
-			else
-				self:SendNotification(player, "Not Your Cow", "This cow belongs to " .. ownerName .. "!", "warning")
-			end
-		end)
-
-		-- Visual feedback
-		detector.MouseHoverEnter:Connect(function(player)
-			if player.Name == ownerName then
-				self:HighlightCow(cowModel, true)
-			end
-		end)
-
-		detector.MouseHoverLeave:Connect(function(player)
-			self:HighlightCow(cowModel, false)
-		end)
-	end
-
-	print("EnhancedCowMilkSystem: Setup click detection for cow " .. cowId .. " with " .. #clickableParts .. " clickable parts")
 end
 
 function EnhancedCowMilkSystem:CreateMilkIndicator(cowModel, cowId)
@@ -554,15 +488,15 @@ function EnhancedCowMilkSystem:GetPlayerCowInfo(player)
 				table.insert(cowInfo.activeCows, {
 					id = cowId,
 					tier = tier,
-					milkAmount = cowData.milkAmount or 2,
-					cooldown = cowData.cooldown or 60,
+					milkAmount = cowData.milkAmount or 1,
+					cooldown = cowData.cooldown or 1,
 					lastCollection = cowData.lastMilkCollection or 0,
 					totalProduced = cowData.totalMilkProduced or 0,
 					position = cowData.position or Vector3.new(0, 0, 0)
 				})
 
 				-- Accumulate stats
-				totalCooldown = totalCooldown + (cowData.cooldown or 60)
+				totalCooldown = totalCooldown + (cowData.cooldown or 1)
 				totalMilk = totalMilk + (cowData.totalMilkProduced or 0)
 			end
 
@@ -690,7 +624,7 @@ function EnhancedCowMilkSystem:GetPerformanceData()
 
 	-- Performance settings
 	performanceData.performanceSettings = self.PerformanceSettings or {
-		particleCount = 15,
+		particleCount = 20,
 		updateRate = 0.1,
 		lightRange = 20
 	}
@@ -721,20 +655,6 @@ function EnhancedCowMilkSystem:GetPerformanceData()
 	return performanceData
 end
 
--- ========== ADDITIONAL UTILITY METHODS ==========
---[[
-    FIXED CowMilkSystem.server.lua - Missing UpdateCowIndicator Method
-    
-    FIXES:
-    ✅ Added missing UpdateCowIndicator method
-    ✅ Enhanced indicator management system
-    ✅ Better integration with GameCore
-    ✅ Improved error handling
-]]
-
--- Add these missing methods to your EnhancedCowMilkSystem class:
-
--- ========== MISSING INDICATOR METHODS - ADD TO ENHANCEDCOWMILKSYSTEM ==========
 
 function EnhancedCowMilkSystem:UpdateCowIndicator(cowId, player)
 	print("EnhancedCowMilkSystem: Updating cow indicator for " .. cowId)
@@ -843,7 +763,7 @@ function EnhancedCowMilkSystem:GetCowIndicatorState(cowId)
 	-- Calculate state based on cooldown
 	local currentTime = os.time()
 	local timeSinceCollection = currentTime - (cowData.lastMilkCollection or 0)
-	local cooldown = cowData.cooldown or 60
+	local cooldown = cowData.cooldown or 1
 
 	if timeSinceCollection >= cooldown then
 		return "ready"
@@ -864,7 +784,7 @@ function EnhancedCowMilkSystem:UpdateIndicatorWithCooldown(cowId, timeLeft)
 
 	if timeLeft <= 0 then
 		self:UpdateCowIndicatorLocal(cowId, "ready")
-	elseif timeLeft <= 10 then
+	elseif timeLeft <= 1 then
 		self:UpdateCowIndicatorLocal(cowId, "almost_ready")
 		indicator.label.Text = "🥛 ALMOST READY (" .. math.ceil(timeLeft) .. "s)"
 	else
@@ -987,7 +907,7 @@ function EnhancedCowMilkSystem:UpdateAllCowIndicators()
 								if cowData then
 									local currentTime = os.time()
 									local timeSinceCollection = currentTime - (cowData.lastMilkCollection or 0)
-									local timeLeft = (cowData.cooldown or 60) - timeSinceCollection
+									local timeLeft = (cowData.cooldown or 1) - timeSinceCollection
 
 									self:UpdateIndicatorWithCooldown(cowId, timeLeft)
 									continue
@@ -1045,7 +965,7 @@ function EnhancedCowMilkSystem:HandleMilkCollectionFallback(player, cowId)
 	-- Basic cooldown check (fallback implementation)
 	local lastCollection = self.PlayerCooldowns[player.UserId] and self.PlayerCooldowns[player.UserId][cowId] or 0
 	local currentTime = os.time()
-	local cooldown = 60 -- Default cooldown
+	local cooldown = 1 -- Default cooldown
 
 	if currentTime - lastCollection < cooldown then
 		local timeLeft = cooldown - (currentTime - lastCollection)
@@ -1069,20 +989,6 @@ function EnhancedCowMilkSystem:HandleMilkCollectionFallback(player, cowId)
 	self:SendNotification(player, "🥛 Milk Collected!", "Collected milk from your cow!", "success")
 	return true
 end
-
--- ========== REPLACE EXISTING MILK COLLECTION HANDLER ==========
-
--- REPLACE your existing HandleCowMilkCollection method with this:
-function EnhancedCowMilkSystem:HandleCowMilkCollection(player, cowId)
-	return self:HandleEnhancedCowMilkCollection(player, cowId)
-end
-
--- ========== UPDATE THE INITIALIZATION TO USE ENHANCED INDICATORS ==========
-
--- UPDATE your existing CreateMilkIndicator method to use the enhanced version:
-
--- ========== ADD TO YOUR INITIALIZATION ==========
-
 -- Add this to your Initialize method after existing initialization:
 function EnhancedCowMilkSystem:InitializeEnhancedFeatures()
 	print("EnhancedCowMilkSystem: Initializing enhanced features...")
@@ -1431,7 +1337,7 @@ function EnhancedCowMilkSystem:UpdateCowIndicatorStatus(cowId)
 		indicator.part.Color = Color3.fromRGB(0, 255, 0)
 		indicator.label.Text = "🥛 READY TO COLLECT!"
 		indicator.label.TextColor3 = Color3.fromRGB(0, 255, 0)
-	elseif timeLeft <= 10 then
+	elseif timeLeft <= 1 then
 		-- Almost ready
 		indicator.part.Color = Color3.fromRGB(255, 255, 0)
 		indicator.label.Text = "🥛 ALMOST READY (" .. math.ceil(timeLeft) .. "s)"
@@ -1518,8 +1424,791 @@ function EnhancedCowMilkSystem:ClearCowEffects(cowModel)
 	end
 end
 
--- ========== ADMIN COMMANDS ==========
+-- ========== CLICKER SYSTEM INTEGRATION ==========
 
+function EnhancedCowMilkSystem:InitializeClickerIntegration()
+	print("EnhancedCowMilkSystem: Initializing clicker system integration...")
+
+	-- Initialize clicker-specific tracking
+	self.ClickerIntegration = {
+		ActiveMilkingSessions = {}, -- [cowId] = {player, startTime, effects}
+		MilkingIndicators = {}, -- [cowId] = indicatorObjects
+		SessionEffects = {} -- [cowId] = effectObjects
+	}
+
+	-- Setup clicker remote handlers
+	self:SetupClickerRemoteHandlers()
+
+	print("EnhancedCowMilkSystem: Clicker integration initialized!")
+end
+
+function EnhancedCowMilkSystem:SetupClickerRemoteHandlers()
+	local remoteFolder = ReplicatedStorage:FindFirstChild("GameRemotes")
+	if not remoteFolder then return end
+
+	-- Connect to milking session updates
+	if remoteFolder:FindFirstChild("MilkingSessionUpdate") then
+		remoteFolder.MilkingSessionUpdate.OnServerEvent:Connect(function(player, updateType, data)
+			pcall(function()
+				self:HandleMilkingSessionUpdate(player, updateType, data)
+			end)
+		end)
+	end
+end
+
+-- ========== ENHANCED CLICK DETECTION FOR CLICKER SYSTEM ==========
+
+-- REPLACE your existing SetupEnhancedClickDetection method with this:
+function EnhancedCowMilkSystem:HandleClickerCowClick(player, cowId)
+	print("🖱️ EnhancedCowMilkSystem: Handling clicker cow click from " .. player.Name)
+
+	-- Check if player is already milking this cow
+	local activeSession = self.ClickerIntegration.ActiveMilkingSessions[cowId]
+
+	if activeSession and activeSession.player.UserId == player.UserId then
+		-- Continue existing milking session
+		print("🖱️ Continuing milking session for " .. player.Name)
+		self:ContinueMilkingSession(player, cowId)
+	else
+		-- Start new milking session through GameCore
+		print("🖱️ Starting new milking session for " .. player.Name)
+		self:StartNewMilkingSession(player, cowId)
+	end
+end
+
+function EnhancedCowMilkSystem:StartNewMilkingSession(player, cowId)
+	-- Use GameCore's clicker system to start session
+	if GameCore and GameCore.HandleStartMilkingSession then
+		local success = GameCore:HandleStartMilkingSession(player, cowId)
+
+		if success then
+			-- Create visual session tracking
+			self:CreateMilkingSessionVisuals(player, cowId)
+		end
+
+		return success
+	else
+		-- Fallback to old system if GameCore clicker not available
+		return self:HandleCowMilkCollection(player, cowId)
+	end
+end
+
+
+-- ========== MILKING SESSION VISUAL EFFECTS ==========
+
+function EnhancedCowMilkSystem:CreateMilkingSessionVisuals(player, cowId)
+	print("🎨 EnhancedCowMilkSystem: Creating milking session visuals for " .. cowId)
+
+	local cowModel = self.ActiveCows[cowId]
+	if not cowModel then return end
+
+	-- Store session data
+	self.ClickerIntegration.ActiveMilkingSessions[cowId] = {
+		player = player,
+		startTime = os.time(),
+		effects = {}
+	}
+
+	-- Create milking area effect
+	self:CreateMilkingAreaEffect(cowModel, cowId)
+
+	-- Update cow indicator for active milking
+	self:UpdateIndicatorForMilking(cowId, "active_milking")
+
+	-- Create player milking animation area
+	self:CreatePlayerMilkingArea(player, cowModel, cowId)
+
+	-- Start milking particle effects
+	self:StartMilkingParticleEffects(cowModel, cowId)
+end
+
+function EnhancedCowMilkSystem:CreatePlayerMilkingArea(player, cowModel, cowId)
+	local character = player.Character
+	if not character then return end
+
+	-- Create milking stool effect
+	local stool = Instance.new("Part")
+	stool.Name = "MilkingStool"
+	stool.Size = Vector3.new(2, 1, 2)
+	stool.Shape = Enum.PartType.Cylinder
+	stool.Material = Enum.Material.Wood
+	stool.Color = Color3.fromRGB(139, 90, 43)
+	stool.CanCollide = false
+	stool.Anchored = true
+
+	local cowCenter = self:GetCowCenter(cowModel)
+	stool.Position = cowCenter + Vector3.new(3, -1, 0)
+	stool.Parent = workspace
+
+	-- Store in effects
+	table.insert(self.ClickerIntegration.SessionEffects[cowId], stool)
+
+	-- Create milk bucket
+	local bucket = Instance.new("Part")
+	bucket.Name = "MilkBucket"
+	bucket.Size = Vector3.new(1, 1.5, 1)
+	bucket.Shape = Enum.PartType.Cylinder
+	bucket.Material = Enum.Material.Metal
+	bucket.Color = Color3.fromRGB(150, 150, 150)
+	bucket.CanCollide = false
+	bucket.Anchored = true
+	bucket.Position = cowCenter + Vector3.new(2, -0.5, 1)
+	bucket.Parent = workspace
+
+	-- Store in effects
+	table.insert(self.ClickerIntegration.SessionEffects[cowId], bucket)
+end
+
+--[[
+    CowMilkSystem.server.lua - FIXED CLICK-BASED VISUAL EFFECTS
+    Replace these methods in your existing CowMilkSystem
+    
+    FIXES:
+    ✅ Visual effects match click-based system (no auto-streams)
+    ✅ Click-responsive particle effects
+    ✅ Proper session visual management
+    ✅ Click-triggered milk drop effects
+]]
+
+-- REPLACE these methods in your existing EnhancedCowMilkSystem:
+
+-- ========== FIXED MILKING PARTICLE EFFECTS (CLICK-BASED) ==========
+
+function EnhancedCowMilkSystem:StartMilkingParticleEffects(cowModel, cowId)
+	-- REMOVED: No automatic milk stream - only create effects on clicks
+	-- The milk drops will be created when HandleContinueMilking is called
+	print("🎨 EnhancedCowMilkSystem: Started click-based particle system for " .. cowId)
+end
+
+-- ========== FIXED CLICK PARTICLE EFFECT ==========
+
+function EnhancedCowMilkSystem:CreateClickParticleEffect(player, cowId)
+	local cowModel = self.ActiveCows[cowId]
+	if not cowModel then return end
+
+	local cowCenter = self:GetCowCenter(cowModel)
+
+	print("✨ EnhancedCowMilkSystem: Creating click milk drop effect for " .. cowId)
+
+	-- Create single milk drop that falls into bucket
+	local milkDrop = Instance.new("Part")
+	milkDrop.Size = Vector3.new(0.2, 0.3, 0.2)
+	milkDrop.Shape = Enum.PartType.Ball
+	milkDrop.Material = Enum.Material.Neon
+	milkDrop.Color = Color3.fromRGB(255, 255, 255)
+	milkDrop.CanCollide = false
+	milkDrop.Anchored = true
+	milkDrop.Position = cowCenter + Vector3.new(1, -0.5, 0) -- From cow udder area
+	milkDrop.Parent = workspace
+
+	-- Animate milk drop falling into bucket
+	local bucketPosition = cowCenter + Vector3.new(2, -1.5, 1)
+
+	local fall = TweenService:Create(milkDrop,
+		TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{
+			Position = bucketPosition,
+			Size = Vector3.new(0.1, 0.1, 0.1)
+		}
+	)
+	fall:Play()
+
+	fall.Completed:Connect(function()
+		-- Create splash effect in bucket
+		self:CreateBucketSplashEffect(bucketPosition, cowId)
+		milkDrop:Destroy()
+	end)
+
+	-- Create small sparkle effect around click area
+	for i = 1, 5 do
+		local sparkle = Instance.new("Part")
+		sparkle.Size = Vector3.new(0.1, 0.1, 0.1)
+		sparkle.Shape = Enum.PartType.Ball
+		sparkle.Material = Enum.Material.Neon
+		sparkle.Color = Color3.fromRGB(255, 255, 100)
+		sparkle.CanCollide = false
+		sparkle.Anchored = true
+		sparkle.Position = cowCenter + Vector3.new(
+			math.random(-2, 2),
+			math.random(-1, 1),
+			math.random(-2, 2)
+		)
+		sparkle.Parent = workspace
+
+		local tween = TweenService:Create(sparkle,
+			TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = sparkle.Position + Vector3.new(0, 3, 0),
+				Transparency = 1,
+				Size = Vector3.new(0.05, 0.05, 0.05)
+			}
+		)
+		tween:Play()
+		tween.Completed:Connect(function()
+			sparkle:Destroy()
+		end)
+	end
+end
+
+-- ========== BUCKET SPLASH EFFECT ==========
+
+function EnhancedCowMilkSystem:CreateBucketSplashEffect(bucketPosition, cowId)
+	print("💦 EnhancedCowMilkSystem: Creating bucket splash effect")
+
+	-- Create milk splash particles
+	for i = 1, 8 do
+		local splash = Instance.new("Part")
+		splash.Size = Vector3.new(0.05, 0.05, 0.05)
+		splash.Shape = Enum.PartType.Ball
+		splash.Material = Enum.Material.Neon
+		splash.Color = Color3.fromRGB(255, 255, 255)
+		splash.CanCollide = false
+		splash.Anchored = true
+		splash.Position = bucketPosition
+		splash.Parent = workspace
+
+		-- Random splash direction
+		local splashDirection = Vector3.new(
+			math.random(-2, 2),
+			math.random(1, 3),
+			math.random(-2, 2)
+		)
+
+		local splash_tween = TweenService:Create(splash,
+			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = bucketPosition + splashDirection,
+				Transparency = 1
+			}
+		)
+		splash_tween:Play()
+		splash_tween.Completed:Connect(function()
+			splash:Destroy()
+		end)
+	end
+
+	-- Update bucket filling level (visual only)
+	self:UpdateBucketFillLevel(cowId)
+end
+
+-- ========== BUCKET FILL LEVEL VISUAL ==========
+
+function EnhancedCowMilkSystem:UpdateBucketFillLevel(cowId)
+	local effects = self.ClickerIntegration.SessionEffects[cowId]
+	if not effects then return end
+
+	-- Find the bucket
+	local bucket = nil
+	for _, effect in pairs(effects) do
+		if effect and effect.Name == "MilkBucket" then
+			bucket = effect
+			break
+		end
+	end
+
+	if not bucket then return end
+
+	-- Get session data to see how much milk collected
+	local session = self.ClickerIntegration.ActiveMilkingSessions[cowId]
+	if not session then return end
+
+	local milkAmount = session.milkCollected or 0
+
+	-- Create or update milk level in bucket
+	local milkLevel = bucket:FindFirstChild("MilkLevel")
+	if not milkLevel then
+		milkLevel = Instance.new("Part")
+		milkLevel.Name = "MilkLevel"
+		milkLevel.Shape = Enum.PartType.Cylinder
+		milkLevel.Material = Enum.Material.Plastic
+		milkLevel.Color = Color3.fromRGB(255, 255, 255)
+		milkLevel.CanCollide = false
+		milkLevel.Anchored = true
+		milkLevel.Size = Vector3.new(0.8, 0.1, 0.8)
+		milkLevel.Position = bucket.Position - Vector3.new(0, 0.6, 0)
+		milkLevel.Parent = bucket
+	end
+
+	-- Update milk level height based on amount collected
+	local fillPercentage = math.min(milkAmount / 20, 1) -- Full at 20 milk
+	local newHeight = 0.1 + (fillPercentage * 1.0) -- Max height of 1.1
+
+	milkLevel.Size = Vector3.new(0.8, newHeight, 0.8)
+	milkLevel.Position = bucket.Position - Vector3.new(0, 0.75 - (newHeight/2), 0)
+
+	-- Change color based on amount
+	if milkAmount >= 20 then
+		milkLevel.Color = Color3.fromRGB(255, 255, 200) -- Slightly yellow when full
+	elseif milkAmount >= 10 then
+		milkLevel.Color = Color3.fromRGB(255, 255, 230) -- Slight tint
+	else
+		milkLevel.Color = Color3.fromRGB(255, 255, 255) -- Pure white
+	end
+end
+
+-- ========== FIXED MILKING AREA EFFECT ==========
+
+function EnhancedCowMilkSystem:CreateMilkingAreaEffect(cowModel, cowId)
+	local cowCenter = self:GetCowCenter(cowModel)
+
+	-- Create milking area circle (less prominent for click-based system)
+	local milkingArea = Instance.new("Part")
+	milkingArea.Name = "MilkingArea"
+	milkingArea.Size = Vector3.new(8, 0.1, 8)
+	milkingArea.Shape = Enum.PartType.Cylinder
+	milkingArea.Material = Enum.Material.Neon
+	milkingArea.Color = Color3.fromRGB(200, 255, 200) -- Softer green
+	milkingArea.Transparency = 0.8 -- More transparent
+	milkingArea.CanCollide = false
+	milkingArea.Anchored = true
+	milkingArea.Position = cowCenter - Vector3.new(0, 2, 0)
+	milkingArea.Orientation = Vector3.new(0, 0, 90)
+	milkingArea.Parent = workspace
+
+	-- Store in effects for cleanup
+	if not self.ClickerIntegration.SessionEffects[cowId] then
+		self.ClickerIntegration.SessionEffects[cowId] = {}
+	end
+	table.insert(self.ClickerIntegration.SessionEffects[cowId], milkingArea)
+
+	-- FIXED: Gentle pulsing (not distracting from clicking)
+	spawn(function()
+		while milkingArea.Parent and self.ClickerIntegration.ActiveMilkingSessions[cowId] do
+			local pulse = TweenService:Create(milkingArea,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.6}
+			)
+			pulse:Play()
+			pulse.Completed:Wait()
+
+			local pulseBack = TweenService:Create(milkingArea,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.9}
+			)
+			pulseBack:Play()
+			pulseBack.Completed:Wait()
+		end
+	end)
+end
+
+-- ========== FIXED ENHANCED CLICK DETECTION ==========
+
+function EnhancedCowMilkSystem:SetupEnhancedClickDetection(cowModel, cowId, ownerName)
+	print("EnhancedCowMilkSystem: Setting up FIXED click detection for " .. cowId)
+
+	-- Remove existing detectors
+	for _, obj in pairs(cowModel:GetDescendants()) do
+		if obj:IsA("ClickDetector") then
+			obj:Destroy()
+		end
+	end
+
+	-- Find all clickable parts with better coverage
+	local clickableParts = {}
+
+	-- Priority parts for better clicking
+	local priorityNames = {"humanoidrootpart", "torso", "body", "middle", "upperbody"}
+	for _, name in ipairs(priorityNames) do
+		for _, part in pairs(cowModel:GetDescendants()) do
+			if part:IsA("BasePart") and part.Name:lower():find(name) then
+				table.insert(clickableParts, {part = part, priority = 10})
+			end
+		end
+	end
+
+	-- Large parts as backup for better click coverage
+	if #clickableParts < 3 then
+		for _, part in pairs(cowModel:GetDescendants()) do
+			if part:IsA("BasePart") then
+				local volume = part.Size.X * part.Size.Y * part.Size.Z
+				if volume > 6 then -- Lower threshold for better coverage
+					table.insert(clickableParts, {part = part, priority = 5})
+				end
+			end
+		end
+	end
+
+	-- Add enhanced click detectors for milking system
+	for _, entry in ipairs(clickableParts) do
+		local detector = Instance.new("ClickDetector")
+		detector.MaxActivationDistance = 25 -- Slightly closer for better control
+		detector.Parent = entry.part
+
+		-- FIXED: Handle different click scenarios properly
+		detector.MouseClick:Connect(function(player)
+			if player.Name == ownerName then
+				self:HandleClickerCowClick(player, cowId)
+			else
+				self:SendNotification(player, "Not Your Cow", "This cow belongs to " .. ownerName .. "!", "warning")
+			end
+		end)
+
+		-- Enhanced visual feedback for click-based system
+		detector.MouseHoverEnter:Connect(function(player)
+			if player.Name == ownerName then
+				self:ShowClickPrompt(cowModel, player, cowId)
+			end
+		end)
+
+		detector.MouseHoverLeave:Connect(function(player)
+			self:HideClickPrompt(cowModel, player, cowId)
+		end)
+	end
+
+	print("EnhancedCowMilkSystem: Enhanced click detection setup for " .. cowId .. " with " .. #clickableParts .. " clickable parts")
+end
+
+-- ========== FIXED CLICK PROMPTS ==========
+
+function EnhancedCowMilkSystem:ShowClickPrompt(cowModel, player, cowId)
+	-- Check if already milking
+	local activeSession = self.ClickerIntegration.ActiveMilkingSessions[cowId]
+
+	local promptText = "🖱️ CLICK TO START MILKING!"
+	local promptColor = Color3.fromRGB(100, 255, 100)
+
+	if activeSession and activeSession.player.UserId == player.UserId then
+		promptText = "🖱️ CLICK FOR MILK! (1 click = 1 milk)"
+		promptColor = Color3.fromRGB(255, 255, 100)
+	elseif activeSession then
+		promptText = "🥛 BEING MILKED BY " .. activeSession.player.Name
+		promptColor = Color3.fromRGB(255, 200, 100)
+		-- Don't return - still show the prompt
+	end
+
+	-- Update indicator with prompt
+	local indicator = self.CowIndicators[cowId]
+	if indicator and indicator.label then
+		local originalText = indicator.label.Text
+		local originalColor = indicator.label.TextColor3
+
+		indicator.label.Text = promptText
+		indicator.label.TextColor3 = promptColor
+
+		-- Store original for restoration
+		indicator.originalText = originalText
+		indicator.originalColor = originalColor
+	end
+end
+
+function EnhancedCowMilkSystem:HideClickPrompt(cowModel, player, cowId)
+	-- Restore original indicator text
+	local indicator = self.CowIndicators[cowId]
+	if indicator and indicator.label and indicator.originalText then
+		indicator.label.Text = indicator.originalText
+		indicator.label.TextColor3 = indicator.originalColor or Color3.new(1, 1, 1)
+
+		indicator.originalText = nil
+		indicator.originalColor = nil
+	end
+end
+
+-- ========== FIXED CONTINUE MILKING SESSION ==========
+
+function EnhancedCowMilkSystem:ContinueMilkingSession(player, cowId)
+	print("🖱️ EnhancedCowMilkSystem: Processing click for milk collection")
+
+	-- Send continue signal to GameCore (which handles the actual milk giving)
+	if GameCore and GameCore.HandleContinueMilking then
+		local success = GameCore:HandleContinueMilking(player)
+
+		if success then
+			-- Update visual effects for the click
+			self:UpdateMilkingSessionVisuals(player, cowId)
+
+			-- Create the milk drop effect
+			self:CreateClickParticleEffect(player, cowId)
+
+			return true
+		end
+	end
+
+	return false
+end
+
+-- ========== FIXED SESSION VISUAL UPDATES ==========
+
+function EnhancedCowMilkSystem:UpdateMilkingSessionVisuals(player, cowId)
+	print("🎨 EnhancedCowMilkSystem: Updating visuals for click")
+
+	-- Update visual effects based on successful click
+	local effects = self.ClickerIntegration.SessionEffects[cowId]
+	if effects then
+		for _, effect in pairs(effects) do
+			if effect and effect.Name == "MilkingArea" then
+				-- Quick flash to show click registered
+				local flash = TweenService:Create(effect,
+					TweenInfo.new(0.1, Enum.EasingStyle.Quad),
+					{Color = Color3.fromRGB(100, 255, 100)} -- Bright green flash
+				)
+				flash:Play()
+				flash.Completed:Connect(function()
+					local restore = TweenService:Create(effect,
+						TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+						{Color = Color3.fromRGB(200, 255, 200)} -- Back to soft green
+					)
+					restore:Play()
+				end)
+				break
+			end
+		end
+	end
+
+	-- Update indicator to show successful click
+	local indicator = self.CowIndicators[cowId]
+	if indicator and indicator.label then
+		-- Quick success flash
+		local originalColor = indicator.label.TextColor3
+		indicator.label.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+		spawn(function()
+			wait(0.2)
+			if indicator.label and indicator.label.Parent then
+				indicator.label.TextColor3 = originalColor
+			end
+		end)
+	end
+end
+
+-- ========== CLEANUP IMPROVEMENTS ==========
+
+function EnhancedCowMilkSystem:CleanupMilkingSession(cowId)
+	print("🧹 EnhancedCowMilkSystem: FIXED cleaning up milking session for " .. cowId)
+
+	-- Clean up visual effects more thoroughly
+	local effects = self.ClickerIntegration.SessionEffects[cowId]
+	if effects then
+		for _, effect in pairs(effects) do
+			if effect and effect.Parent then
+				-- Fade out effect before destroying
+				local fadeOut = TweenService:Create(effect,
+					TweenInfo.new(0.5, Enum.EasingStyle.Quad),
+					{Transparency = 1}
+				)
+				fadeOut:Play()
+				fadeOut.Completed:Connect(function()
+					effect:Destroy()
+				end)
+			end
+		end
+		self.ClickerIntegration.SessionEffects[cowId] = nil
+	end
+
+	-- Clear session data
+	self.ClickerIntegration.ActiveMilkingSessions[cowId] = nil
+
+	-- Update indicator back to normal
+	self:UpdateIndicatorForMilking(cowId, "milking_complete")
+
+	print("🧹 EnhancedCowMilkSystem: FIXED milking session cleanup complete")
+end
+
+print("EnhancedCowMilkSystem: ✅ FIXED CLICK-BASED VISUAL EFFECTS!")
+print("🔧 KEY FIXES:")
+print("  🖱️ Removed automatic milk streams")
+print("  💧 Click-triggered milk drops only")
+print("  🪣 Dynamic bucket filling visualization")
+print("  ✨ Click-responsive visual feedback")
+print("  🎯 Better click detection coverage")
+print("  🎨 Smooth fade-out cleanup effects")
+
+
+-- ========== MILKING INDICATOR UPDATES ==========
+
+function EnhancedCowMilkSystem:UpdateIndicatorForMilking(cowId, state)
+	local indicator = self.CowIndicators[cowId]
+	if not indicator then return end
+
+	if state == "active_milking" then
+		indicator.part.Color = Color3.fromRGB(100, 255, 100) -- Bright green
+		indicator.part.Material = Enum.Material.Neon
+		indicator.part.Transparency = 0.1
+		indicator.label.Text = "🥛 MILKING IN PROGRESS!"
+		indicator.label.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+		-- Add timer label if available
+		if indicator.timerLabel then
+			indicator.timerLabel.Text = "Keep clicking!"
+			indicator.timerLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+		end
+
+		-- Start pulsing animation
+		self:StartMilkingIndicatorAnimation(cowId)
+
+	elseif state == "milking_complete" then
+		indicator.part.Color = Color3.fromRGB(255, 215, 0) -- Gold
+		indicator.label.Text = "🥛 MILKING COMPLETE!"
+		indicator.label.TextColor3 = Color3.fromRGB(255, 215, 0)
+
+		-- Stop after 3 seconds
+		spawn(function()
+			wait(3)
+			if indicator.part and indicator.part.Parent then
+				self:UpdateCowIndicatorLocal(cowId, "ready")
+			end
+		end)
+	end
+end
+
+function EnhancedCowMilkSystem:StartMilkingIndicatorAnimation(cowId)
+	local indicator = self.CowIndicators[cowId]
+	if not indicator then return end
+
+	spawn(function()
+		while self.ClickerIntegration.ActiveMilkingSessions[cowId] and indicator.part.Parent do
+			-- Pulsing glow effect
+			local pulse = TweenService:Create(indicator.part,
+				TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.3}
+			)
+			pulse:Play()
+			pulse.Completed:Wait()
+
+			local pulseBack = TweenService:Create(indicator.part,
+				TweenInfo.new(0.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.1}
+			)
+			pulseBack:Play()
+			pulseBack.Completed:Wait()
+		end
+	end)
+end
+
+-- ========== MILKING SESSION CLEANUP ==========
+
+
+-- ========== MILKING PROMPTS ==========
+
+function EnhancedCowMilkSystem:ShowMilkingPrompt(cowModel, player, cowId)
+	-- Check if already milking
+	local activeSession = self.ClickerIntegration.ActiveMilkingSessions[cowId]
+
+	local promptText = "🥛 CLICK TO START MILKING!"
+	if activeSession and activeSession.player.UserId == player.UserId then
+		promptText = "🥛 KEEP CLICKING TO MILK!"
+	elseif activeSession then
+		promptText = "🥛 BEING MILKED BY " .. activeSession.player.Name
+		return -- Don't show prompt if someone else is milking
+	end
+
+	-- Update indicator with prompt
+	local indicator = self.CowIndicators[cowId]
+	if indicator and indicator.label then
+		local originalText = indicator.label.Text
+		indicator.label.Text = promptText
+		indicator.label.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+		-- Restore original text after delay
+		spawn(function()
+			wait(2)
+			if indicator.label and indicator.label.Parent then
+				indicator.label.Text = originalText
+				indicator.label.TextColor3 = Color3.new(1, 1, 1)
+			end
+		end)
+	end
+end
+
+function EnhancedCowMilkSystem:HideMilkingPrompt(cowModel, player)
+	-- Prompt will auto-restore after timeout
+end
+
+-- ========== SESSION EVENT HANDLERS ==========
+
+function EnhancedCowMilkSystem:HandleMilkingSessionUpdate(player, updateType, data)
+	if updateType == "started" then
+		self:CreateMilkingSessionVisuals(player, data.cowId)
+	elseif updateType == "progress" then
+		-- Update progress visuals
+		self:UpdateSessionProgress(player, data)
+	elseif updateType == "ended" then
+		-- Find and cleanup session
+		for cowId, session in pairs(self.ClickerIntegration.ActiveMilkingSessions) do
+			if session.player.UserId == player.UserId then
+				self:CleanupMilkingSession(cowId)
+				break
+			end
+		end
+	end
+end
+
+function EnhancedCowMilkSystem:UpdateSessionProgress(player, progressData)
+	-- Update visual progress indicators
+	local cowId = nil
+
+	-- Find cow being milked by this player
+	for id, session in pairs(self.ClickerIntegration.ActiveMilkingSessions) do
+		if session.player.UserId == player.UserId then
+			cowId = id
+			break
+		end
+	end
+
+	if cowId then
+		local indicator = self.CowIndicators[cowId]
+		if indicator and indicator.timerLabel then
+			indicator.timerLabel.Text = "Milk: " .. (progressData.milkCollected or 0) .. " (" .. (progressData.sessionDuration or 0) .. "s)"
+		end
+	end
+end
+
+-- ========== EXTERNAL EFFECT CREATION METHODS ==========
+-- These are called from GameCore
+
+function EnhancedCowMilkSystem:CreateMilkingSessionEffect(player, cowId)
+	self:CreateMilkingSessionVisuals(player, cowId)
+end
+
+function EnhancedCowMilkSystem:CreateMilkDropEffect(player, cowId)
+	self:CreateClickParticleEffect(player, cowId)
+end
+
+-- ========== REPLACE EXISTING MILK COLLECTION HANDLER ==========
+
+-- REPLACE your existing HandleCowMilkCollection method with this:
+function EnhancedCowMilkSystem:HandleCowMilkCollection(player, cowId)
+	-- Redirect to clicker system
+	return self:HandleClickerCowClick(player, cowId)
+end
+
+-- ========== INITIALIZATION UPDATE ==========
+
+-- ADD this to your existing Initialize method:
+function EnhancedCowMilkSystem:InitializeEnhanced()
+	-- ... your existing initialization code ...
+
+	-- Add clicker integration
+	self:InitializeClickerIntegration()
+
+	print("EnhancedCowMilkSystem: Enhanced with clicker integration!")
+end
+
+-- ========== CLEANUP ON SESSION END ==========
+
+spawn(function()
+	while true do
+		wait(2)
+
+		-- Check for ended sessions that need cleanup
+		for cowId, session in pairs(EnhancedCowMilkSystem.ClickerIntegration.ActiveMilkingSessions) do
+			if GameCore and GameCore.Systems and GameCore.Systems.ClickerMilking then
+				-- If GameCore no longer has this session, clean up visuals
+				if not GameCore.Systems.ClickerMilking.ActiveSessions[session.player.UserId] then
+					EnhancedCowMilkSystem:CleanupMilkingSession(cowId)
+				end
+			end
+		end
+	end
+end)
+
+print("EnhancedCowMilkSystem: ✅ CLICKER INTEGRATION LOADED!")
+print("🥛 NEW FEATURES:")
+print("  🖱️ Click detection for milking sessions")
+print("  🎨 Active milking visual effects")
+print("  💡 Dynamic milking indicators") 
+print("  ✨ Session progress particle effects")
+print("  🪑 Milking stool and bucket visuals")
+print("  📊 Real-time session progress updates")
 Players.PlayerAdded:Connect(function(player)
 	player.Chatted:Connect(function(message)
 		if player.Name == "TommySalami311" then -- Replace with your username
