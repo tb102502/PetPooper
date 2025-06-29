@@ -228,8 +228,8 @@ local function createInstructionGUI()
 	-- Main frame
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Name = "MainFrame"
-	mainFrame.Size = UDim2.new(0, 800, 0, 600)
-	mainFrame.Position = UDim2.new(0.5, -400, 0.5, -300)
+	mainFrame.Size = UDim2.new(0.826, 0, 1.398, 0)
+	mainFrame.Position = UDim2.new(0.087, 0, -0.199, 0)
 	mainFrame.BackgroundColor3 = Color3.fromRGB(20, 25, 30)
 	mainFrame.BorderSizePixel = 0
 	mainFrame.Parent = overlay
@@ -242,7 +242,7 @@ local function createInstructionGUI()
 	-- Header frame
 	local headerFrame = Instance.new("Frame")
 	headerFrame.Name = "Header"
-	headerFrame.Size = UDim2.new(1, 0, 0, 80)
+	headerFrame.Size = UDim2.new(1, 0, 0.133, 0)
 	headerFrame.Position = UDim2.new(0, 0, 0, 0)
 	headerFrame.BackgroundColor3 = Color3.fromRGB(40, 50, 60)
 	headerFrame.BorderSizePixel = 0
@@ -268,8 +268,8 @@ local function createInstructionGUI()
 	-- Close button
 	local closeButton = Instance.new("TextButton")
 	closeButton.Name = "CloseButton"
-	closeButton.Size = UDim2.new(0, 50, 0, 50)
-	closeButton.Position = UDim2.new(1, -65, 0, 15)
+	closeButton.Size = UDim2.new(0.063, 0, 0.625, 0)
+	closeButton.Position = UDim2.new(0.919, 0, 0.187, 0)
 	closeButton.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
 	closeButton.Text = "✕"
 	closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -286,16 +286,16 @@ local function createInstructionGUI()
 	-- Content area
 	local contentFrame = Instance.new("Frame")
 	contentFrame.Name = "Content"
-	contentFrame.Size = UDim2.new(1, 0, 1, -140)
-	contentFrame.Position = UDim2.new(0, 0, 0, 80)
+	contentFrame.Size = UDim2.new(1, 0, 0.767, 0)
+	contentFrame.Position = UDim2.new(0, 0, 0.133, 0)
 	contentFrame.BackgroundTransparency = 1
 	contentFrame.Parent = mainFrame
 
 	-- Navigation frame (left side)
 	local navFrame = Instance.new("Frame")
 	navFrame.Name = "Navigation"
-	navFrame.Size = UDim2.new(0, 250, 1, 0)
-	navFrame.Position = UDim2.new(0, 10, 0, 0)
+	navFrame.Size = UDim2.new(0.313, 0, 1, 0)
+	navFrame.Position = UDim2.new(0.013, 0, 0, 0)
 	navFrame.BackgroundColor3 = Color3.fromRGB(30, 35, 40)
 	navFrame.BorderSizePixel = 0
 	navFrame.Parent = contentFrame
@@ -308,8 +308,8 @@ local function createInstructionGUI()
 	-- Content display frame (right side)
 	local displayFrame = Instance.new("Frame")
 	displayFrame.Name = "Display"
-	displayFrame.Size = UDim2.new(0, 520, 1, 0)
-	displayFrame.Position = UDim2.new(0, 270, 0, 0)
+	displayFrame.Size = UDim2.new(0.65, 0, 1, 0)
+	displayFrame.Position = UDim2.new(0.338, 0, 0, 0)
 	displayFrame.BackgroundColor3 = Color3.fromRGB(35, 40, 45)
 	displayFrame.BorderSizePixel = 0
 	displayFrame.Parent = contentFrame
@@ -322,8 +322,8 @@ local function createInstructionGUI()
 	-- Page content scroll frame
 	local scrollFrame = Instance.new("ScrollingFrame")
 	scrollFrame.Name = "ContentScroll"
-	scrollFrame.Size = UDim2.new(1, -20, 1, -20)
-	scrollFrame.Position = UDim2.new(0, 10, 0, 10)
+	scrollFrame.Size = UDim2.new(0.962, 0, 0.957, 0)
+	scrollFrame.Position = UDim2.new(0.019, 0, 0.022, 0)
 	scrollFrame.BackgroundTransparency = 1
 	scrollFrame.BorderSizePixel = 0
 	scrollFrame.ScrollBarThickness = 8
@@ -334,7 +334,7 @@ local function createInstructionGUI()
 	local contentLabel = Instance.new("TextLabel")
 	contentLabel.Name = "ContentText"
 	contentLabel.Size = UDim2.new(1, -10, 0, 0)
-	contentLabel.Position = UDim2.new(0, 5, 0, 0)
+	contentLabel.Position = UDim2.new(0.01, 0, 0, 0)
 	contentLabel.BackgroundTransparency = 1
 	contentLabel.Text = ""
 	contentLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
@@ -398,7 +398,7 @@ local function createInstructionGUI()
 	for i, page in ipairs(INSTRUCTION_PAGES) do
 		local navButton = Instance.new("TextButton")
 		navButton.Name = "NavButton" .. i
-		navButton.Size = UDim2.new(1, 0, 0, 45)
+		navButton.Size = UDim2.new(0.92, 0, 0.098, 0)
 		navButton.BackgroundColor3 = Color3.fromRGB(50, 55, 60)
 		navButton.Text = page.icon .. " " .. page.title:gsub("🌾 ", ""):gsub("🌱 ", ""):gsub("🏗️ ", "")
 		navButton.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -447,15 +447,15 @@ local function createInstructionGUI()
 	-- Bottom navigation frame
 	local bottomNav = Instance.new("Frame")
 	bottomNav.Name = "BottomNav"
-	bottomNav.Size = UDim2.new(1, -20, 0, 50)
-	bottomNav.Position = UDim2.new(0, 10, 1, -60)
+	bottomNav.Size = UDim2.new(0.975, 0,0.083, 0)
+	bottomNav.Position = UDim2.new(0.013, 0,0.9, 0)
 	bottomNav.BackgroundTransparency = 1
 	bottomNav.Parent = mainFrame
 
 	-- Previous button
 	local prevButton = Instance.new("TextButton")
 	prevButton.Name = "PrevButton"
-	prevButton.Size = UDim2.new(0, 120, 1, 0)
+	prevButton.Size = UDim2.new(0.154, 0, 1, 0)
 	prevButton.Position = UDim2.new(0, 0, 0, 0)
 	prevButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
 	prevButton.Text = "◀ Previous"
@@ -472,8 +472,8 @@ local function createInstructionGUI()
 	-- Next button
 	local nextButton = Instance.new("TextButton")
 	nextButton.Name = "NextButton"
-	nextButton.Size = UDim2.new(0, 120, 1, 0)
-	nextButton.Position = UDim2.new(1, -120, 0, 0)
+	nextButton.Size = UDim2.new(0.154, 0, 1, 0)
+	nextButton.Position = UDim2.new(0.846, 0, 0, 0)
 	nextButton.BackgroundColor3 = Color3.fromRGB(0, 150, 255)
 	nextButton.Text = "Next ▶"
 	nextButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -489,8 +489,8 @@ local function createInstructionGUI()
 	-- Progress indicator
 	local progressLabel = Instance.new("TextLabel")
 	progressLabel.Name = "Progress"
-	progressLabel.Size = UDim2.new(0, 200, 1, 0)
-	progressLabel.Position = UDim2.new(0.5, -100, 0, 0)
+	progressLabel.Size = UDim2.new(0.256, 0, 1, 0)
+	progressLabel.Position = UDim2.new(0.372, 0, 0, 0)
 	progressLabel.BackgroundTransparency = 1
 	progressLabel.Text = "Page 1 of " .. #INSTRUCTION_PAGES
 	progressLabel.TextColor3 = Color3.fromRGB(200, 200, 200)

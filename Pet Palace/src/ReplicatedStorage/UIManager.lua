@@ -177,7 +177,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Farm",
 			text = "🌾 Farm",
-			position = UDim2.new(0, 20, 0, 150),
+			position = UDim2.new(0.021, 0, 0.349, 0),
 			color = Color3.fromRGB(80, 120, 60),
 			hoverColor = Color3.fromRGB(100, 140, 80),
 			description = "Manage your farm and crops"
@@ -185,7 +185,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Mining", 
 			text = "⛏️ Mining",
-			position = UDim2.new(0, 20, 0, 220),
+			position = UDim2.new(0.021, 0, 0.513, 0),
 			color = Color3.fromRGB(80, 80, 120),
 			hoverColor = Color3.fromRGB(100, 100, 140),
 			description = "Mine ores and explore caves"
@@ -193,7 +193,7 @@ function UIManager:SetupLeftSideButtons()
 		{
 			name = "Crafting",
 			text = "🔨 Crafting", 
-			position = UDim2.new(0, 20, 0, 290),
+			position = UDim2.new(0.021, 0, 0.676, 0),
 			color = Color3.fromRGB(120, 80, 60),
 			hoverColor = Color3.fromRGB(140, 100, 80),
 			description = "Craft tools and equipment"
@@ -276,7 +276,7 @@ end
 function UIManager:CreateLeftSideButton(parent, config)
 	local button = Instance.new("TextButton")
 	button.Name = config.name .. "Button"
-	button.Size = UDim2.new(0, 140, 0, 60)
+	button.Size = UDim2.new(0.145, 0, 0.14, 0)
 	button.Position = config.position
 	button.BackgroundColor3 = config.color
 	button.BorderSizePixel = 0

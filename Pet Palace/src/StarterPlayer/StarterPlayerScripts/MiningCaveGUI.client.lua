@@ -29,8 +29,8 @@ screenGui.Parent = playerGui
 -- Main Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MiningFrame"
-mainFrame.Size = UDim2.new(0, 220, 0, 280)
-mainFrame.Position = UDim2.new(1, -240, 0.5, -140) -- Right side of screen
+mainFrame.Size = UDim2.new(0.227, 0,0.652, 0)
+mainFrame.Position = UDim2.new(0.021, 0, 0.149, 0) -- Right side of screen
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
@@ -49,7 +49,7 @@ frameStroke.Parent = mainFrame
 -- Title Label
 local titleLabel = Instance.new("TextLabel")
 titleLabel.Name = "Title"
-titleLabel.Size = UDim2.new(1, 0, 0, 50)
+titleLabel.Size = UDim2.new(1, 0, 0.179, 0)
 titleLabel.Position = UDim2.new(0, 0, 0, 0)
 titleLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
 titleLabel.BorderSizePixel = 0
@@ -67,8 +67,8 @@ titleCorner.Parent = titleLabel
 -- Cave Button
 local caveButton = Instance.new("TextButton")
 caveButton.Name = "CaveButton"
-caveButton.Size = UDim2.new(0.9, 0, 0, 60)
-caveButton.Position = UDim2.new(0.05, 0, 0, 70)
+caveButton.Size = UDim2.new(0.9, 0, 0.214, 0)
+caveButton.Position = UDim2.new(0.05, 0, 0.25, 0)
 caveButton.BackgroundColor3 = Color3.fromRGB(100, 60, 20)
 caveButton.BorderSizePixel = 0
 caveButton.Text = "🕳️ ENTER CAVE"
@@ -91,8 +91,8 @@ caveButtonStroke.Parent = caveButton
 -- Surface Button
 local surfaceButton = Instance.new("TextButton")
 surfaceButton.Name = "SurfaceButton"
-surfaceButton.Size = UDim2.new(0.9, 0, 0, 60)
-surfaceButton.Position = UDim2.new(0.05, 0, 0, 140)
+surfaceButton.Size = UDim2.new(0.9, 0, 0.214, 0)
+surfaceButton.Position = UDim2.new(0.05, 0, 0.5, 0)
 surfaceButton.BackgroundColor3 = Color3.fromRGB(20, 100, 60)
 surfaceButton.BorderSizePixel = 0
 surfaceButton.Text = "🌞 RETURN TO SURFACE"
@@ -115,8 +115,8 @@ surfaceButtonStroke.Parent = surfaceButton
 -- Status Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Name = "StatusLabel"
-statusLabel.Size = UDim2.new(0.9, 0, 0, 40)
-statusLabel.Position = UDim2.new(0.05, 0, 0, 210)
+statusLabel.Size = UDim2.new(0.9, 0, 0.143, 0)
+statusLabel.Position = UDim2.new(0.05, 0, 0.75, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Text = "Ready to mine!"
 statusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -127,8 +127,8 @@ statusLabel.Parent = mainFrame
 -- Toggle Button (minimize/maximize)
 local toggleButton = Instance.new("TextButton")
 toggleButton.Name = "ToggleButton"
-toggleButton.Size = UDim2.new(0, 30, 0, 30)
-toggleButton.Position = UDim2.new(1, -35, 0, 5)
+toggleButton.Size = UDim2.new(0.136, 0, 0.107, 0)
+toggleButton.Position = UDim2.new(0.841, 0, 0.018, 0)
 toggleButton.BackgroundColor3 = Color3.fromRGB(60, 60, 80)
 toggleButton.BorderSizePixel = 0
 toggleButton.Text = "−"

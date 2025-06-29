@@ -129,7 +129,8 @@ function GameCore:Initialize(shopSystem)
 
 	-- Start update loops
 	self:StartUpdateLoops()
-
+	self:InitializeChairSystemIntegration()
+	self:AddChairMilkingAdminCommands()
 	-- Setup admin commands
 	self:SetupAdminCommands()
 	self:InitializeClickerMilkingSystem()
@@ -184,100 +185,361 @@ function GameCore:SetupClickerRemoteEvents()
 		end)
 	end
 end
-
--- ========== MILKING SESSION MANAGEMENT ==========
-
-function GameCore:HandleStartMilkingSession(player, cowId)
-	print("🥛 GameCore: Starting milking session for " .. player.Name .. " with cow " .. cowId)
-
-	local userId = player.UserId
-	local playerData = self:GetPlayerData(player)
-
-	if not playerData then
-		self:SendNotification(player, "Error", "Player data not found!", "error")
-		return false
-	end
-
-	-- Check if player is already milking
-	if self.Systems.ClickerMilking.ActiveSessions[userId] then
-		self:SendNotification(player, "Already Milking", "You're already milking a cow!", "warning")
-		return false
-	end
-
-	-- Check if cow is already being milked
-	if self.Systems.ClickerMilking.MilkingCows[cowId] then
-		self:SendNotification(player, "Cow Busy", "Someone else is already milking this cow!", "warning")
-		return false
-	end
-
-	-- Validate cow ownership and data
-	if not playerData.livestock or not playerData.livestock.cows or not playerData.livestock.cows[cowId] then
-		self:SendNotification(player, "Invalid Cow", "You don't own this cow!", "error")
-		return false
-	end
-
-	local cowData = playerData.livestock.cows[cowId]
-
-	-- Check cooldown (optional - you can remove this for pure clicker style)
-	local currentTime = os.time()
-	local timeSinceLastMilk = currentTime - (cowData.lastMilkCollection or 0)
-	if timeSinceLastMilk < 10 then -- 10 second cooldown between sessions
-		local timeLeft = 10 - timeSinceLastMilk
-		self:SendNotification(player, "Cow Resting", 
-			"Cow needs " .. math.ceil(timeLeft) .. " more seconds before milking again!", "warning")
-		return false
-	end
-
-	-- Position player next to cow
-	local success = self:PositionPlayerForMilking(player, cowId)
-	if not success then
-		self:SendNotification(player, "Positioning Failed", "Could not position you for milking!", "error")
-		return false
-	end
-
-	-- Create milking session
-	local sessionData = {
-		cowId = cowId,
-		startTime = currentTime,
-		lastClickTime = currentTime,
-		milkCollected = 0,
-		sessionActive = true,
-		cowData = cowData
-	}
-
-	-- Store session data
-	self.Systems.ClickerMilking.ActiveSessions[userId] = sessionData
-	self.Systems.ClickerMilking.MilkingCows[cowId] = userId
-	self.Systems.ClickerMilking.SessionTimeouts[userId] = currentTime + 3 -- 3 second timeout if no clicks
-
-	-- Send session start to client
-	if self.RemoteEvents.MilkingSessionUpdate then
-		self.RemoteEvents.MilkingSessionUpdate:FireClient(player, "started", sessionData)
-	end
-
-	-- Create milking visual effects
-	self:CreateMilkingEffects(player, cowId)
-
-	self:SendNotification(player, "🥛 Milking Started!", 
-		"Keep clicking to collect milk! (1 milk per second)", "success")
-
-	print("🥛 GameCore: Milking session started for " .. player.Name)
-	return true
-end
-
 --[[
-    GameCore.lua - FIXED CLICK-PER-MILK SYSTEM
-    Replace the relevant methods in your GameCore.lua with these fixed versions
+    GameCore Chair Integration Updates
+    Add these methods to your existing GameCore.lua
     
-    FIXES:
-    ✅ 1 click = 1 milk (no automatic collection)
-    ✅ Stable player positioning (no bouncing)
-    ✅ Click-based session management
-    ✅ Proper session timeout handling
+    INTEGRATION:
+    ✅ Chair system compatibility  
+    ✅ Enhanced positioning for seated players
+    ✅ Better session management
+    ✅ Automatic cleanup when leaving chair
 ]]
 
--- REPLACE these methods in your existing GameCore.lua:
+-- ADD these methods to your existing GameCore.lua:
 
+-- ========== CHAIR SYSTEM INTEGRATION ==========
+
+function GameCore:HandleChairBasedMilkingStart(player, cowId)
+    print("🪑 GameCore: Starting chair-based milking session for " .. player.Name)
+
+    -- Check if player is seated in a milking chair
+    if not self:IsPlayerSeatedInMilkingChair(player) then
+        self:SendNotification(player, "Not Seated", "You must be seated in a milking chair to start milking!", "error")
+        return false
+    end
+
+    -- Use existing milking session start logic
+    return self:HandleStartMilkingSession(player, cowId)
+end
+
+function GameCore:IsPlayerSeatedInMilkingChair(player)
+    local character = player.Character
+    if not character then return false end
+
+    local humanoid = character:FindFirstChild("Humanoid")
+    if not humanoid then return false end
+
+    -- Check if player is seated
+    if humanoid.Sit then
+        -- Find what they're sitting on
+        for _, obj in pairs(workspace:GetChildren()) do
+            if obj.Name == "MilkingChair" then -- Your chair name
+                local seat = self:FindSeatInObject(obj)
+                if seat and seat.Occupant == humanoid then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+function GameCore:FindSeatInObject(obj)
+    -- Look for Seat objects in the chair
+    for _, child in pairs(obj:GetDescendants()) do
+        if child:IsA("Seat") then
+            return child
+        end
+    end
+    
+    -- If the object itself is a seat
+    if obj:IsA("Seat") then
+        return obj
+    end
+    
+    return nil
+end
+function GameCore:GetMilkingSessionType(player)
+	local userId = player.UserId
+	local session = self.Systems.ClickerMilking.ActiveSessions[userId]
+
+	if session then
+		return session.isChairBased and "chair" or "standard"
+	end
+
+	return "none"
+end
+
+function GameCore:IsChairBasedMilkingActive(player)
+	local userId = player.UserId
+	local session = self.Systems.ClickerMilking.ActiveSessions[userId]
+
+	return session and session.isChairBased
+end
+
+print("GameCore: ✅ CHAIR SYSTEM INTEGRATION LOADED!")
+print("🪑 INTEGRATION FEATURES:")
+print("  🔗 Seamless chair-based milking integration")
+print("  👤 Enhanced player positioning for chairs")
+print("  📊 Session type tracking (chair vs standard)")
+print("  🔍 Automatic chair monitoring") 
+print("  🧹 Smart cleanup when leaving chairs")
+print("  🎯 Chair-specific admin commands")
+print("")
+print("🔧 Chair Admin Commands:")
+print("  /chairmilkstatus - Show chair vs standard sessions")
+print("  /testchair - Test if player is seated properly")
+print("  /forcerelease - Force release from milking")
+print("  /chairinfo - Show all chairs and occupancy")
+print("")
+print("📋 INTEGRATION CHECKLIST:")
+print("  1. Add InitializeChairSystemIntegration() to GameCore:Initialize()")
+print("  2. Add AddChairMilkingAdminCommands() to GameCore:Initialize()")
+print("  3. Replace HandleStartMilkingSession and HandleStopMilkingSession")
+print("  4. Make sure chair is named 'MilkingChair' in workspace")
+-- ========== ENHANCED POSITIONING FOR SEATED PLAYERS ==========
+
+function GameCore:PositionPlayerForMilkingChair(player, cowId)
+    print("🪑 GameCore: CHAIR-BASED positioning for " .. player.Name)
+
+    -- For chair-based system, player is already positioned by the chair
+    -- We just need to lock them in place and store their state
+    
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") then
+        warn("GameCore: Player character not ready for chair milking")
+        return false
+    end
+
+    local humanoid = character:FindFirstChild("Humanoid")
+    local humanoidRootPart = character.HumanoidRootPart
+
+    -- Store original position for restoration (for safety)
+    local userId = player.UserId
+    self.Systems.ClickerMilking.PlayerPositions[userId] = {
+        cframe = humanoidRootPart.CFrame,
+        walkSpeed = humanoid and humanoid.WalkSpeed or 16,
+        jumpPower = humanoid and humanoid.JumpPower or 50,
+        isSeated = true -- Flag for chair-based milking
+    }
+
+    -- Don't modify player position since they're seated in chair
+    -- Chair system handles player locking
+    
+    print("🪑 GameCore: Chair-based positioning complete - player locked by chair system")
+    return true
+end
+
+function GameCore:ReleasePlayerFromMilkingChair(player)
+    print("🪑 GameCore: CHAIR-BASED release for " .. player.Name)
+
+    local userId = player.UserId
+    local character = player.Character
+
+    -- For chair system, the player position is managed by the chair
+    -- We just need to clean up our tracking
+    
+    if character then
+        local humanoid = character:FindFirstChild("Humanoid")
+        
+        -- Only restore if player is no longer seated
+        if humanoid and not humanoid.Sit then
+            local originalData = self.Systems.ClickerMilking.PlayerPositions[userId]
+            if originalData then
+                humanoid.WalkSpeed = originalData.walkSpeed
+                humanoid.JumpPower = originalData.jumpPower
+            end
+        end
+    end
+
+    -- Clear stored data
+    self.Systems.ClickerMilking.PlayerPositions[userId] = nil
+
+    print("🪑 Player released from chair-based milking")
+end
+
+-- ========== UPDATED MILKING SESSION METHODS ==========
+
+-- REPLACE your existing HandleStartMilkingSession with this enhanced version:
+function GameCore:HandleStartMilkingSession(player, cowId)
+    print("🥛 GameCore: Starting ENHANCED milking session for " .. player.Name .. " with cow " .. cowId)
+
+    local userId = player.UserId
+    local playerData = self:GetPlayerData(player)
+
+    if not playerData then
+        self:SendNotification(player, "Error", "Player data not found!", "error")
+        return false
+    end
+
+    -- Check if player is already milking
+    if self.Systems.ClickerMilking.ActiveSessions[userId] then
+        self:SendNotification(player, "Already Milking", "You're already milking a cow!", "warning")
+        return false
+    end
+
+    -- Check if cow is already being milked
+    if self.Systems.ClickerMilking.MilkingCows[cowId] then
+        self:SendNotification(player, "Cow Busy", "Someone else is already milking this cow!", "warning")
+        return false
+    end
+
+    -- Validate cow ownership and data
+    if not playerData.livestock or not playerData.livestock.cows or not playerData.livestock.cows[cowId] then
+        self:SendNotification(player, "Invalid Cow", "You don't own this cow!", "error")
+        return false
+    end
+
+    local cowData = playerData.livestock.cows[cowId]
+
+    -- Check cooldown
+    local currentTime = os.time()
+    local timeSinceLastMilk = currentTime - (cowData.lastMilkCollection or 0)
+    if timeSinceLastMilk < 10 then -- 10 second cooldown between sessions
+        local timeLeft = 10 - timeSinceLastMilk
+        self:SendNotification(player, "Cow Resting", 
+            "Cow needs " .. math.ceil(timeLeft) .. " more seconds before milking again!", "warning")
+        return false
+    end
+
+    -- Position player - use appropriate method based on system
+    local success = false
+    if self:IsPlayerSeatedInMilkingChair(player) then
+        success = self:PositionPlayerForMilkingChair(player, cowId)
+    else
+        success = self:PositionPlayerForMilking(player, cowId)
+    end
+    
+    if not success then
+        self:SendNotification(player, "Positioning Failed", "Could not position you for milking!", "error")
+        return false
+    end
+
+    -- Create milking session
+    local sessionData = {
+        cowId = cowId,
+        startTime = currentTime,
+        lastClickTime = currentTime,
+        milkCollected = 0,
+        sessionActive = true,
+        cowData = cowData,
+        isChairBased = self:IsPlayerSeatedInMilkingChair(player) -- Track milking type
+    }
+
+    -- Store session data
+    self.Systems.ClickerMilking.ActiveSessions[userId] = sessionData
+    self.Systems.ClickerMilking.MilkingCows[cowId] = userId
+    self.Systems.ClickerMilking.SessionTimeouts[userId] = currentTime + 3
+
+    -- Send session start to client
+    if self.RemoteEvents.MilkingSessionUpdate then
+        self.RemoteEvents.MilkingSessionUpdate:FireClient(player, "started", sessionData)
+    end
+
+    -- Create milking visual effects
+    self:CreateMilkingEffects(player, cowId)
+
+    local milkingType = sessionData.isChairBased and "chair-based" or "standard"
+    self:SendNotification(player, "🥛 Milking Started!", 
+        "Keep clicking to collect milk! (" .. milkingType .. " milking)", "success")
+
+    print("🥛 GameCore: " .. milkingType .. " milking session started for " .. player.Name)
+    return true
+end
+
+-- ========== ENHANCED STOP MILKING SESSION ==========
+
+function GameCore:HandleStopMilkingSession(player)
+    print("🥛 GameCore: ENHANCED stopping milking session for " .. player.Name)
+
+    local userId = player.UserId
+    local session = self.Systems.ClickerMilking.ActiveSessions[userId]
+
+    if not session then
+        return false
+    end
+
+    -- Get final milk count
+    local totalMilk = session.milkCollected
+
+    -- Final save of player data
+    if totalMilk > 0 then
+        local playerData = self:GetPlayerData(player)
+        if playerData then
+            session.cowData.lastMilkCollection = os.time()
+            self:SavePlayerData(player)
+
+            if self.RemoteEvents.PlayerDataUpdated then
+                self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+            end
+        end
+    end
+
+    -- Clean up session
+    self:CleanupMilkingSession(userId)
+
+    -- Release player position - use appropriate method
+    if session.isChairBased then
+        self:ReleasePlayerFromMilkingChair(player)
+    else
+        self:ReleasePlayerFromMilking(player)
+    end
+
+    -- Send session end notification
+    if self.RemoteEvents.MilkingSessionUpdate then
+        self.RemoteEvents.MilkingSessionUpdate:FireClient(player, "ended", {
+            totalMilk = totalMilk,
+            sessionDuration = os.time() - session.startTime
+        })
+    end
+
+    local milkingType = session.isChairBased and "Chair-based" or "Standard"
+    self:SendNotification(player, "🥛 Milking Complete!", 
+        milkingType .. " milking complete! Collected " .. totalMilk .. " milk.", "success")
+
+    return true
+end
+
+-- ========== CHAIR SYSTEM MONITORING ==========
+
+function GameCore:StartChairSystemMonitoring()
+    -- Monitor players in milking chairs
+    spawn(function()
+        while true do
+            wait(2) -- Check every 2 seconds
+            self:MonitorChairMilkingSessions()
+        end
+    end)
+    
+    print("GameCore: Chair system monitoring started")
+end
+
+function GameCore:MonitorChairMilkingSessions()
+    -- Check all chair-based milking sessions
+    for userId, session in pairs(self.Systems.ClickerMilking.ActiveSessions) do
+        if session.isChairBased then
+            local player = Players:GetPlayerByUserId(userId)
+            
+            if player and player.Parent then
+                -- Check if player is still seated in milking chair
+                if not self:IsPlayerSeatedInMilkingChair(player) then
+                    print("🪑 GameCore: Player " .. player.Name .. " left milking chair - ending session")
+                    self:HandleStopMilkingSession(player)
+                end
+            end
+        end
+    end
+end
+
+-- ========== CHAIR INTEGRATION INITIALIZATION ==========
+
+function GameCore:InitializeChairSystemIntegration()
+    print("GameCore: Initializing chair system integration...")
+
+    -- Start chair monitoring
+    self:StartChairSystemMonitoring()
+
+    -- Add chair-specific remote events if needed
+    local remoteFolder = ReplicatedStorage:FindFirstChild("GameRemotes")
+    if remoteFolder then
+        -- Chair system will handle its own remotes
+        print("GameCore: Chair integration ready")
+    end
+
+    print("GameCore: Chair system integration initialized!")
+end
 -- ========== FIXED MILK COLLECTION HANDLER ==========
 
 function GameCore:HandleContinueMilking(player)
@@ -621,56 +883,6 @@ function GameCore:UpdateMilkingSessions()
 	end
 end
 
--- ========== FIXED STOP MILKING SESSION ==========
-
-function GameCore:HandleStopMilkingSession(player)
-	print("🥛 GameCore: FIXED stopping milking session for " .. player.Name)
-
-	local userId = player.UserId
-	local session = self.Systems.ClickerMilking.ActiveSessions[userId]
-
-	if not session then
-		return false
-	end
-
-	-- Get final milk count (already awarded during clicks)
-	local totalMilk = session.milkCollected
-
-	-- Final save of player data
-	if totalMilk > 0 then
-		local playerData = self:GetPlayerData(player)
-		if playerData then
-			-- Update cow's last milk collection time
-			session.cowData.lastMilkCollection = os.time()
-			self:SavePlayerData(player)
-
-			-- Update client one final time
-			if self.RemoteEvents.PlayerDataUpdated then
-				self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-			end
-		end
-	end
-
-	-- Clean up session
-	self:CleanupMilkingSession(userId)
-
-	-- Release player position
-	self:ReleasePlayerFromMilking(player)
-
-	-- Send session end notification
-	if self.RemoteEvents.MilkingSessionUpdate then
-		self.RemoteEvents.MilkingSessionUpdate:FireClient(player, "ended", {
-			totalMilk = totalMilk,
-			sessionDuration = os.time() - session.startTime
-		})
-	end
-
-	self:SendNotification(player, "🥛 Milking Complete!", 
-		"Collected " .. totalMilk .. " milk from " .. totalMilk .. " clicks!", "success")
-
-	return true
-end
-
 -- ========== FIXED CLEANUP METHOD ==========
 
 function GameCore:CleanupMilkingSession(userId)
@@ -853,6 +1065,78 @@ print("")
 print("🧪 TEST WITH ADMIN COMMAND:")
 print("  Type in chat: /debugpositions")
 print("  This will show you the calculated positions before testing")
+function GameCore:AddChairMilkingAdminCommands()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
+
+				if command == "/chairmilkstatus" then
+					print("=== CHAIR MILKING STATUS ===")
+					local chairBasedSessions = 0
+					local standardSessions = 0
+
+					for userId, session in pairs(self.Systems.ClickerMilking.ActiveSessions) do
+						local sessionPlayer = Players:GetPlayerByUserId(userId)
+						local playerName = sessionPlayer and sessionPlayer.Name or "Unknown"
+
+						if session.isChairBased then
+							chairBasedSessions = chairBasedSessions + 1
+							print("  CHAIR: " .. playerName .. " milking " .. session.cowId)
+						else
+							standardSessions = standardSessions + 1
+							print("  STANDARD: " .. playerName .. " milking " .. session.cowId)
+						end
+					end
+
+					print("Chair-based sessions: " .. chairBasedSessions)
+					print("Standard sessions: " .. standardSessions)
+					print("============================")
+
+				elseif command == "/testchair" then
+					local isSeated = self:IsPlayerSeatedInMilkingChair(player)
+					print("Player " .. player.Name .. " seated in milking chair: " .. tostring(isSeated))
+
+					if isSeated then
+						print("Chair milking available for testing")
+					else
+						print("Player needs to sit in a milking chair first")
+					end
+
+				elseif command == "/forcerelease" then
+					-- Force release from any milking session
+					self:HandleStopMilkingSession(player)
+					print("Force released " .. player.Name .. " from milking")
+
+				elseif command == "/chairinfo" then
+					print("=== CHAIR SYSTEM INFO ===")
+					local chairCount = 0
+
+					for _, obj in pairs(workspace:GetChildren()) do
+						if obj.Name == "MilkingChair" then
+							chairCount = chairCount + 1
+							local seat = self:FindSeatInObject(obj)
+							local occupied = seat and seat.Occupant ~= nil
+							print("Chair " .. chairCount .. ": " .. (occupied and "OCCUPIED" or "EMPTY"))
+
+							if occupied then
+								local character = seat.Occupant.Parent
+								local occupantPlayer = Players:GetPlayerFromCharacter(character)
+								if occupantPlayer then
+									print("  Occupied by: " .. occupantPlayer.Name)
+								end
+							end
+						end
+					end
+
+					print("Total chairs found: " .. chairCount)
+					print("========================")
+				end
+			end
+		end)
+	end)
+end
 function GameCore:TestPlayerPositioning(player)
 	if player.Name == "TommySalami311" then -- Replace with your username
 		print("Testing player positioning...")
