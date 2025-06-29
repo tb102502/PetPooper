@@ -51,7 +51,6 @@ ChairMilkingSystem.State = {
 	ChairGUIs = {} -- [userId] = guiReference
 }
 
-
 -- ========== INITIALIZATION ==========
 
 function ChairMilkingSystem:Initialize()

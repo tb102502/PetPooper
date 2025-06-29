@@ -1450,6 +1450,308 @@ function EnhancedCowMilkSystem:SetupClickerRemoteHandlers()
 		end)
 	end
 end
+function EnhancedCowMilkSystem:InitializeChairIntegration()
+	print("EnhancedCowMilkSystem: Initializing chair system integration...")
+
+	-- Setup chair-specific remote handlers
+	local remoteFolder = ReplicatedStorage:FindFirstChild("GameRemotes")
+	if remoteFolder then
+		-- Handle chair milking requests
+		if remoteFolder:FindFirstChild("StartChairMilking") then
+			remoteFolder.StartChairMilking.OnServerEvent:Connect(function(player, cowId)
+				pcall(function()
+					self:HandleChairMilkingStart(player, cowId)
+				end)
+			end)
+		end
+
+		if remoteFolder:FindFirstChild("StopChairMilking") then
+			remoteFolder.StopChairMilking.OnServerEvent:Connect(function(player, cowId)
+				pcall(function()
+					self:HandleChairMilkingStop(player, cowId)
+				end)
+			end)
+		end
+	end
+
+	print("EnhancedCowMilkSystem: Chair integration initialized!")
+end
+
+function EnhancedCowMilkSystem:CreatePlayerMilkingArea(player, cowModel, cowId)
+	local character = player.Character
+	if not character then return end
+
+	-- Get cow bounds for reference
+	local cowBounds = self:GetCowBoundingBox(cowModel)
+	local cowCenter = cowBounds.center
+	local groundLevel = cowBounds.minY
+
+	print("🐄 Using cow bounds - Center: " .. tostring(cowCenter) .. ", Ground: " .. groundLevel)
+
+	-- Create simple area indicator (no furniture)
+	local milkingArea = Instance.new("Part")
+	milkingArea.Name = "ChairMilkingIndicator"
+	milkingArea.Size = Vector3.new(15, 0.1, 10)
+	milkingArea.Shape = Enum.PartType.Cylinder
+	milkingArea.Material = Enum.Material.Neon
+	milkingArea.Color = Color3.fromRGB(100, 255, 100)
+	milkingArea.Transparency = 0.8
+	milkingArea.CanCollide = false
+	milkingArea.Anchored = true
+	milkingArea.Position = Vector3.new(cowCenter.X, groundLevel + 0.05, cowCenter.Z)
+	milkingArea.Orientation = Vector3.new(0, 0, 90)
+	milkingArea.Parent = workspace
+
+	-- Store in effects for cleanup
+	if not self.ClickerIntegration.SessionEffects[cowId] then
+		self.ClickerIntegration.SessionEffects[cowId] = {}
+	end
+	table.insert(self.ClickerIntegration.SessionEffects[cowId], milkingArea)
+
+	-- Add gentle pulsing effect
+	spawn(function()
+		while milkingArea.Parent and self.ClickerIntegration.ActiveMilkingSessions[cowId] do
+			local pulse = TweenService:Create(milkingArea,
+				TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.6}
+			)
+			pulse:Play()
+			pulse.Completed:Wait()
+
+			if not milkingArea.Parent then break end
+
+			local pulseBack = TweenService:Create(milkingArea,
+				TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.9}
+			)
+			pulseBack:Play()
+			pulseBack.Completed:Wait()
+		end
+	end)
+
+	print("🎨 Created chair-based milking area indicator (no furniture)")
+end
+
+
+function EnhancedCowMilkSystem:CreateClickParticleEffect(player, cowId)
+	local cowModel = self.ActiveCows[cowId]
+	if not cowModel then return end
+
+	local cowCenter = self:GetCowCenter(cowModel)
+
+	print("✨ EnhancedCowMilkSystem: Creating CHAIR-BASED click milk effect for " .. cowId)
+
+	for i = 1, 3 do
+		local milkDrop = Instance.new("Part")
+		milkDrop.Size = Vector3.new(0.2, 0.3, 0.2)
+		milkDrop.Shape = Enum.PartType.Ball
+		milkDrop.Material = Enum.Material.Neon
+		milkDrop.Color = Color3.fromRGB(255, 255, 255)
+		milkDrop.CanCollide = false
+		milkDrop.Anchored = true
+		milkDrop.Position = cowCenter + Vector3.new(
+			math.random(-1, 1), 
+			-0.5, 
+			math.random(-1, 1)
+		) -- From cow udder area
+		milkDrop.Parent = workspace
+
+		-- Animate milk drop falling to ground
+		local groundPosition = milkDrop.Position - Vector3.new(0, 3, 0)
+
+		local fall = TweenService:Create(milkDrop,
+			TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+			{
+				Position = groundPosition,
+				Size = Vector3.new(0.1, 0.1, 0.1)
+			}
+		)
+		fall:Play()
+
+		fall.Completed:Connect(function()
+			-- Create splash effect on ground
+			self:CreateGroundSplashEffect(groundPosition, cowId)
+			milkDrop:Destroy()
+		end)
+
+		wait(0.1) -- Slight delay between drops
+	end
+
+	-- Create sparkle effect around cow
+	for i = 1, 5 do
+		local sparkle = Instance.new("Part")
+		sparkle.Size = Vector3.new(0.1, 0.1, 0.1)
+		sparkle.Shape = Enum.PartType.Ball
+		sparkle.Material = Enum.Material.Neon
+		sparkle.Color = Color3.fromRGB(255, 255, 100)
+		sparkle.CanCollide = false
+		sparkle.Anchored = true
+		sparkle.Position = cowCenter + Vector3.new(
+			math.random(-2, 2),
+			math.random(-1, 1),
+			math.random(-2, 2)
+		)
+		sparkle.Parent = workspace
+
+		local tween = TweenService:Create(sparkle,
+			TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = sparkle.Position + Vector3.new(0, 3, 0),
+				Transparency = 1,
+				Size = Vector3.new(0.05, 0.05, 0.05)
+			}
+		)
+		tween:Play()
+		tween.Completed:Connect(function()
+			sparkle:Destroy()
+		end)
+	end
+end
+
+-- ========== NEW GROUND SPLASH EFFECT ==========
+
+function EnhancedCowMilkSystem:CreateGroundSplashEffect(groundPosition, cowId)
+	print("💦 EnhancedCowMilkSystem: Creating ground splash effect")
+
+	-- Create ground splash particles
+	for i = 1, 6 do
+		local splash = Instance.new("Part")
+		splash.Size = Vector3.new(0.05, 0.05, 0.05)
+		splash.Shape = Enum.PartType.Ball
+		splash.Material = Enum.Material.Neon
+		splash.Color = Color3.fromRGB(255, 255, 255)
+		splash.CanCollide = false
+		splash.Anchored = true
+		splash.Position = groundPosition
+		splash.Parent = workspace
+
+		-- Random splash direction (horizontal)
+		local splashDirection = Vector3.new(
+			math.random(-2, 2),
+			math.random(0, 1), -- Small upward motion
+			math.random(-2, 2)
+		)
+
+		local splash_tween = TweenService:Create(splash,
+			TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = groundPosition + splashDirection,
+				Transparency = 1
+			}
+		)
+		splash_tween:Play()
+		splash_tween.Completed:Connect(function()
+			splash:Destroy()
+		end)
+	end
+
+	-- Create temporary ground stain
+	local stain = Instance.new("Part")
+	stain.Name = "MilkStain"
+	stain.Size = Vector3.new(1, 0.01, 1)
+	stain.Shape = Enum.PartType.Cylinder
+	stain.Material = Enum.Material.Plastic
+	stain.Color = Color3.fromRGB(240, 240, 240)
+	stain.Transparency = 0.3
+	stain.CanCollide = false
+	stain.Anchored = true
+	stain.Position = groundPosition
+	stain.Orientation = Vector3.new(0, 0, 90)
+	stain.Parent = workspace
+
+	-- Fade out stain over time
+	spawn(function()
+		wait(2)
+		local fadeOut = TweenService:Create(stain,
+			TweenInfo.new(3, Enum.EasingStyle.Quad),
+			{Transparency = 1}
+		)
+		fadeOut:Play()
+		fadeOut.Completed:Connect(function()
+			stain:Destroy()
+		end)
+	end)
+end
+
+-- ========== UPDATED MILKING AREA EFFECT (SIMPLIFIED) ==========
+
+function EnhancedCowMilkSystem:CreateMilkingAreaEffect(cowModel, cowId)
+	local bounds = self:GetCowBoundingBox(cowModel)
+	local cowCenter = bounds.center
+	local groundLevel = bounds.minY
+
+	-- Create SIMPLIFIED ground effect at actual ground level
+	local milkingArea = Instance.new("Part")
+	milkingArea.Name = "MilkingArea"
+	milkingArea.Size = Vector3.new(12, 0.1, 8)
+	milkingArea.Shape = Enum.PartType.Cylinder
+	milkingArea.Material = Enum.Material.Neon
+	milkingArea.Color = Color3.fromRGB(200, 255, 200)
+	milkingArea.Transparency = 0.8
+	milkingArea.CanCollide = false
+	milkingArea.Anchored = true
+	milkingArea.Position = Vector3.new(cowCenter.X, groundLevel + 0.05, cowCenter.Z)
+	milkingArea.Orientation = Vector3.new(0, 0, 90)
+	milkingArea.Parent = workspace
+
+	if not self.ClickerIntegration.SessionEffects[cowId] then
+		self.ClickerIntegration.SessionEffects[cowId] = {}
+	end
+	table.insert(self.ClickerIntegration.SessionEffects[cowId], milkingArea)
+
+	-- Gentle pulsing
+	spawn(function()
+		while milkingArea.Parent and self.ClickerIntegration.ActiveMilkingSessions[cowId] do
+			local pulse = TweenService:Create(milkingArea,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.6}
+			)
+			pulse:Play()
+			pulse.Completed:Wait()
+
+			local pulseBack = TweenService:Create(milkingArea,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Transparency = 0.9}
+			)
+			pulseBack:Play()
+			pulseBack.Completed:Wait()
+		end
+	end)
+
+	print("🎨 Created SIMPLIFIED milking area effect for chair system")
+end
+
+-- ========== CHAIR INTEGRATION METHODS ==========
+
+function EnhancedCowMilkSystem:HandleChairMilkingStart(player, cowId)
+	print("🪑 EnhancedCowMilkSystem: Handling chair-based milking start")
+
+	-- Start milking session using existing clicker system
+	return self:HandleClickerCowClick(player, cowId)
+end
+
+function EnhancedCowMilkSystem:HandleChairMilkingStop(player, cowId)
+	print("🪑 EnhancedCowMilkSystem: Handling chair-based milking stop")
+
+	-- Stop milking session
+	local userId = player.UserId
+	local session = self.ClickerIntegration.ActiveMilkingSessions[cowId]
+
+	if session and session.player.UserId == userId then
+		self:CleanupMilkingSession(cowId)
+		return true
+	end
+
+	return false
+end
+
+function EnhancedCowMilkSystem:IsPlayerMilkingCow(player, cowId)
+	local userId = player.UserId
+	local session = self.ClickerIntegration.ActiveMilkingSessions[cowId]
+
+	return session and session.player.UserId == userId
+end
+
 
 -- ========== ENHANCED CLICK DETECTION FOR CLICKER SYSTEM ==========
 
@@ -1517,71 +1819,6 @@ function EnhancedCowMilkSystem:CreateMilkingSessionVisuals(player, cowId)
 	self:StartMilkingParticleEffects(cowModel, cowId)
 end
 
-function EnhancedCowMilkSystem:CreatePlayerMilkingArea(player, cowModel, cowId)
-	local character = player.Character
-	if not character then return end
-
-	print("🪑 EnhancedCowMilkSystem: Creating REDESIGNED milking area")
-
-	-- Get cow bounds (same calculation as GameCore)
-	local cowBounds = self:GetCowBoundingBox(cowModel)
-	local cowCenter = cowBounds.center
-	local groundLevel = cowBounds.minY
-
-	print("🐄 Using cow bounds - Center: " .. tostring(cowCenter) .. ", Ground: " .. groundLevel)
-
-	-- Calculate where player will be positioned
-	local playerGroundPosition = Vector3.new(
-		cowCenter.X + 6, -- Same as in GameCore
-		groundLevel,
-		cowCenter.Z
-	)
-
-	--[[ Create milking stool at player's ground position
-	local stool = Instance.new("Part")
-	stool.Name = "MilkingStool"
-	stool.Size = Vector3.new(2, 5, 2)
-	stool.Shape = Enum.PartType.Cylinder
-	stool.Material = Enum.Material.Wood
-	stool.Color = Color3.fromRGB(139, 90, 43)
-	stool.CanCollide = false
-	stool.Anchored = true
-	stool.Position = Vector3.new(
-		playerGroundPosition.X,
-		groundLevel + 0.5, -- Half stool height above ground
-		playerGroundPosition.Z
-	)
-	stool.Parent = workspace
-
-	-- Store in effects
-	if not self.ClickerIntegration.SessionEffects[cowId] then
-		self.ClickerIntegration.SessionEffects[cowId] = {}
-	end
-	table.insert(self.ClickerIntegration.SessionEffects[cowId], stool)
-
-	-- Create milk bucket between cow and player
-	local bucket = Instance.new("Part")
-	bucket.Name = "MilkBucket"
-	bucket.Size = Vector3.new(1.5, 2, 1.5)
-	bucket.Shape = Enum.PartType.Cylinder
-	bucket.Material = Enum.Material.Metal
-	bucket.Color = Color3.fromRGB(150, 150, 150)
-	bucket.CanCollide = false
-	bucket.Anchored = true
-	bucket.Position = Vector3.new(
-		cowCenter.X + 3, -- Halfway between cow and player
-		groundLevel + 1, -- Half bucket height above ground
-		cowCenter.Z - 1 -- Slightly to the side
-	)
-	bucket.Parent = workspace
-]]--
-	table.insert(self.ClickerIntegration.SessionEffects[cowId])
-
-	print("🪑 Created milking setup:")
-	--print("  Stool at: " .. tostring(stool.Position))
-	--print("  Bucket at: " .. tostring(bucket.Position))
-	print("  Ground level: " .. groundLevel)
-end
 
 -- ========== ADD BOUNDING BOX METHOD TO CowMilkSystem ==========
 
@@ -1675,234 +1912,6 @@ function EnhancedCowMilkSystem:StartMilkingParticleEffects(cowModel, cowId)
 	-- The milk drops will be created when HandleContinueMilking is called
 	print("🎨 EnhancedCowMilkSystem: Started click-based particle system for " .. cowId)
 end
-
--- ========== FIXED CLICK PARTICLE EFFECT ==========
-
-function EnhancedCowMilkSystem:CreateClickParticleEffect(player, cowId)
-	local cowModel = self.ActiveCows[cowId]
-	if not cowModel then return end
-
-	local cowCenter = self:GetCowCenter(cowModel)
-
-	print("✨ EnhancedCowMilkSystem: Creating click milk drop effect for " .. cowId)
-
-	-- Create single milk drop that falls into bucket
-	local milkDrop = Instance.new("Part")
-	milkDrop.Size = Vector3.new(0.2, 0.3, 0.2)
-	milkDrop.Shape = Enum.PartType.Ball
-	milkDrop.Material = Enum.Material.Neon
-	milkDrop.Color = Color3.fromRGB(255, 255, 255)
-	milkDrop.CanCollide = false
-	milkDrop.Anchored = true
-	milkDrop.Position = cowCenter + Vector3.new(1, -0.5, 0) -- From cow udder area
-	milkDrop.Parent = workspace
-
-	-- Animate milk drop falling into bucket
-	local bucketPosition = cowCenter + Vector3.new(2, -1.5, 1)
-
-	local fall = TweenService:Create(milkDrop,
-		TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{
-			Position = bucketPosition,
-			Size = Vector3.new(0.1, 0.1, 0.1)
-		}
-	)
-	fall:Play()
-
-	fall.Completed:Connect(function()
-		-- Create splash effect in bucket
-		self:CreateBucketSplashEffect(bucketPosition, cowId)
-		milkDrop:Destroy()
-	end)
-
-	-- Create small sparkle effect around click area
-	for i = 1, 5 do
-		local sparkle = Instance.new("Part")
-		sparkle.Size = Vector3.new(0.1, 0.1, 0.1)
-		sparkle.Shape = Enum.PartType.Ball
-		sparkle.Material = Enum.Material.Neon
-		sparkle.Color = Color3.fromRGB(255, 255, 100)
-		sparkle.CanCollide = false
-		sparkle.Anchored = true
-		sparkle.Position = cowCenter + Vector3.new(
-			math.random(-2, 2),
-			math.random(-1, 1),
-			math.random(-2, 2)
-		)
-		sparkle.Parent = workspace
-
-		local tween = TweenService:Create(sparkle,
-			TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Position = sparkle.Position + Vector3.new(0, 3, 0),
-				Transparency = 1,
-				Size = Vector3.new(0.05, 0.05, 0.05)
-			}
-		)
-		tween:Play()
-		tween.Completed:Connect(function()
-			sparkle:Destroy()
-		end)
-	end
-end
-
--- ========== BUCKET SPLASH EFFECT ==========
-
-function EnhancedCowMilkSystem:CreateBucketSplashEffect(bucketPosition, cowId)
-	print("💦 EnhancedCowMilkSystem: Creating bucket splash effect")
-
-	-- Create milk splash particles
-	for i = 1, 8 do
-		local splash = Instance.new("Part")
-		splash.Size = Vector3.new(0.05, 0.05, 0.05)
-		splash.Shape = Enum.PartType.Ball
-		splash.Material = Enum.Material.Neon
-		splash.Color = Color3.fromRGB(255, 255, 255)
-		splash.CanCollide = false
-		splash.Anchored = true
-		splash.Position = bucketPosition
-		splash.Parent = workspace
-
-		-- Random splash direction
-		local splashDirection = Vector3.new(
-			math.random(-2, 2),
-			math.random(1, 3),
-			math.random(-2, 2)
-		)
-
-		local splash_tween = TweenService:Create(splash,
-			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Position = bucketPosition + splashDirection,
-				Transparency = 1
-			}
-		)
-		splash_tween:Play()
-		splash_tween.Completed:Connect(function()
-			splash:Destroy()
-		end)
-	end
-
-	-- Update bucket filling level (visual only)
-	self:UpdateBucketFillLevel(cowId)
-end
-
--- ========== BUCKET FILL LEVEL VISUAL ==========
-
-function EnhancedCowMilkSystem:UpdateBucketFillLevel(cowId)
-	local effects = self.ClickerIntegration.SessionEffects[cowId]
-	if not effects then return end
-
-	-- Find the bucket
-	local bucket = nil
-	for _, effect in pairs(effects) do
-		if effect and effect.Name == "MilkBucket" then
-			bucket = effect
-			break
-		end
-	end
-
-	if not bucket then return end
-
-	-- Get session data to see how much milk collected
-	local session = self.ClickerIntegration.ActiveMilkingSessions[cowId]
-	if not session then return end
-
-	local milkAmount = session.milkCollected or 0
-
-	-- Create or update milk level in bucket
-	local milkLevel = bucket:FindFirstChild("MilkLevel")
-	if not milkLevel then
-		milkLevel = Instance.new("Part")
-		milkLevel.Name = "MilkLevel"
-		milkLevel.Shape = Enum.PartType.Cylinder
-		milkLevel.Material = Enum.Material.Plastic
-		milkLevel.Color = Color3.fromRGB(255, 255, 255)
-		milkLevel.CanCollide = false
-		milkLevel.Anchored = true
-		milkLevel.Size = Vector3.new(0.8, 0.1, 0.8)
-		milkLevel.Position = bucket.Position - Vector3.new(0, 0.6, 0)
-		milkLevel.Parent = bucket
-	end
-
-	-- Update milk level height based on amount collected
-	local fillPercentage = math.min(milkAmount / 20, 1) -- Full at 20 milk
-	local newHeight = 0.1 + (fillPercentage * 1.0) -- Max height of 1.1
-
-	milkLevel.Size = Vector3.new(0.8, newHeight, 0.8)
-	milkLevel.Position = bucket.Position - Vector3.new(0, 0.75 - (newHeight/2), 0)
-
-	-- Change color based on amount
-	if milkAmount >= 20 then
-		milkLevel.Color = Color3.fromRGB(255, 255, 200) -- Slightly yellow when full
-	elseif milkAmount >= 10 then
-		milkLevel.Color = Color3.fromRGB(255, 255, 230) -- Slight tint
-	else
-		milkLevel.Color = Color3.fromRGB(255, 255, 255) -- Pure white
-	end
-end
-
--- ========== FIXED MILKING AREA EFFECT ==========
-function EnhancedCowMilkSystem:CreateMilkingAreaEffect(cowModel, cowId)
-	local bounds = self:GetCowBoundingBox(cowModel)
-	local cowCenter = bounds.center
-	local groundLevel = bounds.minY
-
-	-- Create ground effect at actual ground level
-	local milkingArea = Instance.new("Part")
-	milkingArea.Name = "MilkingArea"
-	milkingArea.Size = Vector3.new(12, 0.1, 8)
-	milkingArea.Shape = Enum.PartType.Cylinder
-	milkingArea.Material = Enum.Material.Neon
-	milkingArea.Color = Color3.fromRGB(200, 255, 200)
-	milkingArea.Transparency = 0.8
-	milkingArea.CanCollide = false
-	milkingArea.Anchored = true
-	milkingArea.Position = Vector3.new(cowCenter.X + 3, groundLevel + 0.05, cowCenter.Z) -- Centered between cow and player
-	milkingArea.Orientation = Vector3.new(0, 0, 90)
-	milkingArea.Parent = workspace
-
-	if not self.ClickerIntegration.SessionEffects[cowId] then
-		self.ClickerIntegration.SessionEffects[cowId] = {}
-	end
-	table.insert(self.ClickerIntegration.SessionEffects[cowId], milkingArea)
-
-	-- Gentle pulsing
-	spawn(function()
-		while milkingArea.Parent and self.ClickerIntegration.ActiveMilkingSessions[cowId] do
-			local pulse = TweenService:Create(milkingArea,
-				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{Transparency = 0.6}
-			)
-			pulse:Play()
-			pulse.Completed:Wait()
-
-			local pulseBack = TweenService:Create(milkingArea,
-				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{Transparency = 0.9}
-			)
-			pulseBack:Play()
-			pulseBack.Completed:Wait()
-		end
-	end)
-
-	print("🎨 Created milking area effect at ground level: " .. groundLevel)
-end
-
-print("🎯 ✅ COMPLETE POSITIONING REDESIGN!")
-print("🔧 KEY CHANGES:")
-print("  📐 Proper bounding box calculation for accurate ground level")
-print("  👤 Player stands normally (no crouching/sitting)")
-print("  🚫 Removed PlatformStand (was causing weird positioning)")
-print("  📏 Player positioned 6 studs to side of cow")
-print("  🪑 Equipment positioned relative to actual cow bounds")
-print("  🎯 Player faces toward cow naturally")
-print("  🧹 Better cleanup and release positioning")
-print("")
-print("🧪 TEST COMMANDS:")
-print("  /debugpositions - Show calculated positions")
-print("  Then test milking to see new positioning")
-
 -- ========== FIXED ENHANCED CLICK DETECTION ==========
 
 function EnhancedCowMilkSystem:SetupEnhancedClickDetection(cowModel, cowId, ownerName)
@@ -2115,15 +2124,6 @@ function EnhancedCowMilkSystem:CleanupMilkingSession(cowId)
 	print("🧹 EnhancedCowMilkSystem: FIXED milking session cleanup complete")
 end
 
-print("EnhancedCowMilkSystem: ✅ FIXED CLICK-BASED VISUAL EFFECTS!")
-print("🔧 KEY FIXES:")
-print("  🖱️ Removed automatic milk streams")
-print("  💧 Click-triggered milk drops only")
-print("  🪣 Dynamic bucket filling visualization")
-print("  ✨ Click-responsive visual feedback")
-print("  🎯 Better click detection coverage")
-print("  🎨 Smooth fade-out cleanup effects")
-
 
 -- ========== MILKING INDICATOR UPDATES ==========
 
@@ -2313,14 +2313,6 @@ spawn(function()
 	end
 end)
 
-print("EnhancedCowMilkSystem: ✅ CLICKER INTEGRATION LOADED!")
-print("🥛 NEW FEATURES:")
-print("  🖱️ Click detection for milking sessions")
-print("  🎨 Active milking visual effects")
-print("  💡 Dynamic milking indicators") 
-print("  ✨ Session progress particle effects")
-print("  🪑 Milking stool and bucket visuals")
-print("  📊 Real-time session progress updates")
 Players.PlayerAdded:Connect(function(player)
 	player.Chatted:Connect(function(message)
 		if player.Name == "TommySalami311" then -- Replace with your username
