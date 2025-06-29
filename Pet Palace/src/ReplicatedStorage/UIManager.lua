@@ -894,39 +894,52 @@ function UIManager:CreateFarmMenu()
 	title.Font = Enum.Font.GothamBold
 	title.Parent = menuFrame
 
-	local expansionFrame = Instance.new("Frame")
-	expansionFrame.Name = "ExpansionFrame"
-	expansionFrame.Size = UDim2.new(0.95, 0, 0.4, 0)
-	expansionFrame.Position = UDim2.new(0.025, 0, 0.15, 0)
-	expansionFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	expansionFrame.BorderSizePixel = 0
-	expansionFrame.Parent = menuFrame
+	-- Inventory Container
+	local inventoryFrame = Instance.new("Frame")
+	inventoryFrame.Name = "InventoryFrame"
+	inventoryFrame.Size = UDim2.new(0.95, 0, 0.8, 0)
+	inventoryFrame.Position = UDim2.new(0.025, 0, 0.15, 0)
+	inventoryFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	inventoryFrame.BorderSizePixel = 0
+	inventoryFrame.Parent = menuFrame
 
-	local expansionCorner = Instance.new("UICorner")
-	expansionCorner.CornerRadius = UDim.new(0.02, 0)
-	expansionCorner.Parent = expansionFrame
+	local inventoryCorner = Instance.new("UICorner")
+	inventoryCorner.CornerRadius = UDim.new(0.02, 0)
+	inventoryCorner.Parent = inventoryFrame
 
-	local statusLabel = Instance.new("TextLabel")
-	statusLabel.Name = "StatusLabel"
-	statusLabel.Size = UDim2.new(0.9, 0, 0.3, 0)
-	statusLabel.Position = UDim2.new(0.05, 0, 0.05, 0)
-	statusLabel.BackgroundTransparency = 1
-	statusLabel.Text = "Loading farm status..."
-	statusLabel.TextColor3 = Color3.new(1, 1, 1)
-	statusLabel.TextScaled = true
-	statusLabel.Font = Enum.Font.Gotham
-	statusLabel.Parent = expansionFrame
+	-- Inventory Title
+	local inventoryTitle = Instance.new("TextLabel")
+	inventoryTitle.Name = "InventoryTitle"
+	inventoryTitle.Size = UDim2.new(0.9, 0, 0.1, 0)
+	inventoryTitle.Position = UDim2.new(0.05, 0, 0.02, 0)
+	inventoryTitle.BackgroundTransparency = 1
+	inventoryTitle.Text = "📦 FARM INVENTORY"
+	inventoryTitle.TextColor3 = Color3.new(1, 1, 1)
+	inventoryTitle.TextScaled = true
+	inventoryTitle.Font = Enum.Font.GothamBold
+	inventoryTitle.Parent = inventoryFrame
 
-	self:PopulateFarmContent(expansionFrame)
+	self:PopulateFarmInventory(inventoryFrame)
 
 	return true
 end
 
-function UIManager:PopulateFarmContent(expansionFrame)
+function UIManager:PopulateFarmInventory(inventoryFrame)
 	if not self.State.GameClient then
+		local loadingLabel = Instance.new("TextLabel")
+		loadingLabel.Name = "LoadingLabel"
+		loadingLabel.Size = UDim2.new(0.9, 0, 0.8, 0)
+		loadingLabel.Position = UDim2.new(0.05, 0, 0.15, 0)
+		loadingLabel.BackgroundTransparency = 1
+		loadingLabel.Text = "Loading farm inventory..."
+		loadingLabel.TextColor3 = Color3.new(1, 1, 1)
+		loadingLabel.TextScaled = true
+		loadingLabel.Font = Enum.Font.Gotham
+		loadingLabel.Parent = inventoryFrame
 		return
 	end
 
+	-- Get player inventory data
 	local success, playerData = pcall(function()
 		if self.State.GameClient.GetPlayerData then
 			return self.State.GameClient:GetPlayerData()
@@ -934,49 +947,295 @@ function UIManager:PopulateFarmContent(expansionFrame)
 		return nil
 	end)
 
-	if success and playerData and playerData.farming then
-		local expansionLevel = playerData.farming.expansionLevel or 1
+	if not success or not playerData then
+		local errorLabel = Instance.new("TextLabel")
+		errorLabel.Size = UDim2.new(0.9, 0, 0.8, 0)
+		errorLabel.Position = UDim2.new(0.05, 0, 0.15, 0)
+		errorLabel.BackgroundTransparency = 1
+		errorLabel.Text = "❌ Unable to load inventory data"
+		errorLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+		errorLabel.TextScaled = true
+		errorLabel.Font = Enum.Font.Gotham
+		errorLabel.Parent = inventoryFrame
+		return
+	end
 
-		local statusLabel = expansionFrame:FindFirstChild("StatusLabel")
-		if statusLabel then
-			statusLabel.Text = "🌾 Current Farm Level: " .. expansionLevel .. "\n" .. 
-				"Grid Size: " .. self:GetGridSizeForLevel(expansionLevel) .. "\n" .. 
-				"Total Spots: " .. self:GetTotalSpotsForLevel(expansionLevel)
+	-- Create scrolling frame for inventory
+	local scrollFrame = Instance.new("ScrollingFrame")
+	scrollFrame.Name = "InventoryScroll"
+	scrollFrame.Size = UDim2.new(0.95, 0, 0.85, 0)
+	scrollFrame.Position = UDim2.new(0.025, 0, 0.12, 0)
+	scrollFrame.BackgroundTransparency = 1
+	scrollFrame.BorderSizePixel = 0
+	scrollFrame.ScrollBarThickness = 8
+	scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+	scrollFrame.Parent = inventoryFrame
+
+	-- Create categories
+	local yPosition = 0.02
+	local categorySpacing = 0.02
+
+	-- SEEDS SECTION
+	yPosition = self:CreateInventoryCategory(scrollFrame, "🌱 SEEDS", yPosition, playerData.seeds or {})
+	yPosition = yPosition + categorySpacing
+
+	-- CROPS SECTION  
+	yPosition = self:CreateInventoryCategory(scrollFrame, "🌾 HARVESTED CROPS", yPosition, playerData.crops or {})
+	yPosition = yPosition + categorySpacing
+
+	-- MILK SECTION
+	local milkData = {
+		milk = playerData.milk or 0
+	}
+	yPosition = self:CreateInventoryCategory(scrollFrame, "🥛 DAIRY PRODUCTS", yPosition, milkData)
+
+	-- Update canvas size
+	scrollFrame.CanvasSize = UDim2.new(0, 0, yPosition + 0.05, 0)
+end
+
+function UIManager:CreateInventoryCategory(parentFrame, categoryTitle, startY, itemData)
+	-- Category Header
+	local categoryHeader = Instance.new("Frame")
+	categoryHeader.Name = categoryTitle:gsub("[^%w]", "") .. "Header"
+	categoryHeader.Size = UDim2.new(0.95, 0, 0.08, 0)
+	categoryHeader.Position = UDim2.new(0.025, 0, startY, 0)
+	categoryHeader.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+	categoryHeader.BorderSizePixel = 0
+	categoryHeader.Parent = parentFrame
+
+	local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = UDim.new(0.1, 0)
+	headerCorner.Parent = categoryHeader
+
+	local headerLabel = Instance.new("TextLabel")
+	headerLabel.Size = UDim2.new(0.9, 0, 1, 0)
+	headerLabel.Position = UDim2.new(0.05, 0, 0, 0)
+	headerLabel.BackgroundTransparency = 1
+	headerLabel.Text = categoryTitle
+	headerLabel.TextColor3 = Color3.new(1, 1, 1)
+	headerLabel.TextScaled = true
+	headerLabel.Font = Enum.Font.GothamBold
+	headerLabel.TextXAlignment = Enum.TextXAlignment.Left
+	headerLabel.Parent = categoryHeader
+
+	local currentY = startY + 0.1
+
+	-- Check if category has items
+	local hasItems = false
+	if type(itemData) == "table" then
+		for itemName, quantity in pairs(itemData) do
+			if quantity and quantity > 0 then
+				hasItems = true
+				break
+			end
 		end
+	end
 
-		if expansionLevel < 5 then
-			local expandButton = Instance.new("TextButton")
-			expandButton.Name = "ExpandButton"
-			expandButton.Size = UDim2.new(0.5, 0, 0.25, 0)
-			expandButton.Position = UDim2.new(0.25, 0, 0.7, 0)
-			expandButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-			expandButton.BorderSizePixel = 0
-			expandButton.Text = "🌱 Expand Farm"
-			expandButton.TextColor3 = Color3.new(1, 1, 1)
-			expandButton.TextScaled = true
-			expandButton.Font = Enum.Font.GothamBold
-			expandButton.Parent = expansionFrame
+	if not hasItems then
+		-- Show empty message
+		local emptyLabel = Instance.new("TextLabel")
+		emptyLabel.Name = "EmptyLabel"
+		emptyLabel.Size = UDim2.new(0.9, 0, 0.06, 0)
+		emptyLabel.Position = UDim2.new(0.05, 0, currentY, 0)
+		emptyLabel.BackgroundTransparency = 1
+		emptyLabel.Text = "No items in this category"
+		emptyLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+		emptyLabel.TextScaled = true
+		emptyLabel.Font = Enum.Font.Gotham
+		emptyLabel.TextXAlignment = Enum.TextXAlignment.Left
+		emptyLabel.Parent = parentFrame
 
-			local buttonCorner = Instance.new("UICorner")
-			buttonCorner.CornerRadius = UDim.new(0.1, 0)
-			buttonCorner.Parent = expandButton
+		return currentY + 0.08
+	end
 
-			expandButton.MouseButton1Click:Connect(function()
-				self:ShowNotification("Farm Expansion", "Farm expansion system coming soon!", "info")
+	-- Create item entries
+	for itemName, quantity in pairs(itemData) do
+		if quantity and quantity > 0 then
+			local itemFrame = Instance.new("Frame")
+			itemFrame.Name = itemName .. "Item"
+			itemFrame.Size = UDim2.new(0.9, 0, 0.06, 0)
+			itemFrame.Position = UDim2.new(0.05, 0, currentY, 0)
+			itemFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+			itemFrame.BorderSizePixel = 0
+			itemFrame.Parent = parentFrame
+
+			local itemCorner = Instance.new("UICorner")
+			itemCorner.CornerRadius = UDim.new(0.05, 0)
+			itemCorner.Parent = itemFrame
+
+			-- Item icon (get from item config if available)
+			local itemIcon = self:GetItemIcon(itemName)
+			local iconLabel = Instance.new("TextLabel")
+			iconLabel.Size = UDim2.new(0.1, 0, 0.8, 0)
+			iconLabel.Position = UDim2.new(0.02, 0, 0.1, 0)
+			iconLabel.BackgroundTransparency = 1
+			iconLabel.Text = itemIcon
+			iconLabel.TextColor3 = Color3.new(1, 1, 1)
+			iconLabel.TextScaled = true
+			iconLabel.Font = Enum.Font.Gotham
+			iconLabel.Parent = itemFrame
+
+			-- Item name
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Size = UDim2.new(0.6, 0, 0.8, 0)
+			nameLabel.Position = UDim2.new(0.15, 0, 0.1, 0)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.Text = self:FormatItemName(itemName)
+			nameLabel.TextColor3 = Color3.new(1, 1, 1)
+			nameLabel.TextScaled = true
+			nameLabel.Font = Enum.Font.Gotham
+			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.Parent = itemFrame
+
+			-- Quantity
+			local quantityLabel = Instance.new("TextLabel")
+			quantityLabel.Size = UDim2.new(0.2, 0, 0.8, 0)
+			quantityLabel.Position = UDim2.new(0.78, 0, 0.1, 0)
+			quantityLabel.BackgroundTransparency = 1
+			quantityLabel.Text = "x" .. self:FormatNumber(quantity)
+			quantityLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+			quantityLabel.TextScaled = true
+			quantityLabel.Font = Enum.Font.GothamBold
+			quantityLabel.TextXAlignment = Enum.TextXAlignment.Right
+			quantityLabel.Parent = itemFrame
+
+			-- Hover effect
+			itemFrame.MouseEnter:Connect(function()
+				local hoverTween = TweenService:Create(itemFrame,
+					TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+					{BackgroundColor3 = Color3.fromRGB(45, 45, 45)}
+				)
+				hoverTween:Play()
 			end)
+
+			itemFrame.MouseLeave:Connect(function()
+				local leaveTween = TweenService:Create(itemFrame,
+					TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+					{BackgroundColor3 = Color3.fromRGB(35, 35, 35)}
+				)
+				leaveTween:Play()
+			end)
+
+			currentY = currentY + 0.08
+		end
+	end
+
+	return currentY
+end
+
+-- REPLACE the old PopulateFarmContent function with this:
+function UIManager:PopulateFarmContent(farmFrame)
+	-- This function is now replaced by PopulateFarmInventory
+	-- Remove any existing content
+	for _, child in pairs(farmFrame:GetChildren()) do
+		if child.Name ~= "UICorner" then
+			child:Destroy()
+		end
+	end
+
+	-- Call the new inventory system
+	self:PopulateFarmInventory(farmFrame)
+end
+
+function UIManager:RefreshMenuContent(menuName)
+	if self.State.CurrentPage ~= menuName then return end
+
+	print("UIManager: Refreshing content for " .. menuName)
+
+	if menuName == "Shop" then
+		-- Refresh current shop tab
+		local activeTab = self.State.ShopTabs[self.State.ActiveShopTab]
+		if activeTab then
+			activeTab.populated = false
+			self:PopulateShopTabContent(self.State.ActiveShopTab)
+		end
+	elseif menuName == "Farm" then
+		-- Refresh farm inventory
+		self:RefreshFarmContent()
+	else
+		-- For other menus, close and reopen
+		local currentMenus = self.State.ActiveMenus
+		self:CloseActiveMenus()
+
+		spawn(function()
+			wait(0.1)
+			self:OpenMenu(menuName)
+		end)
+	end
+end
+
+function UIManager:RefreshFarmContent()
+	if self.State.CurrentPage ~= "Farm" then return end
+
+	print("UIManager: Refreshing farm inventory content")
+
+	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
+	local inventoryFrame = menuFrame:FindFirstChild("InventoryFrame")
+
+	if inventoryFrame then
+		-- Clear existing inventory content but keep the frame structure
+		local scrollFrame = inventoryFrame:FindFirstChild("InventoryScroll")
+		if scrollFrame then
+			for _, child in pairs(scrollFrame:GetChildren()) do
+				if not child:IsA("UICorner") and not child:IsA("UIListLayout") then
+					child:Destroy()
+				end
+			end
+
+			-- Repopulate the inventory
+			self:PopulateFarmInventory(inventoryFrame)
 		end
 	end
 end
 
-function UIManager:GetGridSizeForLevel(level)
-	local sizes = {[1] = "3x3", [2] = "5x5", [3] = "7x7", [4] = "9x9", [5] = "11x11"}
-	return sizes[level] or "Unknown"
+function UIManager:GetItemIcon(itemName)
+	-- Map item names to icons
+	local iconMap = {
+		-- Seeds
+		carrot_seeds = "🥕",
+		carrotSeeds = "🥕",
+		tomato_seeds = "🍅", 
+		tomatoSeeds = "🍅",
+		corn_seeds = "🌽",
+		cornSeeds = "🌽",
+		wheat_seeds = "🌾",
+		wheatSeeds = "🌾",
+		potato_seeds = "🥔",
+		potatoSeeds = "🥔",
+		lettuce_seeds = "🥬",
+		lettuceSeeds = "🥬",
+
+		-- Crops (same as seeds but harvested)
+		carrot = "🥕",
+		tomato = "🍅",
+		corn = "🌽", 
+		wheat = "🌾",
+		potato = "🥔",
+		lettuce = "🥬",
+
+		-- Dairy
+		milk = "🥛",
+
+		-- Default
+		default = "📦"
+	}
+
+	return iconMap[itemName] or iconMap.default
 end
 
-function UIManager:GetTotalSpotsForLevel(level)
-	local spots = {[1] = 9, [2] = 25, [3] = 49, [4] = 81, [5] = 121}
-	return spots[level] or 0
+function UIManager:FormatItemName(itemName)
+	-- Convert item names to display format
+	local displayName = itemName:gsub("_", " "):gsub("(%l)(%w*)", function(a,b) return a:upper()..b end)
+
+	-- Special cases
+	if itemName:find("_seeds") or itemName:find("Seeds") then
+		displayName = displayName:gsub(" Seeds", "") .. " Seeds"
+	end
+
+	return displayName
 end
+
+
 
 function UIManager:PopulateShopTabContent(tabId)
 	print("UIManager: Populating content for tab: " .. tabId)
@@ -1261,29 +1520,6 @@ function UIManager:CreateEnhancedShopItemFrame(item, index, categoryColor)
 	end)
 
 	return itemFrame
-end
-
-function UIManager:RefreshMenuContent(menuName)
-	if self.State.CurrentPage ~= menuName then return end
-
-	print("UIManager: Refreshing content for " .. menuName)
-
-	if menuName == "Shop" then
-		-- Refresh current shop tab
-		local activeTab = self.State.ShopTabs[self.State.ActiveShopTab]
-		if activeTab then
-			activeTab.populated = false
-			self:PopulateShopTabContent(self.State.ActiveShopTab)
-		end
-	else
-		local currentMenus = self.State.ActiveMenus
-		self:CloseActiveMenus()
-
-		spawn(function()
-			wait(0.1)
-			self:OpenMenu(menuName)
-		end)
-	end
 end
 
 function UIManager:CreateSellItemFrame(item, index)

@@ -1314,7 +1314,7 @@ end
 
 function MiningSystem:TeleportPlayerToSurface(player)
 	if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-		local spawnPosition = Vector3.new(0, 10, 0)
+		local spawnPosition = Vector3.new(-306.555, -3.943, 109.844)
 
 		if GameCore and GameCore.GetFarmPlotPosition then
 			local success, farmPosition = pcall(function()
