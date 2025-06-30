@@ -1,13 +1,12 @@
 --[[
-    UPDATED UIManager.lua - Responsive Top Menu Design
+    COMPLETE UPDATED UIManager.lua - Uniform Shop Item Sizing
     Place in: ReplicatedStorage/UIManager.lua
     
-    NEW FEATURES:
-    ✅ Scale-based sizing for all devices
-    ✅ Top horizontal menu bar (replaces left-side buttons)
-    ✅ Responsive design for mobile/tablet/desktop
-    ✅ Cleaner main screen layout
-    ✅ Adaptive scaling system
+    UPDATED FEATURES:
+    ✅ Uniform item sizing across ALL shop tabs
+    ✅ Consistent 20% height for all shop items
+    ✅ Standardized internal layouts and positioning
+    ✅ Professional appearance matching crafting/premium menus
 ]]
 
 local UIManager = {}
@@ -66,7 +65,37 @@ UIManager.Config = {
 	}
 }
 
-print("UIManager: Responsive module loaded with top menu design")
+-- ========== UNIFORM SHOP ITEM CONFIGURATION ==========
+UIManager.ItemConfig = {
+	-- Uniform sizing for all shop items
+	ItemFrameSize = UDim2.new(0.96, 0, 0.2, 0), -- Consistent height for all items
+	ItemSpacing = 0.02, -- Consistent spacing between items
+	YIncrement = 0.22, -- ItemFrameSize.Y.Scale + ItemSpacing
+
+	-- Standard layout positions within each item frame
+	CategoryIndicatorSize = UDim2.new(0.01, 0, 1, 0),
+	CategoryIndicatorPosition = UDim2.new(0, 0, 0, 0),
+
+	BadgeSize = UDim2.new(0.08, 0, 0.25, 0),
+	BadgePosition = UDim2.new(0.02, 0, 0.05, 0),
+
+	IconSize = UDim2.new(0.12, 0, 0.5, 0),
+	IconPosition = UDim2.new(0.05, 0, 0.25, 0),
+
+	NameSize = UDim2.new(0.35, 0, 0.3, 0),
+	NamePosition = UDim2.new(0.19, 0, 0.1, 0),
+
+	PriceSize = UDim2.new(0.22, 0, 0.3, 0),
+	PricePosition = UDim2.new(0.55, 0, 0.1, 0),
+
+	DescriptionSize = UDim2.new(0.35, 0, 0.35, 0),
+	DescriptionPosition = UDim2.new(0.19, 0, 0.45, 0),
+
+	ButtonSize = UDim2.new(0.18, 0, 0.3, 0),
+	ButtonPosition = UDim2.new(0.79, 0, 0.45, 0)
+}
+
+print("UIManager: Responsive module loaded with uniform shop item sizing")
 
 -- ========== DEVICE DETECTION ==========
 
@@ -731,10 +760,286 @@ function UIManager:CreateNotificationArea(parent)
 	print("UIManager: Responsive notification area created")
 end
 
--- ========== TABBED SHOP MENU (Updated for Scale) ==========
+-- ========== UNIFORM SHOP ITEM CREATION ==========
+
+function UIManager:CreateStandardShopItemFrame(item, index, categoryColor, itemType)
+	itemType = itemType or "buy" -- "buy" or "sell"
+
+	local itemFrame = Instance.new("Frame")
+	itemFrame.Name = (itemType == "sell" and "SellItem_" or "ShopItem_") .. index
+	itemFrame.Size = self.ItemConfig.ItemFrameSize
+	itemFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+	itemFrame.BorderSizePixel = 0
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.05, 0)
+	corner.Parent = itemFrame
+
+	-- Category color indicator (consistent for all items)
+	local indicator = Instance.new("Frame")
+	indicator.Name = "CategoryIndicator"
+	indicator.Size = self.ItemConfig.CategoryIndicatorSize
+	indicator.Position = self.ItemConfig.CategoryIndicatorPosition
+	indicator.BackgroundColor3 = categoryColor
+	indicator.BorderSizePixel = 0
+	indicator.Parent = itemFrame
+
+	local indicatorCorner = Instance.new("UICorner")
+	indicatorCorner.CornerRadius = UDim.new(0.05, 0)
+	indicatorCorner.Parent = indicator
+
+	-- Badge (order for buy items, stock for sell items)
+	self:CreateItemBadge(itemFrame, item, itemType)
+
+	-- Item icon (consistent positioning)
+	local iconLabel = Instance.new("TextLabel")
+	iconLabel.Name = "ItemIcon"
+	iconLabel.Size = self.ItemConfig.IconSize
+	iconLabel.Position = self.ItemConfig.IconPosition
+	iconLabel.BackgroundTransparency = 1
+	iconLabel.Text = item.icon or "📦"
+	iconLabel.TextColor3 = Color3.new(1, 1, 1)
+	iconLabel.TextScaled = true
+	iconLabel.Font = Enum.Font.Gotham
+	iconLabel.Parent = itemFrame
+
+	-- Item name (consistent positioning and sizing)
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "ItemName"
+	nameLabel.Size = self.ItemConfig.NameSize
+	nameLabel.Position = self.ItemConfig.NamePosition
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = item.name or item.id
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.TextScaled = true
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = itemFrame
+
+	-- Price/value information (consistent positioning)
+	self:CreateItemPriceInfo(itemFrame, item, itemType)
+
+	-- Description (consistent positioning and sizing)
+	local descLabel = Instance.new("TextLabel")
+	descLabel.Name = "ItemDescription"
+	descLabel.Size = self.ItemConfig.DescriptionSize
+	descLabel.Position = self.ItemConfig.DescriptionPosition
+	descLabel.BackgroundTransparency = 1
+	descLabel.Text = self:GetItemDescription(item, itemType)
+	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+	descLabel.TextScaled = true
+	descLabel.Font = Enum.Font.Gotham
+	descLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descLabel.TextYAlignment = Enum.TextYAlignment.Top
+	descLabel.TextWrapped = true
+	descLabel.Parent = itemFrame
+
+	-- Action buttons (consistent positioning and sizing)
+	self:CreateItemButtons(itemFrame, item, itemType)
+
+	-- Hover effects (consistent for all items)
+	self:AddItemFrameHoverEffects(itemFrame)
+
+	return itemFrame
+end
+
+function UIManager:CreateItemBadge(itemFrame, item, itemType)
+	local badge = Instance.new("Frame")
+	badge.Name = itemType == "sell" and "StockBadge" or "OrderBadge"
+	badge.Size = self.ItemConfig.BadgeSize
+	badge.Position = self.ItemConfig.BadgePosition
+	badge.BorderSizePixel = 0
+	badge.Parent = itemFrame
+
+	local badgeCorner = Instance.new("UICorner")
+	badgeCorner.CornerRadius = UDim.new(0.3, 0)
+	badgeCorner.Parent = badge
+
+	local badgeLabel = Instance.new("TextLabel")
+	badgeLabel.Size = UDim2.new(1, 0, 1, 0)
+	badgeLabel.BackgroundTransparency = 1
+	badgeLabel.TextColor3 = Color3.new(1, 1, 1)
+	badgeLabel.TextScaled = true
+	badgeLabel.Font = Enum.Font.GothamBold
+	badgeLabel.Parent = badge
+
+	if itemType == "sell" then
+		-- Stock badge for sell items
+		badge.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+		badgeLabel.Text = tostring(item.stock or 0)
+	else
+		-- Order badge for buy items (only show if purchaseOrder exists and is reasonable)
+		if item.purchaseOrder and item.purchaseOrder <= 20 then
+			badge.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+			badgeLabel.Text = tostring(item.purchaseOrder)
+		else
+			badge.Visible = false
+		end
+	end
+end
+
+function UIManager:CreateItemPriceInfo(itemFrame, item, itemType)
+	if itemType == "sell" then
+		-- For sell items: show price per item and total value
+		local priceLabel = Instance.new("TextLabel")
+		priceLabel.Name = "PricePerItem"
+		priceLabel.Size = UDim2.new(0.22, 0, 0.15, 0)
+		priceLabel.Position = UDim2.new(0.55, 0, 0.1, 0)
+		priceLabel.BackgroundTransparency = 1
+		priceLabel.Text = (item.sellPrice or 0) .. " 💰 each"
+		priceLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+		priceLabel.TextScaled = true
+		priceLabel.Font = Enum.Font.Gotham
+		priceLabel.TextXAlignment = Enum.TextXAlignment.Right
+		priceLabel.Parent = itemFrame
+
+		local totalLabel = Instance.new("TextLabel")
+		totalLabel.Name = "TotalValue"
+		totalLabel.Size = UDim2.new(0.22, 0, 0.15, 0)
+		totalLabel.Position = UDim2.new(0.55, 0, 0.25, 0)
+		totalLabel.BackgroundTransparency = 1
+		totalLabel.Text = "Total: " .. (item.totalValue or 0) .. " 💰"
+		totalLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+		totalLabel.TextScaled = true
+		totalLabel.Font = Enum.Font.GothamBold
+		totalLabel.TextXAlignment = Enum.TextXAlignment.Right
+		totalLabel.Parent = itemFrame
+	else
+		-- For buy items: show purchase price
+		local priceLabel = Instance.new("TextLabel")
+		priceLabel.Name = "PurchasePrice"
+		priceLabel.Size = self.ItemConfig.PriceSize
+		priceLabel.Position = self.ItemConfig.PricePosition
+		priceLabel.BackgroundTransparency = 1
+		priceLabel.Text = (item.price or 0) .. " " .. (item.currency == "farmTokens" and "🎫" or "💰")
+		priceLabel.TextColor3 = item.currency == "farmTokens" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 215, 0)
+		priceLabel.TextScaled = true
+		priceLabel.Font = Enum.Font.Gotham
+		priceLabel.TextXAlignment = Enum.TextXAlignment.Right
+		priceLabel.Parent = itemFrame
+	end
+end
+
+function UIManager:GetItemDescription(item, itemType)
+	if itemType == "sell" then
+		return item.description or ("You have " .. (item.stock or 0) .. " in stock")
+	else
+		local desc = item.description or "No description"
+		return desc:len() > 80 and (desc:sub(1, 80) .. "...") or desc
+	end
+end
+
+function UIManager:CreateItemButtons(itemFrame, item, itemType)
+	if itemType == "sell" then
+		-- Create sell buttons container
+		local buttonContainer = Instance.new("Frame")
+		buttonContainer.Name = "SellButtonContainer"
+		buttonContainer.Size = self.ItemConfig.ButtonSize
+		buttonContainer.Position = self.ItemConfig.ButtonPosition
+		buttonContainer.BackgroundTransparency = 1
+		buttonContainer.Parent = itemFrame
+
+		-- Sell 1 button
+		local sell1Button = Instance.new("TextButton")
+		sell1Button.Name = "Sell1Button"
+		sell1Button.Size = UDim2.new(1, 0, 0.45, 0)
+		sell1Button.Position = UDim2.new(0, 0, 0, 0)
+		sell1Button.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+		sell1Button.BorderSizePixel = 0
+		sell1Button.Text = "SELL 1"
+		sell1Button.TextColor3 = Color3.new(1, 1, 1)
+		sell1Button.TextScaled = true
+		sell1Button.Font = Enum.Font.GothamBold
+		sell1Button.Parent = buttonContainer
+
+		local sell1Corner = Instance.new("UICorner")
+		sell1Corner.CornerRadius = UDim.new(0.1, 0)
+		sell1Corner.Parent = sell1Button
+
+		-- Sell All button
+		local sellAllButton = Instance.new("TextButton")
+		sellAllButton.Name = "SellAllButton"
+		sellAllButton.Size = UDim2.new(1, 0, 0.45, 0)
+		sellAllButton.Position = UDim2.new(0, 0, 0.55, 0)
+		sellAllButton.BackgroundColor3 = Color3.fromRGB(200, 120, 0)
+		sellAllButton.BorderSizePixel = 0
+		sellAllButton.Text = "SELL ALL"
+		sellAllButton.TextColor3 = Color3.new(1, 1, 1)
+		sellAllButton.TextScaled = true
+		sellAllButton.Font = Enum.Font.GothamBold
+		sellAllButton.Parent = buttonContainer
+
+		local sellAllCorner = Instance.new("UICorner")
+		sellAllCorner.CornerRadius = UDim.new(0.1, 0)
+		sellAllCorner.Parent = sellAllButton
+
+		-- Sell button functionality
+		sell1Button.MouseButton1Click:Connect(function()
+			if self.State.GameClient and self.State.GameClient.SellItem then
+				self.State.GameClient:SellItem(item.id, 1)
+			else
+				self:ShowNotification("Sell Error", "Sell system not available!", "error")
+			end
+		end)
+
+		sellAllButton.MouseButton1Click:Connect(function()
+			if self.State.GameClient and self.State.GameClient.SellItem then
+				self.State.GameClient:SellItem(item.id, item.stock)
+			else
+				self:ShowNotification("Sell Error", "Sell system not available!", "error")
+			end
+		end)
+	else
+		-- Single buy button
+		local buyButton = Instance.new("TextButton")
+		buyButton.Name = "BuyButton"
+		buyButton.Size = self.ItemConfig.ButtonSize
+		buyButton.Position = self.ItemConfig.ButtonPosition
+		buyButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+		buyButton.BorderSizePixel = 0
+		buyButton.Text = "BUY"
+		buyButton.TextColor3 = Color3.new(1, 1, 1)
+		buyButton.TextScaled = true
+		buyButton.Font = Enum.Font.GothamBold
+		buyButton.Parent = itemFrame
+
+		local buyCorner = Instance.new("UICorner")
+		buyCorner.CornerRadius = UDim.new(0.1, 0)
+		buyCorner.Parent = buyButton
+
+		-- Buy button functionality
+		buyButton.MouseButton1Click:Connect(function()
+			if self.State.GameClient and self.State.GameClient.PurchaseItem then
+				self.State.GameClient:PurchaseItem(item)
+			else
+				self:ShowNotification("Shop Error", "Purchase system not available!", "error")
+			end
+		end)
+	end
+end
+
+function UIManager:AddItemFrameHoverEffects(itemFrame)
+	itemFrame.MouseEnter:Connect(function()
+		local hoverTween = TweenService:Create(itemFrame,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+			{BackgroundColor3 = Color3.fromRGB(70, 70, 70)}
+		)
+		hoverTween:Play()
+	end)
+
+	itemFrame.MouseLeave:Connect(function()
+		local leaveTween = TweenService:Create(itemFrame,
+			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
+			{BackgroundColor3 = Color3.fromRGB(60, 60, 60)}
+		)
+		leaveTween:Play()
+	end)
+end
+
+-- ========== TABBED SHOP MENU (Updated for Uniform Sizing) ==========
 
 function UIManager:CreateTabbedShopMenu()
-	print("UIManager: Creating responsive tabbed shop menu")
+	print("UIManager: Creating responsive tabbed shop menu with uniform item sizing")
 
 	local menuFrame = self.State.MainUI.MenuContainer.MenuFrame
 
@@ -756,7 +1061,7 @@ function UIManager:CreateTabbedShopMenu()
 	accessNote.Size = UDim2.new(0.95, 0, 0.05, 0)
 	accessNote.Position = UDim2.new(0.025, 0, 0.12, 0)
 	accessNote.BackgroundTransparency = 1
-	accessNote.Text = "👣 Organized by category • Logical purchase progression"
+	accessNote.Text = "👣 Organized by category • Uniform item presentation"
 	accessNote.TextColor3 = Color3.fromRGB(200, 200, 200)
 	accessNote.TextScaled = true
 	accessNote.Font = Enum.Font.Gotham
@@ -797,7 +1102,6 @@ function UIManager:CreateTabbedShopMenu()
 	return true
 end
 
--- [Continue with remaining shop functions - keeping them scale-based...]
 function UIManager:CreateShopTabs(tabContainer, contentContainer)
 	print("UIManager: Creating responsive shop tabs")
 
@@ -874,7 +1178,203 @@ function UIManager:CreateShopTabs(tabContainer, contentContainer)
 	end
 end
 
--- [Continue with rest of the functions, keeping them the same but updating any sizing to scale-based...]
+function UIManager:PopulateShopTabContent(tabId)
+	print("UIManager: Populating content for tab: " .. tabId .. " with uniform sizing")
+
+	local tab = self.State.ShopTabs[tabId]
+	if not tab then return end
+
+	local contentFrame = tab.content
+
+	-- Clear existing content
+	for _, child in pairs(contentFrame:GetChildren()) do
+		if not child:IsA("UICorner") then
+			child:Destroy()
+		end
+	end
+
+	if not self.State.GameClient then
+		local loadingLabel = Instance.new("TextLabel")
+		loadingLabel.Size = UDim2.new(1, 0, 1, 0)
+		loadingLabel.BackgroundTransparency = 1
+		loadingLabel.Text = "Loading " .. tab.config.name .. " items..."
+		loadingLabel.TextColor3 = Color3.new(1, 1, 1)
+		loadingLabel.TextScaled = true
+		loadingLabel.Font = Enum.Font.Gotham
+		loadingLabel.Parent = contentFrame
+		return
+	end
+
+	-- Handle sell tab differently
+	if tabId == "sell" then
+		self:PopulateUniformSellTabContent(contentFrame, tab.config.color)
+		return
+	end
+
+	-- Regular shop items
+	local success, shopItems = pcall(function()
+		if self.State.GameClient.GetShopItems then
+			return self.State.GameClient:GetShopItems()
+		end
+		return {}
+	end)
+
+	if not success or not shopItems or #shopItems == 0 then
+		local noItemsLabel = Instance.new("TextLabel")
+		noItemsLabel.Size = UDim2.new(1, 0, 1, 0)
+		noItemsLabel.BackgroundTransparency = 1
+		noItemsLabel.Text = "No " .. tab.config.name .. " items available"
+		noItemsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		noItemsLabel.TextScaled = true
+		noItemsLabel.Font = Enum.Font.Gotham
+		noItemsLabel.Parent = contentFrame
+		return
+	end
+
+	-- Filter items by category
+	local categoryItems = {}
+	for _, item in ipairs(shopItems) do
+		if item.category == tabId then
+			table.insert(categoryItems, item)
+		end
+	end
+
+	-- Sort by purchase order
+	table.sort(categoryItems, function(a, b)
+		local orderA = a.purchaseOrder or 999
+		local orderB = b.purchaseOrder or 999
+
+		if orderA == orderB then
+			return a.price < b.price
+		end
+
+		return orderA < orderB
+	end)
+
+	if #categoryItems == 0 then
+		local emptyLabel = Instance.new("TextLabel")
+		emptyLabel.Size = UDim2.new(1, 0, 1, 0)
+		emptyLabel.BackgroundTransparency = 1
+		emptyLabel.Text = "No items in " .. tab.config.name .. " category"
+		emptyLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		emptyLabel.TextScaled = true
+		emptyLabel.Font = Enum.Font.Gotham
+		emptyLabel.Parent = contentFrame
+		return
+	end
+
+	-- Create items with uniform sizing
+	local yPosition = 0.02
+
+	for i, item in ipairs(categoryItems) do
+		local itemFrame = self:CreateStandardShopItemFrame(item, i, tab.config.color, "buy")
+		itemFrame.Position = UDim2.new(0.02, 0, yPosition, 0)
+		itemFrame.Parent = contentFrame
+		yPosition = yPosition + self.ItemConfig.YIncrement
+	end
+
+	-- Update canvas size with padding
+	contentFrame.CanvasSize = UDim2.new(0, 0, yPosition + 0.05, 0)
+
+	print("UIManager: Populated " .. #categoryItems .. " items in " .. tabId .. " tab with uniform sizing")
+end
+
+function UIManager:PopulateUniformSellTabContent(contentFrame, categoryColor)
+	print("UIManager: Populating sell tab content with uniform sizing")
+
+	-- Get sellable items from GameClient
+	local success, sellableItems = pcall(function()
+		if self.State.GameClient.GetSellableItems then
+			return self.State.GameClient:GetSellableItems()
+		end
+		return {}
+	end)
+
+	if not success or not sellableItems or #sellableItems == 0 then
+		local noItemsLabel = Instance.new("TextLabel")
+		noItemsLabel.Size = UDim2.new(1, 0, 1, 0)
+		noItemsLabel.BackgroundTransparency = 1
+		noItemsLabel.Text = "💰 No items to sell!\n\nGrow crops or collect milk to have items to sell."
+		noItemsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+		noItemsLabel.TextScaled = true
+		noItemsLabel.Font = Enum.Font.Gotham
+		noItemsLabel.Parent = contentFrame
+		return
+	end
+
+	-- Create sell items with uniform sizing
+	local yPosition = 0.02
+
+	for i, item in ipairs(sellableItems) do
+		local itemFrame = self:CreateStandardShopItemFrame(item, i, categoryColor, "sell")
+		itemFrame.Position = UDim2.new(0.02, 0, yPosition, 0)
+		itemFrame.Parent = contentFrame
+		yPosition = yPosition + self.ItemConfig.YIncrement
+	end
+
+	-- Update canvas size with padding
+	contentFrame.CanvasSize = UDim2.new(0, 0, yPosition + 0.05, 0)
+
+	print("UIManager: Populated " .. #sellableItems .. " sellable items with uniform sizing")
+end
+
+function UIManager:ShowShopTab(tabId)
+	print("UIManager: Switching to shop tab: " .. tabId)
+
+	if not self.State.ShopTabs[tabId] then
+		warn("UIManager: Tab not found: " .. tabId)
+		return
+	end
+
+	-- Update active tab
+	local previousTab = self.State.ActiveShopTab
+	self.State.ActiveShopTab = tabId
+
+	-- Update tab appearances
+	for id, tab in pairs(self.State.ShopTabs) do
+		local isActive = (id == tabId)
+
+		-- Hide/show content
+		tab.content.Visible = isActive
+
+		-- Update button appearance
+		local targetColor = isActive and self:LightenColor(tab.config.color, 0.3) or tab.config.color
+		local buttonTween = TweenService:Create(tab.button,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad),
+			{BackgroundColor3 = targetColor}
+		)
+		buttonTween:Play()
+
+		-- Add selection indicator for active tab
+		if isActive then
+			local indicator = tab.button:FindFirstChild("ActiveIndicator")
+			if not indicator then
+				indicator = Instance.new("Frame")
+				indicator.Name = "ActiveIndicator"
+				indicator.Size = UDim2.new(1, 0, 0.1, 0)
+				indicator.Position = UDim2.new(0, 0, 0.9, 0)
+				indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+				indicator.BorderSizePixel = 0
+				indicator.Parent = tab.button
+
+				local indicatorCorner = Instance.new("UICorner")
+				indicatorCorner.CornerRadius = UDim.new(0.5, 0)
+				indicatorCorner.Parent = indicator
+			end
+		else
+			local indicator = tab.button:FindFirstChild("ActiveIndicator")
+			if indicator then
+				indicator:Destroy()
+			end
+		end
+	end
+
+	-- Populate tab content if not already done
+	if not self.State.ShopTabs[tabId].populated then
+		self:PopulateShopTabContent(tabId)
+		self.State.ShopTabs[tabId].populated = true
+	end
+end
 
 -- ========== OTHER MENU FUNCTIONS (Responsive) ==========
 
@@ -1123,18 +1623,51 @@ function UIManager:CreateInventoryCategory(parentFrame, categoryTitle, startY, i
 	return currentY
 end
 
--- REPLACE the old PopulateFarmContent function with this:
-function UIManager:PopulateFarmContent(farmFrame)
-	-- This function is now replaced by PopulateFarmInventory
-	-- Remove any existing content
-	for _, child in pairs(farmFrame:GetChildren()) do
-		if child.Name ~= "UICorner" then
-			child:Destroy()
-		end
+function UIManager:GetItemIcon(itemName)
+	-- Map item names to icons
+	local iconMap = {
+		-- Seeds
+		carrot_seeds = "🥕",
+		carrotSeeds = "🥕",
+		tomato_seeds = "🍅", 
+		tomatoSeeds = "🍅",
+		corn_seeds = "🌽",
+		cornSeeds = "🌽",
+		wheat_seeds = "🌾",
+		wheatSeeds = "🌾",
+		potato_seeds = "🥔",
+		potatoSeeds = "🥔",
+		lettuce_seeds = "🥬",
+		lettuceSeeds = "🥬",
+
+		-- Crops (same as seeds but harvested)
+		carrot = "🥕",
+		tomato = "🍅",
+		corn = "🌽", 
+		wheat = "🌾",
+		potato = "🥔",
+		lettuce = "🥬",
+
+		-- Dairy
+		milk = "🥛",
+
+		-- Default
+		default = "📦"
+	}
+
+	return iconMap[itemName] or iconMap.default
+end
+
+function UIManager:FormatItemName(itemName)
+	-- Convert item names to display format
+	local displayName = itemName:gsub("_", " "):gsub("(%l)(%w*)", function(a,b) return a:upper()..b end)
+
+	-- Special cases
+	if itemName:find("_seeds") or itemName:find("Seeds") then
+		displayName = displayName:gsub(" Seeds", "") .. " Seeds"
 	end
 
-	-- Call the new inventory system
-	self:PopulateFarmInventory(farmFrame)
+	return displayName
 end
 
 function UIManager:RefreshMenuContent(menuName)
@@ -1186,524 +1719,6 @@ function UIManager:RefreshFarmContent()
 			self:PopulateFarmInventory(inventoryFrame)
 		end
 	end
-end
-
-function UIManager:GetItemIcon(itemName)
-	-- Map item names to icons
-	local iconMap = {
-		-- Seeds
-		carrot_seeds = "🥕",
-		carrotSeeds = "🥕",
-		tomato_seeds = "🍅", 
-		tomatoSeeds = "🍅",
-		corn_seeds = "🌽",
-		cornSeeds = "🌽",
-		wheat_seeds = "🌾",
-		wheatSeeds = "🌾",
-		potato_seeds = "🥔",
-		potatoSeeds = "🥔",
-		lettuce_seeds = "🥬",
-		lettuceSeeds = "🥬",
-
-		-- Crops (same as seeds but harvested)
-		carrot = "🥕",
-		tomato = "🍅",
-		corn = "🌽", 
-		wheat = "🌾",
-		potato = "🥔",
-		lettuce = "🥬",
-
-		-- Dairy
-		milk = "🥛",
-
-		-- Default
-		default = "📦"
-	}
-
-	return iconMap[itemName] or iconMap.default
-end
-
-function UIManager:FormatItemName(itemName)
-	-- Convert item names to display format
-	local displayName = itemName:gsub("_", " "):gsub("(%l)(%w*)", function(a,b) return a:upper()..b end)
-
-	-- Special cases
-	if itemName:find("_seeds") or itemName:find("Seeds") then
-		displayName = displayName:gsub(" Seeds", "") .. " Seeds"
-	end
-
-	return displayName
-end
-
-
-
-function UIManager:PopulateShopTabContent(tabId)
-	print("UIManager: Populating content for tab: " .. tabId)
-
-	local tab = self.State.ShopTabs[tabId]
-	if not tab then return end
-
-	local contentFrame = tab.content
-
-	-- Clear existing content
-	for _, child in pairs(contentFrame:GetChildren()) do
-		if not child:IsA("UICorner") then
-			child:Destroy()
-		end
-	end
-
-	if not self.State.GameClient then
-		local loadingLabel = Instance.new("TextLabel")
-		loadingLabel.Size = UDim2.new(1, 0, 1, 0)
-		loadingLabel.BackgroundTransparency = 1
-		loadingLabel.Text = "Loading " .. tab.config.name .. " items..."
-		loadingLabel.TextColor3 = Color3.new(1, 1, 1)
-		loadingLabel.TextScaled = true
-		loadingLabel.Font = Enum.Font.Gotham
-		loadingLabel.Parent = contentFrame
-		return
-	end
-
-	-- Handle sell tab differently
-	if tabId == "sell" then
-		self:PopulateSellTabContent(contentFrame)
-		return
-	end
-
-	-- Regular shop items
-	local success, shopItems = pcall(function()
-		if self.State.GameClient.GetShopItems then
-			return self.State.GameClient:GetShopItems()
-		end
-		return {}
-	end)
-
-	if not success or not shopItems or #shopItems == 0 then
-		local noItemsLabel = Instance.new("TextLabel")
-		noItemsLabel.Size = UDim2.new(1, 0, 1, 0)
-		noItemsLabel.BackgroundTransparency = 1
-		noItemsLabel.Text = "No " .. tab.config.name .. " items available"
-		noItemsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-		noItemsLabel.TextScaled = true
-		noItemsLabel.Font = Enum.Font.Gotham
-		noItemsLabel.Parent = contentFrame
-		return
-	end
-
-	-- Filter items by category
-	local categoryItems = {}
-	for _, item in ipairs(shopItems) do
-		if item.category == tabId then
-			table.insert(categoryItems, item)
-		end
-	end
-
-	-- Sort by purchase order
-	table.sort(categoryItems, function(a, b)
-		local orderA = a.purchaseOrder or 999
-		local orderB = b.purchaseOrder or 999
-
-		if orderA == orderB then
-			return a.price < b.price
-		end
-
-		return orderA < orderB
-	end)
-
-	if #categoryItems == 0 then
-		local emptyLabel = Instance.new("TextLabel")
-		emptyLabel.Size = UDim2.new(1, 0, 1, 0)
-		emptyLabel.BackgroundTransparency = 1
-		emptyLabel.Text = "No items in " .. tab.config.name .. " category"
-		emptyLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-		emptyLabel.TextScaled = true
-		emptyLabel.Font = Enum.Font.Gotham
-		emptyLabel.Parent = contentFrame
-		return
-	end
-
-	-- Create items with enhanced layout
-	local yPosition = 0.02
-	local itemSpacing = 0.02
-
-	for i, item in ipairs(categoryItems) do
-		local itemFrame = self:CreateEnhancedShopItemFrame(item, i, tab.config.color)
-		itemFrame.Position = UDim2.new(0.02, 0, yPosition, 0)
-		itemFrame.Parent = contentFrame
-		yPosition = yPosition + 0.25 + itemSpacing
-	end
-
-	-- Update canvas size with padding
-	contentFrame.CanvasSize = UDim2.new(0, 0, yPosition + 0.05, 0)
-
-	print("UIManager: Populated " .. #categoryItems .. " items in " .. tabId .. " tab")
-end
-
-function UIManager:PopulateSellTabContent(contentFrame)
-	print("UIManager: Populating sell tab content")
-
-	-- Get sellable items from GameClient
-	local success, sellableItems = pcall(function()
-		if self.State.GameClient.GetSellableItems then
-			return self.State.GameClient:GetSellableItems()
-		end
-		return {}
-	end)
-
-	if not success or not sellableItems or #sellableItems == 0 then
-		local noItemsLabel = Instance.new("TextLabel")
-		noItemsLabel.Size = UDim2.new(1, 0, 1, 0)
-		noItemsLabel.BackgroundTransparency = 1
-		noItemsLabel.Text = "💰 No items to sell!\n\nGrow crops or collect milk to have items to sell."
-		noItemsLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-		noItemsLabel.TextScaled = true
-		noItemsLabel.Font = Enum.Font.Gotham
-		noItemsLabel.Parent = contentFrame
-		return
-	end
-
-	-- Create sell items
-	local yPosition = 0.02
-	local itemSpacing = 0.02
-
-	for i, item in ipairs(sellableItems) do
-		local itemFrame = self:CreateSellItemFrame(item, i)
-		itemFrame.Position = UDim2.new(0.02, 0, yPosition, 0)
-		itemFrame.Parent = contentFrame
-		yPosition = yPosition + 0.25 + itemSpacing
-	end
-
-	-- Update canvas size with padding
-	contentFrame.CanvasSize = UDim2.new(0, 0, yPosition + 0.05, 0)
-
-	print("UIManager: Populated " .. #sellableItems .. " sellable items")
-end
-
-function UIManager:CreateEnhancedShopItemFrame(item, index, categoryColor)
-	local itemFrame = Instance.new("Frame")
-	itemFrame.Name = "ShopItem_" .. index
-	itemFrame.Size = UDim2.new(0.96, 0, 0.23, 0)
-	itemFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	itemFrame.BorderSizePixel = 0
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.05, 0)
-	corner.Parent = itemFrame
-
-	-- Category color indicator
-	local indicator = Instance.new("Frame")
-	indicator.Name = "CategoryIndicator"
-	indicator.Size = UDim2.new(0.01, 0, 1, 0)
-	indicator.Position = UDim2.new(0, 0, 0, 0)
-	indicator.BackgroundColor3 = categoryColor
-	indicator.BorderSizePixel = 0
-	indicator.Parent = itemFrame
-
-	local indicatorCorner = Instance.new("UICorner")
-	indicatorCorner.CornerRadius = UDim.new(0.05, 0)
-	indicatorCorner.Parent = indicator
-
-	-- Purchase order badge (if exists)
-	if item.purchaseOrder and item.purchaseOrder <= 20 then
-		local orderBadge = Instance.new("Frame")
-		orderBadge.Name = "OrderBadge"
-		orderBadge.Size = UDim2.new(0.08, 0, 0.3, 0)
-		orderBadge.Position = UDim2.new(0.02, 0, 0.05, 0)
-		orderBadge.BackgroundColor3 = categoryColor
-		orderBadge.BorderSizePixel = 0
-		orderBadge.Parent = itemFrame
-
-		local badgeCorner = Instance.new("UICorner")
-		badgeCorner.CornerRadius = UDim.new(0.5, 0)
-		badgeCorner.Parent = orderBadge
-
-		local orderLabel = Instance.new("TextLabel")
-		orderLabel.Size = UDim2.new(1, 0, 1, 0)
-		orderLabel.BackgroundTransparency = 1
-		orderLabel.Text = tostring(item.purchaseOrder)
-		orderLabel.TextColor3 = Color3.new(1, 1, 1)
-		orderLabel.TextScaled = true
-		orderLabel.Font = Enum.Font.GothamBold
-		orderLabel.Parent = orderBadge
-	end
-
-	-- Item icon
-	local iconLabel = Instance.new("TextLabel")
-	iconLabel.Name = "ItemIcon"
-	iconLabel.Size = UDim2.new(0.15, 0, 0.6, 0)
-	iconLabel.Position = UDim2.new(0.05, 0, 0.2, 0)
-	iconLabel.BackgroundTransparency = 1
-	iconLabel.Text = item.icon or "📦"
-	iconLabel.TextColor3 = Color3.new(1, 1, 1)
-	iconLabel.TextScaled = true
-	iconLabel.Font = Enum.Font.Gotham
-	iconLabel.Parent = itemFrame
-
-	-- Item name
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(0.4, 0, 0.4, 0)
-	nameLabel.Position = UDim2.new(0.22, 0, 0.1, 0)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = item.name or item.id
-	nameLabel.TextColor3 = Color3.new(1, 1, 1)
-	nameLabel.TextScaled = true
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Parent = itemFrame
-
-	-- Item price
-	local priceLabel = Instance.new("TextLabel")
-	priceLabel.Size = UDim2.new(0.25, 0, 0.4, 0)
-	priceLabel.Position = UDim2.new(0.72, 0, 0.1, 0)
-	priceLabel.BackgroundTransparency = 1
-	priceLabel.Text = (item.price or 0) .. " " .. (item.currency == "farmTokens" and "🎫" or "💰")
-	priceLabel.TextColor3 = item.currency == "farmTokens" and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 215, 0)
-	priceLabel.TextScaled = true
-	priceLabel.Font = Enum.Font.Gotham
-	priceLabel.TextXAlignment = Enum.TextXAlignment.Right
-	priceLabel.Parent = itemFrame
-
-	-- Item description
-	local descLabel = Instance.new("TextLabel")
-	descLabel.Size = UDim2.new(0.45, 0, 0.45, 0)
-	descLabel.Position = UDim2.new(0.22, 0, 0.5, 0)
-	descLabel.BackgroundTransparency = 1
-	descLabel.Text = item.description and item.description:sub(1, 100) .. (item.description:len() > 100 and "..." or "") or "No description"
-	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	descLabel.TextScaled = true
-	descLabel.Font = Enum.Font.Gotham
-	descLabel.TextXAlignment = Enum.TextXAlignment.Left
-	descLabel.TextYAlignment = Enum.TextYAlignment.Top
-	descLabel.TextWrapped = true
-	descLabel.Parent = itemFrame
-
-	-- Buy button
-	local buyButton = Instance.new("TextButton")
-	buyButton.Size = UDim2.new(0.2, 0, 0.4, 0)
-	buyButton.Position = UDim2.new(0.75, 0, 0.55, 0)
-	buyButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-	buyButton.BorderSizePixel = 0
-	buyButton.Text = "BUY"
-	buyButton.TextColor3 = Color3.new(1, 1, 1)
-	buyButton.TextScaled = true
-	buyButton.Font = Enum.Font.GothamBold
-	buyButton.Parent = itemFrame
-
-	local buyCorner = Instance.new("UICorner")
-	buyCorner.CornerRadius = UDim.new(0.1, 0)
-	buyCorner.Parent = buyButton
-
-	-- Buy button functionality
-	buyButton.MouseButton1Click:Connect(function()
-		if self.State.GameClient and self.State.GameClient.PurchaseItem then
-			self.State.GameClient:PurchaseItem(item)
-		else
-			self:ShowNotification("Shop Error", "Purchase system not available!", "error")
-		end
-	end)
-
-	-- Hover effects
-	itemFrame.MouseEnter:Connect(function()
-		local hoverTween = TweenService:Create(itemFrame,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-			{BackgroundColor3 = Color3.fromRGB(70, 70, 70)}
-		)
-		hoverTween:Play()
-	end)
-
-	itemFrame.MouseLeave:Connect(function()
-		local leaveTween = TweenService:Create(itemFrame,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-			{BackgroundColor3 = Color3.fromRGB(60, 60, 60)}
-		)
-		leaveTween:Play()
-	end)
-
-	return itemFrame
-end
-
-function UIManager:CreateSellItemFrame(item, index)
-	local itemFrame = Instance.new("Frame")
-	itemFrame.Name = "SellItem_" .. index
-	itemFrame.Size = UDim2.new(0.96, 0, 0.23, 0)
-	itemFrame.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	itemFrame.BorderSizePixel = 0
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.05, 0)
-	corner.Parent = itemFrame
-
-	-- Sell category indicator (orange)
-	local indicator = Instance.new("Frame")
-	indicator.Name = "CategoryIndicator"
-	indicator.Size = UDim2.new(0.01, 0, 1, 0)
-	indicator.Position = UDim2.new(0, 0, 0, 0)
-	indicator.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
-	indicator.BorderSizePixel = 0
-	indicator.Parent = itemFrame
-
-	local indicatorCorner = Instance.new("UICorner")
-	indicatorCorner.CornerRadius = UDim.new(0.05, 0)
-	indicatorCorner.Parent = indicator
-
-	-- Stock badge
-	local stockBadge = Instance.new("Frame")
-	stockBadge.Name = "StockBadge"
-	stockBadge.Size = UDim2.new(0.08, 0, 0.3, 0)
-	stockBadge.Position = UDim2.new(0.02, 0, 0.05, 0)
-	stockBadge.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
-	stockBadge.BorderSizePixel = 0
-	stockBadge.Parent = itemFrame
-
-	local badgeCorner = Instance.new("UICorner")
-	badgeCorner.CornerRadius = UDim.new(0.3, 0)
-	badgeCorner.Parent = stockBadge
-
-	local stockLabel = Instance.new("TextLabel")
-	stockLabel.Size = UDim2.new(1, 0, 1, 0)
-	stockLabel.BackgroundTransparency = 1
-	stockLabel.Text = tostring(item.stock)
-	stockLabel.TextColor3 = Color3.new(1, 1, 1)
-	stockLabel.TextScaled = true
-	stockLabel.Font = Enum.Font.GothamBold
-	stockLabel.Parent = stockBadge
-
-	-- Item icon
-	local iconLabel = Instance.new("TextLabel")
-	iconLabel.Name = "ItemIcon"
-	iconLabel.Size = UDim2.new(0.15, 0, 0.6, 0)
-	iconLabel.Position = UDim2.new(0.05, 0, 0.2, 0)
-	iconLabel.BackgroundTransparency = 1
-	iconLabel.Text = item.icon or "📦"
-	iconLabel.TextColor3 = Color3.new(1, 1, 1)
-	iconLabel.TextScaled = true
-	iconLabel.Font = Enum.Font.Gotham
-	iconLabel.Parent = itemFrame
-
-	-- Item name
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(0.35, 0, 0.4, 0)
-	nameLabel.Position = UDim2.new(0.22, 0, 0.1, 0)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Text = item.name or item.id
-	nameLabel.TextColor3 = Color3.new(1, 1, 1)
-	nameLabel.TextScaled = true
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Parent = itemFrame
-
-	-- Sell price per item
-	local priceLabel = Instance.new("TextLabel")
-	priceLabel.Size = UDim2.new(0.2, 0, 0.4, 0)
-	priceLabel.Position = UDim2.new(0.58, 0, 0.1, 0)
-	priceLabel.BackgroundTransparency = 1
-	priceLabel.Text = item.sellPrice .. " 💰 each"
-	priceLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
-	priceLabel.TextScaled = true
-	priceLabel.Font = Enum.Font.Gotham
-	priceLabel.TextXAlignment = Enum.TextXAlignment.Right
-	priceLabel.Parent = itemFrame
-
-	-- Total value
-	local totalLabel = Instance.new("TextLabel")
-	totalLabel.Size = UDim2.new(0.2, 0, 0.3, 0)
-	totalLabel.Position = UDim2.new(0.58, 0, 0.4, 0)
-	totalLabel.BackgroundTransparency = 1
-	totalLabel.Text = "Total: " .. item.totalValue .. " 💰"
-	totalLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-	totalLabel.TextScaled = true
-	totalLabel.Font = Enum.Font.GothamBold
-	totalLabel.TextXAlignment = Enum.TextXAlignment.Right
-	totalLabel.Parent = itemFrame
-
-	-- Item description/stock info
-	local descLabel = Instance.new("TextLabel")
-	descLabel.Size = UDim2.new(0.35, 0, 0.45, 0)
-	descLabel.Position = UDim2.new(0.22, 0, 0.5, 0)
-	descLabel.BackgroundTransparency = 1
-	descLabel.Text = item.description or ("You have " .. item.stock .. " in stock")
-	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	descLabel.TextScaled = true
-	descLabel.Font = Enum.Font.Gotham
-	descLabel.TextXAlignment = Enum.TextXAlignment.Left
-	descLabel.TextYAlignment = Enum.TextYAlignment.Top
-	descLabel.TextWrapped = true
-	descLabel.Parent = itemFrame
-
-	-- Sell buttons container
-	local buttonContainer = Instance.new("Frame")
-	buttonContainer.Size = UDim2.new(0.18, 0, 0.6, 0)
-	buttonContainer.Position = UDim2.new(0.8, 0, 0.35, 0)
-	buttonContainer.BackgroundTransparency = 1
-	buttonContainer.Parent = itemFrame
-
-	-- Sell 1 button
-	local sell1Button = Instance.new("TextButton")
-	sell1Button.Size = UDim2.new(1, 0, 0.45, 0)
-	sell1Button.Position = UDim2.new(0, 0, 0, 0)
-	sell1Button.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
-	sell1Button.BorderSizePixel = 0
-	sell1Button.Text = "SELL 1"
-	sell1Button.TextColor3 = Color3.new(1, 1, 1)
-	sell1Button.TextScaled = true
-	sell1Button.Font = Enum.Font.GothamBold
-	sell1Button.Parent = buttonContainer
-
-	local sell1Corner = Instance.new("UICorner")
-	sell1Corner.CornerRadius = UDim.new(0.1, 0)
-	sell1Corner.Parent = sell1Button
-
-	-- Sell All button
-	local sellAllButton = Instance.new("TextButton")
-	sellAllButton.Size = UDim2.new(1, 0, 0.45, 0)
-	sellAllButton.Position = UDim2.new(0, 0, 0.55, 0)
-	sellAllButton.BackgroundColor3 = Color3.fromRGB(200, 120, 0)
-	sellAllButton.BorderSizePixel = 0
-	sellAllButton.Text = "SELL ALL"
-	sellAllButton.TextColor3 = Color3.new(1, 1, 1)
-	sellAllButton.TextScaled = true
-	sellAllButton.Font = Enum.Font.GothamBold
-	sellAllButton.Parent = buttonContainer
-
-	local sellAllCorner = Instance.new("UICorner")
-	sellAllCorner.CornerRadius = UDim.new(0.1, 0)
-	sellAllCorner.Parent = sellAllButton
-
-	-- Sell button functionality
-	sell1Button.MouseButton1Click:Connect(function()
-		if self.State.GameClient and self.State.GameClient.SellItem then
-			self.State.GameClient:SellItem(item.id, 1)
-		else
-			self:ShowNotification("Sell Error", "Sell system not available!", "error")
-		end
-	end)
-
-	sellAllButton.MouseButton1Click:Connect(function()
-		if self.State.GameClient and self.State.GameClient.SellItem then
-			self.State.GameClient:SellItem(item.id, item.stock)
-		else
-			self:ShowNotification("Sell Error", "Sell system not available!", "error")
-		end
-	end)
-
-	-- Hover effects
-	itemFrame.MouseEnter:Connect(function()
-		local hoverTween = TweenService:Create(itemFrame,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-			{BackgroundColor3 = Color3.fromRGB(70, 70, 70)}
-		)
-		hoverTween:Play()
-	end)
-
-	itemFrame.MouseLeave:Connect(function()
-		local leaveTween = TweenService:Create(itemFrame,
-			TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-			{BackgroundColor3 = Color3.fromRGB(60, 60, 60)}
-		)
-		leaveTween:Play()
-	end)
-
-	return itemFrame
 end
 
 function UIManager:CreateMiningMenu()
@@ -1764,69 +1779,7 @@ function UIManager:CreateCraftingMenu()
 	return true
 end
 
--- [Include all other remaining functions from the original UIManager...]
--- ShowShopTab, PopulateShopTabContent, CreateEnhancedShopItemFrame, etc.
--- UpdateCurrencyDisplay, ShowNotification, LightenColor, etc.
-
 -- ========== UTILITY FUNCTIONS ==========
-
-function UIManager:ShowShopTab(tabId)
-	print("UIManager: Switching to shop tab: " .. tabId)
-
-	if not self.State.ShopTabs[tabId] then
-		warn("UIManager: Tab not found: " .. tabId)
-		return
-	end
-
-	-- Update active tab
-	local previousTab = self.State.ActiveShopTab
-	self.State.ActiveShopTab = tabId
-
-	-- Update tab appearances
-	for id, tab in pairs(self.State.ShopTabs) do
-		local isActive = (id == tabId)
-
-		-- Hide/show content
-		tab.content.Visible = isActive
-
-		-- Update button appearance
-		local targetColor = isActive and self:LightenColor(tab.config.color, 0.3) or tab.config.color
-		local buttonTween = TweenService:Create(tab.button,
-			TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-			{BackgroundColor3 = targetColor}
-		)
-		buttonTween:Play()
-
-		-- Add selection indicator for active tab
-		if isActive then
-			local indicator = tab.button:FindFirstChild("ActiveIndicator")
-			if not indicator then
-				indicator = Instance.new("Frame")
-				indicator.Name = "ActiveIndicator"
-				indicator.Size = UDim2.new(1, 0, 0.1, 0)
-				indicator.Position = UDim2.new(0, 0, 0.9, 0)
-				indicator.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-				indicator.BorderSizePixel = 0
-				indicator.Parent = tab.button
-
-				local indicatorCorner = Instance.new("UICorner")
-				indicatorCorner.CornerRadius = UDim.new(0.5, 0)
-				indicatorCorner.Parent = indicator
-			end
-		else
-			local indicator = tab.button:FindFirstChild("ActiveIndicator")
-			if indicator then
-				indicator:Destroy()
-			end
-		end
-	end
-
-	-- Populate tab content if not already done
-	if not self.State.ShopTabs[tabId].populated then
-		self:PopulateShopTabContent(tabId)
-		self.State.ShopTabs[tabId].populated = true
-	end
-end
 
 function UIManager:UpdateCurrencyDisplay(playerData)
 	if not playerData or not self.State.CurrencyLabels then return end
@@ -1982,9 +1935,6 @@ function UIManager:GetNotificationColor(notificationType)
 	return colors[notificationType] or colors.info
 end
 
--- [Include remaining shop functions like PopulateShopTabContent, CreateEnhancedShopItemFrame, etc.]
--- [Include remaining utility functions like RefreshMenuContent, GetState, Cleanup, etc.]
-
 function UIManager:GetCurrentPage()
 	return self.State.CurrentPage
 end
@@ -2029,24 +1979,23 @@ end
 
 _G.UIManager = UIManager
 
-print("UIManager: ✅ RESPONSIVE DESIGN with TOP MENU!")
-print("📱 NEW RESPONSIVE FEATURES:")
-print("  📏 Scale-based sizing for all devices")
-print("  📊 Automatic device type detection")
-print("  🔝 Top horizontal menu bar (cleaner layout)")
-print("  📐 Adaptive scaling (Mobile: 1.2x, Tablet: 1.1x, Desktop: 1.0x)")
-print("  🎨 Currency display repositioned below menu")
-print("  📱 Mobile/tablet optimized text sizing")
+print("UIManager: ✅ COMPLETE WITH UNIFORM SHOP ITEM SIZING!")
+print("📏 ALL SHOP ITEMS NOW HAVE:")
+print("  📐 Consistent 20% height frames")
+print("  🎯 Standardized internal layouts")
+print("  🏷️ Uniform badge positioning")
+print("  💰 Consistent price displays")
+print("  🔘 Standardized button sizing")
+print("  📝 Uniform description areas")
+print("  🎨 Professional appearance matching crafting/premium menus")
 print("")
-print("🎮 Top Menu Navigation:")
-print("  🌾 Farm - Left side of top bar")
-print("  ⛏️ Mining - Center of top bar")
-print("  🔨 Crafting - Right side of top bar")
-print("  🛒 Shop - Proximity indicator on far right")
-print("")
-print("📱 Device Compatibility:")
-print("  Mobile phones - 1.2x scaling, touch optimized")
-print("  Tablets - 1.1x scaling, hybrid interface")
-print("  Desktop - 1.0x scaling, full features")
+print("🛒 UNIFORM SIZING APPLIES TO:")
+print("  🌱 Seeds tab - all buy items")
+print("  🌾 Farming tab - all buy items")
+print("  🛡️ Defense tab - all buy items")
+print("  ⛏️ Mining tab - all buy items")
+print("  🔨 Crafting tab - all buy items")
+print("  ✨ Premium tab - all buy items")
+print("  💰 Sell tab - all sell items with dual buttons")
 
 return UIManager
