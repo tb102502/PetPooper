@@ -1351,7 +1351,111 @@ function ItemConfig.DebugPurchaseOrder(category)
 	print("✅ FIXED: All items now visible in shop!")
 	print("========================================")
 end
+function ItemConfig.DebugHiddenItems()
+	print("=== ITEMCONFIG HIDDEN ITEMS CHECK ===")
 
+	local hiddenItems = {}
+	local totalItems = 0
+	local categoryCount = {}
+
+	for itemId, item in pairs(ItemConfig.ShopItems) do
+		totalItems = totalItems + 1
+
+		local category = item.category or "unknown"
+		categoryCount[category] = (categoryCount[category] or 0) + 1
+
+		-- Check for flags that might hide items
+		if item.notPurchasable then
+			table.insert(hiddenItems, {id = itemId, reason = "notPurchasable = true"})
+		end
+
+		if not item.name then
+			table.insert(hiddenItems, {id = itemId, reason = "missing name"})
+		end
+
+		if not item.price then
+			table.insert(hiddenItems, {id = itemId, reason = "missing price"})
+		end
+
+		if not item.currency then
+			table.insert(hiddenItems, {id = itemId, reason = "missing currency"})
+		end
+
+		if not item.category then
+			table.insert(hiddenItems, {id = itemId, reason = "missing category"})
+		end
+	end
+
+	print("📦 Total items in ItemConfig: " .. totalItems)
+	print("📂 Items by category:")
+	for category, count in pairs(categoryCount) do
+		print("  " .. category .. ": " .. count)
+	end
+
+	if #hiddenItems > 0 then
+		print("❌ POTENTIALLY HIDDEN ITEMS (" .. #hiddenItems .. "):")
+		for _, item in ipairs(hiddenItems) do
+			print("  " .. item.id .. " - " .. item.reason)
+		end
+	else
+		print("✅ ALL ITEMS SHOULD BE VISIBLE!")
+	end
+
+	print("====================================")
+end
+
+-- Fix any notPurchasable flags automatically
+function ItemConfig.FixHiddenItems()
+	print("🔧 FIXING HIDDEN ITEMS...")
+
+	local fixedCount = 0
+
+	for itemId, item in pairs(ItemConfig.ShopItems) do
+		-- Remove notPurchasable flags
+		if item.notPurchasable then
+			print("  Removing notPurchasable from " .. itemId)
+			item.notPurchasable = nil
+			fixedCount = fixedCount + 1
+		end
+
+		-- Add missing required properties
+		if not item.description then
+			item.description = "No description available"
+		end
+
+		if not item.icon then
+			item.icon = "📦"
+		end
+
+		if not item.maxQuantity then
+			item.maxQuantity = 999
+		end
+
+		if not item.type then
+			item.type = "item"
+		end
+	end
+
+	print("✅ Fixed " .. fixedCount .. " items")
+	return fixedCount
+end
+
+-- Global access for easy testing
+_G.DebugHiddenItems = function()
+	ItemConfig.DebugHiddenItems()
+end
+
+_G.FixHiddenItems = function()
+	return ItemConfig.FixHiddenItems()
+end
+
+print("ItemConfig: ✅ Debug functions added!")
+print("🔧 Global Commands:")
+print("  _G.DebugHiddenItems() - Check for hidden items")
+print("  _G.FixHiddenItems() - Fix notPurchasable flags")
+
+-- Run automatic check
+ItemConfig.DebugHiddenItems()
 print("✅ FIXED ItemConfig loaded - ALL ITEMS SHOW IN SHOP!")
 print("📦 Total shop items: " .. (function() local count = 0; for _ in pairs(ItemConfig.ShopItems) do count = count + 1 end return count end)())
 print("🌾 Seeds: 11 items (carrot to glorious sunflower)")
