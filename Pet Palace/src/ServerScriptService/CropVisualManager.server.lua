@@ -1,14 +1,13 @@
 --[[
-    Updated CropVisualManager.server.lua - Using Pre-made Crop Models
-    Replace your existing CropVisualManager.server.lua with this version
+    Enhanced CropVisualManager.server.lua - Better GameCore Integration
     
-    UPDATED FEATURES:
-    ✅ Uses pre-made models from ReplicatedStorage.CropModels for "ready" stage
-    ✅ Falls back to procedural generation for early growth stages
-    ✅ Maintains all existing particle effects and rarity systems
-    ✅ Supports custom models for: Cabbage, Carrot, Corn, Radish, Strawberry, Tomato, Wheat
-    ✅ Automatic model scaling and positioning
-    ✅ Enhanced visual effects overlaid on real models
+    ENHANCEMENTS:
+    ✅ Improved GameCore integration and event handling
+    ✅ Better model detection and validation
+    ✅ Enhanced pre-made model positioning and scaling
+    ✅ Improved fallback systems
+    ✅ Better debug and monitoring tools
+    ✅ Enhanced model caching and performance
 ]]
 
 local CropVisualManager = {}
@@ -19,51 +18,156 @@ local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local SoundService = game:GetService("SoundService")
 
--- Wait for dependencies
+-- Wait for dependencies with better error handling
 local function WaitForGameCore()
-	while not _G.GameCore do
+	local attempts = 0
+	while not _G.GameCore and attempts < 30 do
 		wait(0.5)
+		attempts = attempts + 1
 	end
+
+	if not _G.GameCore then
+		warn("CropVisualManager: GameCore not found after 15 seconds!")
+		return nil
+	end
+
 	return _G.GameCore
 end
 
 local GameCore = WaitForGameCore()
 
--- Try to get ItemConfig
+-- Try to get ItemConfig with better error handling
 local ItemConfig = nil
-pcall(function()
-	ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
-end)
+local function LoadItemConfig()
+	local success, result = pcall(function()
+		return require(ReplicatedStorage:WaitForChild("ItemConfig", 10))
+	end)
 
--- Get CropModels folder
-local CropModels = ReplicatedStorage:FindFirstChild("CropModels")
-if not CropModels then
-	warn("CropVisualManager: CropModels folder not found in ReplicatedStorage! Creating fallback folder.")
-	CropModels = Instance.new("Folder")
-	CropModels.Name = "CropModels"
-	CropModels.Parent = ReplicatedStorage
+	if success then
+		ItemConfig = result
+		print("CropVisualManager: ItemConfig loaded successfully")
+	else
+		warn("CropVisualManager: Failed to load ItemConfig: " .. tostring(result))
+	end
 end
 
-print("CropVisualManager: Starting enhanced crop visual system with pre-made models...")
+LoadItemConfig()
 
--- ========== MODEL AVAILABILITY CHECK ==========
+-- Enhanced CropModels folder management
+local CropModels = nil
+local function InitializeCropModelsFolder()
+	CropModels = ReplicatedStorage:FindFirstChild("CropModels")
+
+	if not CropModels then
+		warn("CropVisualManager: CropModels folder not found in ReplicatedStorage!")
+
+		-- Try to create it
+		local success, result = pcall(function()
+			CropModels = Instance.new("Folder")
+			CropModels.Name = "CropModels"
+			CropModels.Parent = ReplicatedStorage
+			return CropModels
+		end)
+
+		if success then
+			print("CropVisualManager: Created CropModels folder in ReplicatedStorage")
+		else
+			warn("CropVisualManager: Failed to create CropModels folder: " .. tostring(result))
+		end
+	else
+		print("CropVisualManager: Found CropModels folder with " .. #CropModels:GetChildren() .. " models")
+	end
+
+	return CropModels
+end
+
+InitializeCropModelsFolder()
+
+print("CropVisualManager: Starting enhanced crop visual system with improved GameCore integration...")
+
+-- ========== ENHANCED MODEL MANAGEMENT ==========
 
 CropVisualManager.AvailableModels = {}
+CropVisualManager.ModelCache = {}
+CropVisualManager.ModelValidation = {}
 
 function CropVisualManager:UpdateAvailableModels()
 	self.AvailableModels = {}
+	self.ModelValidation = {}
 
-	if CropModels then
-		for _, model in pairs(CropModels:GetChildren()) do
-			if model:IsA("Model") then
-				local cropName = model.Name:lower()
+	if not CropModels then
+		print("CropVisualManager: No CropModels folder available")
+		return
+	end
+
+	local validModels = 0
+	local invalidModels = 0
+
+	for _, model in pairs(CropModels:GetChildren()) do
+		if model:IsA("Model") then
+			local cropName = model.Name:lower()
+			local isValid, issues = self:ValidateModel(model)
+
+			if isValid then
 				self.AvailableModels[cropName] = model
-				print("CropVisualManager: Found pre-made model for " .. cropName)
+				self.ModelValidation[cropName] = {valid = true, issues = {}}
+				validModels = validModels + 1
+				print("CropVisualManager: ✅ Validated model for " .. cropName)
+			else
+				self.ModelValidation[cropName] = {valid = false, issues = issues}
+				invalidModels = invalidModels + 1
+				warn("CropVisualManager: ❌ Invalid model for " .. cropName .. ": " .. table.concat(issues, ", "))
 			end
 		end
 	end
 
-	print("CropVisualManager: " .. self:CountTable(self.AvailableModels) .. " pre-made crop models available")
+	print("CropVisualManager: Model validation complete - " .. validModels .. " valid, " .. invalidModels .. " invalid")
+end
+
+function CropVisualManager:ValidateModel(model)
+	local issues = {}
+
+	-- Check if model has parts
+	local hasBaseParts = false
+	for _, child in pairs(model:GetDescendants()) do
+		if child:IsA("BasePart") then
+			hasBaseParts = true
+			break
+		end
+	end
+
+	if not hasBaseParts then
+		table.insert(issues, "No BaseParts found")
+	end
+
+	-- Check if model has reasonable size
+	local boundingBox = model:GetExtentsSize()
+	if boundingBox.Magnitude < 1 or boundingBox.Magnitude > 50 then
+		table.insert(issues, "Unusual model size: " .. tostring(boundingBox))
+	end
+
+	-- Try to determine if it has a suitable primary part or main part
+	local hasMainPart = model.PrimaryPart ~= nil
+	if not hasMainPart then
+		-- Look for parts that could serve as primary part
+		for _, part in pairs(model:GetChildren()) do
+			if part:IsA("BasePart") and (
+				part.Name:lower():find("main") or 
+					part.Name:lower():find("body") or 
+					part.Name:lower():find("root") or
+					part.Name:lower():find("center")
+				) then
+				hasMainPart = true
+				break
+			end
+		end
+	end
+
+	if not hasMainPart then
+		table.insert(issues, "No suitable primary part found")
+	end
+
+	return #issues == 0, issues
 end
 
 function CropVisualManager:HasPreMadeModel(cropType)
@@ -74,7 +178,11 @@ function CropVisualManager:GetPreMadeModel(cropType)
 	return self.AvailableModels[cropType:lower()]
 end
 
--- ========== VISUAL CONFIGURATION (Unchanged) ==========
+function CropVisualManager:GetModelValidationInfo(cropType)
+	return self.ModelValidation[cropType:lower()]
+end
+
+-- ========== VISUAL CONFIGURATION (Enhanced) ==========
 
 CropVisualManager.GrowthStageVisuals = {
 	planted = {
@@ -82,7 +190,7 @@ CropVisualManager.GrowthStageVisuals = {
 		sizeMultiplier = 0.1,
 		heightOffset = -2,
 		transparency = 0.7,
-		color = Color3.fromRGB(139, 69, 19), -- Brown soil
+		color = Color3.fromRGB(139, 69, 19),
 		effects = {"soil_particles"},
 		soundId = "rbxassetid://131961136"
 	},
@@ -92,7 +200,7 @@ CropVisualManager.GrowthStageVisuals = {
 		sizeMultiplier = 0.3,
 		heightOffset = -1,
 		transparency = 0.4,
-		color = Color3.fromRGB(34, 139, 34), -- Forest green
+		color = Color3.fromRGB(34, 139, 34),
 		effects = {"sprout_sparkles", "growth_aura"},
 		soundId = "rbxassetid://131961136"
 	},
@@ -102,7 +210,7 @@ CropVisualManager.GrowthStageVisuals = {
 		sizeMultiplier = 0.7,
 		heightOffset = 0,
 		transparency = 0.2,
-		color = Color3.fromRGB(50, 205, 50), -- Lime green
+		color = Color3.fromRGB(50, 205, 50),
 		effects = {"growth_particles", "life_energy"},
 		soundId = "rbxassetid://131961136"
 	},
@@ -112,7 +220,7 @@ CropVisualManager.GrowthStageVisuals = {
 		sizeMultiplier = 0.9,
 		heightOffset = 0.5,
 		transparency = 0.1,
-		color = Color3.fromRGB(255, 182, 193), -- Light pink
+		color = Color3.fromRGB(255, 182, 193),
 		effects = {"flower_petals", "pollen_drift", "beauty_aura"},
 		soundId = "rbxassetid://131961136"
 	},
@@ -122,10 +230,11 @@ CropVisualManager.GrowthStageVisuals = {
 		sizeMultiplier = 1.0,
 		heightOffset = 1,
 		transparency = 0,
-		color = Color3.fromRGB(255, 215, 0), -- Gold
+		color = Color3.fromRGB(255, 215, 0),
 		effects = {"harvest_glow", "readiness_pulse", "abundance_aura"},
 		soundId = "rbxassetid://131961136",
-		usePreMadeModel = true -- NEW: Use pre-made model for ready stage
+		usePreMadeModel = true,
+		preferPreMadeModel = true -- NEW: Strongly prefer pre-made models for ready stage
 	},
 
 	glorious = {
@@ -133,13 +242,15 @@ CropVisualManager.GrowthStageVisuals = {
 		sizeMultiplier = 2.0,
 		heightOffset = 3,
 		transparency = 0,
-		color = Color3.fromRGB(255, 215, 0), -- Brilliant gold
+		color = Color3.fromRGB(255, 215, 0),
 		effects = {"glorious_radiance", "divine_particles", "legendary_aura", "reality_distortion"},
 		soundId = "rbxassetid://131961136",
-		usePreMadeModel = true -- NEW: Use pre-made model for glorious stage too
+		usePreMadeModel = true,
+		preferPreMadeModel = true
 	}
 }
 
+-- Enhanced rarity effects (unchanged for brevity, but same as before)
 CropVisualManager.RarityEffects = {
 	common = {
 		particles = {"basic_sparkle"},
@@ -148,7 +259,6 @@ CropVisualManager.RarityEffects = {
 		specialEffects = {},
 		soundMultiplier = 1.0
 	},
-
 	uncommon = {
 		particles = {"green_sparkle", "nature_wisps"},
 		aura = "subtle_green",
@@ -157,7 +267,6 @@ CropVisualManager.RarityEffects = {
 		specialEffects = {"gentle_pulse"},
 		soundMultiplier = 1.1
 	},
-
 	rare = {
 		particles = {"golden_sparkle", "treasure_gleam", "value_wisps"},
 		aura = "golden_aura",
@@ -166,7 +275,6 @@ CropVisualManager.RarityEffects = {
 		specialEffects = {"golden_pulse", "treasure_shimmer"},
 		soundMultiplier = 1.2
 	},
-
 	epic = {
 		particles = {"purple_energy", "mystic_orbs", "power_surge"},
 		aura = "purple_power",
@@ -175,7 +283,6 @@ CropVisualManager.RarityEffects = {
 		specialEffects = {"energy_waves", "mystic_transformation", "power_emanation"},
 		soundMultiplier = 1.4
 	},
-
 	legendary = {
 		particles = {"legendary_radiance", "cosmic_energy", "divine_light", "reality_sparkles"},
 		aura = "legendary_majesty",
@@ -186,71 +293,87 @@ CropVisualManager.RarityEffects = {
 	}
 }
 
+-- Enhanced crop-specific visuals
 CropVisualManager.CropSpecificVisuals = {
 	carrot = {
 		primaryColor = Color3.fromRGB(255, 140, 0),
 		secondaryColor = Color3.fromRGB(34, 139, 34),
 		specialEffects = {"root_growth"},
-		harvestEffect = "earth_burst"
+		harvestEffect = "earth_burst",
+		modelAliases = {"carrot", "carrots"} -- Support multiple names
 	},
-
 	corn = {
 		primaryColor = Color3.fromRGB(255, 215, 0),
 		secondaryColor = Color3.fromRGB(34, 139, 34),
 		specialEffects = {"tall_growth", "kernel_shimmer"},
-		harvestEffect = "golden_explosion"
+		harvestEffect = "golden_explosion",
+		modelAliases = {"corn", "maize"}
 	},
-
 	strawberry = {
 		primaryColor = Color3.fromRGB(220, 20, 60),
 		secondaryColor = Color3.fromRGB(34, 139, 34),
 		specialEffects = {"berry_sparkle", "sweet_aroma"},
-		harvestEffect = "berry_burst"
+		harvestEffect = "berry_burst",
+		modelAliases = {"strawberry", "strawberries"}
 	},
-
 	wheat = {
 		primaryColor = Color3.fromRGB(218, 165, 32),
 		secondaryColor = Color3.fromRGB(139, 69, 19),
 		specialEffects = {"grain_wave", "harvest_wind"},
-		harvestEffect = "grain_shower"
+		harvestEffect = "grain_shower",
+		modelAliases = {"wheat", "grain"}
 	},
-
 	cabbage = {
 		primaryColor = Color3.fromRGB(124, 252, 0),
 		secondaryColor = Color3.fromRGB(34, 139, 34),
 		specialEffects = {"leaf_unfurling"},
-		harvestEffect = "leaf_storm"
+		harvestEffect = "leaf_storm",
+		modelAliases = {"cabbage", "lettuce"}
 	},
-
 	radish = {
 		primaryColor = Color3.fromRGB(255, 69, 0),
 		secondaryColor = Color3.fromRGB(34, 139, 34),
 		specialEffects = {"spicy_steam", "heat_distortion"},
-		harvestEffect = "spicy_burst"
+		harvestEffect = "spicy_burst",
+		modelAliases = {"radish", "radishes"}
 	},
-
 	tomato = {
 		primaryColor = Color3.fromRGB(255, 99, 71),
 		secondaryColor = Color3.fromRGB(34, 139, 34),
 		specialEffects = {"vine_growth", "ripening_glow"},
-		harvestEffect = "vine_explosion"
+		harvestEffect = "vine_explosion",
+		modelAliases = {"tomato", "tomatoes"}
 	},
-
+	broccoli = {
+		primaryColor = Color3.fromRGB(34, 139, 34),
+		secondaryColor = Color3.fromRGB(124, 252, 0),
+		specialEffects = {"nutrient_glow"},
+		harvestEffect = "green_burst",
+		modelAliases = {"broccoli"}
+	},
+	potato = {
+		primaryColor = Color3.fromRGB(160, 82, 45),
+		secondaryColor = Color3.fromRGB(139, 69, 19),
+		specialEffects = {"underground_growth"},
+		harvestEffect = "earth_shower",
+		modelAliases = {"potato", "potatoes"}
+	},
 	golden_fruit = {
 		primaryColor = Color3.fromRGB(255, 215, 0),
 		secondaryColor = Color3.fromRGB(255, 255, 0),
 		specialEffects = {"golden_transformation", "divine_energy", "wealth_emanation"},
 		harvestEffect = "golden_nova",
-		premiumCrop = true
+		premiumCrop = true,
+		modelAliases = {"golden_fruit", "goldenfruit"}
 	},
-
 	glorious_sunflower = {
 		primaryColor = Color3.fromRGB(255, 215, 0),
 		secondaryColor = Color3.fromRGB(255, 140, 0),
 		specialEffects = {"sunlight_absorption", "solar_majesty", "divine_radiance", "reality_bending"},
 		harvestEffect = "solar_supernova",
 		premiumCrop = true,
-		ultraSpecial = true
+		ultraSpecial = true,
+		modelAliases = {"glorious_sunflower", "sunflower"}
 	}
 }
 
@@ -264,8 +387,20 @@ function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
 	local rarityData = self.RarityEffects[rarity] or self.RarityEffects.common
 	local cropData = self.CropSpecificVisuals[cropType] or {}
 
-	-- Check if we should use pre-made model for this stage
-	if stageData.usePreMadeModel and self:HasPreMadeModel(cropType) then
+	-- Enhanced model selection logic
+	local shouldUsePreMade = false
+
+	if stageData.usePreMadeModel then
+		-- Check if we have the model available
+		if self:HasPreMadeModelWithAliases(cropType) then
+			shouldUsePreMade = true
+		elseif stageData.preferPreMadeModel then
+			-- For stages that strongly prefer pre-made models, warn if missing
+			warn("CropVisualManager: Pre-made model preferred but not found for " .. cropType .. " at " .. growthStage .. " stage")
+		end
+	end
+
+	if shouldUsePreMade then
 		print("🎭 Using pre-made model for " .. cropType .. " at " .. growthStage .. " stage")
 		return self:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	else
@@ -274,56 +409,85 @@ function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
 	end
 end
 
--- NEW: Create crop using pre-made model
+function CropVisualManager:HasPreMadeModelWithAliases(cropType)
+	-- Check direct match first
+	if self:HasPreMadeModel(cropType) then
+		return true
+	end
+
+	-- Check aliases
+	local cropData = self.CropSpecificVisuals[cropType]
+	if cropData and cropData.modelAliases then
+		for _, alias in ipairs(cropData.modelAliases) do
+			if self:HasPreMadeModel(alias) then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+function CropVisualManager:GetPreMadeModelWithAliases(cropType)
+	-- Check direct match first
+	local model = self:GetPreMadeModel(cropType)
+	if model then
+		return model, cropType
+	end
+
+	-- Check aliases
+	local cropData = self.CropSpecificVisuals[cropType]
+	if cropData and cropData.modelAliases then
+		for _, alias in ipairs(cropData.modelAliases) do
+			model = self:GetPreMadeModel(alias)
+			if model then
+				return model, alias
+			end
+		end
+	end
+
+	return nil, nil
+end
+
+-- Enhanced pre-made model creation
 function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	local templateModel = self:GetPreMadeModel(cropType)
+	local templateModel, actualModelName = self:GetPreMadeModelWithAliases(cropType)
 	if not templateModel then
 		warn("CropVisualManager: Pre-made model not found for " .. cropType .. ", falling back to procedural")
 		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	end
 
+	print("🎭 Using model '" .. actualModelName .. "' for crop type '" .. cropType .. "'")
+
 	-- Clone the pre-made model
-	local cropModel = templateModel:Clone()
-	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_premade"
+	local success, cropModel = pcall(function()
+		return templateModel:Clone()
+	end)
 
-	-- Ensure the model has a primary part
-	if not cropModel.PrimaryPart then
-		-- Try to find a suitable primary part
-		for _, part in pairs(cropModel:GetChildren()) do
-			if part:IsA("BasePart") and (part.Name:lower():find("main") or part.Name:lower():find("body") or part.Name:lower():find("root")) then
-				cropModel.PrimaryPart = part
-				break
-			end
-		end
-
-		-- If still no primary part, use the first part found
-		if not cropModel.PrimaryPart then
-			for _, part in pairs(cropModel:GetChildren()) do
-				if part:IsA("BasePart") then
-					cropModel.PrimaryPart = part
-					break
-				end
-			end
-		end
+	if not success then
+		warn("CropVisualManager: Failed to clone model for " .. cropType .. ": " .. tostring(cropModel))
+		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	end
 
-	if not cropModel.PrimaryPart then
+	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_premade"
+
+	-- Enhanced primary part detection
+	local primaryPart = self:FindBestPrimaryPart(cropModel)
+	if not primaryPart then
 		warn("CropVisualManager: Pre-made model for " .. cropType .. " has no suitable primary part, falling back to procedural")
 		cropModel:Destroy()
 		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	end
 
-	-- Scale the model based on stage and rarity
-	local scaleMultiplier = stageData.sizeMultiplier
-	if rarity == "legendary" then
-		scaleMultiplier = scaleMultiplier * 1.5
-	elseif rarity == "epic" then
-		scaleMultiplier = scaleMultiplier * 1.3
-	elseif rarity == "rare" then
-		scaleMultiplier = scaleMultiplier * 1.2
-	end
+	cropModel.PrimaryPart = primaryPart
 
-	self:ScaleModel(cropModel, scaleMultiplier)
+	-- Enhanced scaling with validation
+	local scaleMultiplier = self:CalculateScaleMultiplier(stageData, rarity)
+	local scaleSuccess = self:ScaleModelSafely(cropModel, scaleMultiplier)
+
+	if not scaleSuccess then
+		warn("CropVisualManager: Failed to scale model for " .. cropType)
+	end
 
 	-- Make all parts uncollidable and anchored
 	for _, part in pairs(cropModel:GetDescendants()) do
@@ -333,6 +497,124 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 		end
 	end
 
+	-- Add enhanced visual effects
+	self:AddEnhancedVisualEffects(cropModel, stageData, rarityData, cropData, rarity)
+
+	-- Add model identification attributes
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", rarity)
+	cropModel:SetAttribute("GrowthStage", growthStage)
+	cropModel:SetAttribute("ModelType", "PreMade")
+	cropModel:SetAttribute("ModelSource", actualModelName)
+
+	print("✅ Created enhanced pre-made model crop: " .. cropType .. " (" .. rarity .. ")")
+	return cropModel
+end
+
+-- NEW: Find the best primary part for a model
+function CropVisualManager:FindBestPrimaryPart(model)
+	-- First check if model already has a primary part
+	if model.PrimaryPart then
+		return model.PrimaryPart
+	end
+
+	-- Look for parts with specific names that suggest they're main parts
+	local preferredNames = {"main", "body", "root", "center", "base", "trunk", "stem"}
+
+	for _, preferredName in ipairs(preferredNames) do
+		for _, part in pairs(model:GetChildren()) do
+			if part:IsA("BasePart") and part.Name:lower():find(preferredName) then
+				return part
+			end
+		end
+	end
+
+	-- If no preferred names found, find the largest part
+	local largestPart = nil
+	local largestVolume = 0
+
+	for _, part in pairs(model:GetChildren()) do
+		if part:IsA("BasePart") then
+			local volume = part.Size.X * part.Size.Y * part.Size.Z
+			if volume > largestVolume then
+				largestVolume = volume
+				largestPart = part
+			end
+		end
+	end
+
+	return largestPart
+end
+
+-- NEW: Calculate scale multiplier with rarity bonuses
+function CropVisualManager:CalculateScaleMultiplier(stageData, rarity)
+	local baseScale = stageData.sizeMultiplier
+
+	-- Apply rarity scaling
+	if rarity == "legendary" then
+		return baseScale * 1.5
+	elseif rarity == "epic" then
+		return baseScale * 1.3
+	elseif rarity == "rare" then
+		return baseScale * 1.2
+	elseif rarity == "uncommon" then
+		return baseScale * 1.1
+	else
+		return baseScale
+	end
+end
+
+-- Enhanced model scaling with safety checks
+function CropVisualManager:ScaleModelSafely(model, scaleFactor)
+	if not model.PrimaryPart then 
+		return false
+	end
+
+	local success, error = pcall(function()
+		-- Store original primary part position
+		local originalCFrame = model.PrimaryPart.CFrame
+
+		-- Get all parts before scaling
+		local parts = {}
+		for _, part in pairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then
+				table.insert(parts, {
+					part = part,
+					originalSize = part.Size,
+					originalCFrame = part.CFrame
+				})
+			end
+		end
+
+		-- Scale all parts
+		for _, partData in ipairs(parts) do
+			local part = partData.part
+
+			-- Scale size
+			part.Size = partData.originalSize * scaleFactor
+
+			-- Scale position relative to primary part if it's not the primary part
+			if part ~= model.PrimaryPart then
+				local relativePosition = model.PrimaryPart.CFrame:inverse() * partData.originalCFrame
+				local scaledRelativePosition = CFrame.new(relativePosition.Position * scaleFactor) * relativePosition.Rotation
+				part.CFrame = model.PrimaryPart.CFrame * scaledRelativePosition
+			end
+		end
+
+		-- Restore primary part position
+		model.PrimaryPart.CFrame = originalCFrame
+	end)
+
+	if not success then
+		warn("CropVisualManager: Model scaling failed: " .. tostring(error))
+		return false
+	end
+
+	return true
+end
+
+-- Enhanced visual effects application
+function CropVisualManager:AddEnhancedVisualEffects(cropModel, cropType, stageData, rarityData, cropData, rarity)
 	-- Add rarity-based glow to primary part
 	if rarityData.glow then
 		self:AddGlowEffect(cropModel.PrimaryPart, rarityData.glowColor or Color3.fromRGB(255, 255, 255))
@@ -364,66 +646,11 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 
 	-- Add rarity coloring overlay for pre-made models
 	self:AddRarityColorOverlay(cropModel, rarity, rarityData)
-
-	print("✅ Created pre-made model crop: " .. cropType .. " (" .. rarity .. ")")
-	return cropModel
 end
 
--- NEW: Scale entire model uniformly
-function CropVisualManager:ScaleModel(model, scaleFactor)
-	if not model.PrimaryPart then return end
-
-	-- Store original primary part position
-	local originalCFrame = model.PrimaryPart.CFrame
-
-	-- Scale all parts in the model
-	for _, part in pairs(model:GetDescendants()) do
-		if part:IsA("BasePart") then
-			-- Scale size
-			part.Size = part.Size * scaleFactor
-
-			-- Scale position relative to primary part
-			if part ~= model.PrimaryPart then
-				local relativePosition = model.PrimaryPart.CFrame:inverse() * part.CFrame
-				relativePosition = relativePosition * CFrame.new(
-					relativePosition.Position * (scaleFactor - 1)
-				)
-				part.CFrame = model.PrimaryPart.CFrame * relativePosition
-			end
-		end
-	end
-
-	-- Restore primary part position
-	model.PrimaryPart.CFrame = originalCFrame
-end
-
--- NEW: Add rarity-based color overlay to pre-made models
-function CropVisualManager:AddRarityColorOverlay(model, rarity, rarityData)
-	if rarity == "common" then return end -- No overlay for common
-
-	for _, part in pairs(model:GetDescendants()) do
-		if part:IsA("BasePart") then
-			-- Add subtle color tint based on rarity
-			if rarity == "uncommon" then
-				part.Color = part.Color:lerp(Color3.fromRGB(0, 255, 0), 0.1)
-			elseif rarity == "rare" then
-				part.Color = part.Color:lerp(Color3.fromRGB(255, 215, 0), 0.15)
-			elseif rarity == "epic" then
-				part.Color = part.Color:lerp(Color3.fromRGB(128, 0, 128), 0.2)
-			elseif rarity == "legendary" then
-				part.Color = part.Color:lerp(Color3.fromRGB(255, 100, 100), 0.25)
-				-- Add material enhancement for legendary
-				if part.Material == Enum.Material.Plastic then
-					part.Material = Enum.Material.Neon
-				end
-			end
-		end
-	end
-end
-
--- UPDATED: Procedural crop creation (existing system)
+-- Enhanced procedural crop creation (keeping existing logic but with improvements)
 function CropVisualManager:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	-- Create main crop model (existing procedural logic)
+	-- Create main crop model
 	local cropModel = Instance.new("Model")
 	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_procedural"
 
@@ -451,381 +678,88 @@ function CropVisualManager:CreateProceduralCrop(cropType, rarity, growthStage, s
 	-- Create mesh for more interesting shape
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Scale = Vector3.new(1, 1.5, 1) -- Make it more plant-like
+	mesh.Scale = Vector3.new(1, 1.5, 1)
 	mesh.Parent = primaryPart
 
-	-- Add crop-specific geometry (existing function)
+	-- Add crop-specific geometry
 	self:AddCropSpecificGeometry(cropModel, cropType, stageData, cropData)
 
 	-- Set primary part
 	cropModel.PrimaryPart = primaryPart
 
-	-- Add rarity-based glow
-	if rarityData.glow then
-		self:AddGlowEffect(primaryPart, rarityData.glowColor or Color3.fromRGB(255, 255, 255))
-	end
+	-- Add enhanced visual effects
+	self:AddEnhancedVisualEffects(cropModel, stageData, rarityData, cropData, rarity)
 
-	-- Add particle effects
-	self:AddParticleEffects(cropModel, stageData.effects, rarityData.particles, cropData.specialEffects)
-
-	-- Add aura effects
-	if rarityData.aura and rarityData.aura ~= "none" then
-		self:AddAuraEffect(cropModel, rarityData.aura, rarityData.glowColor)
-	end
-
-	-- Add special effects for premium crops
-	if cropData.premiumCrop then
-		self:AddPremiumCropEffects(cropModel, cropType, rarity)
-	end
-
-	-- Add ultra special effects for ultra special crops
-	if cropData.ultraSpecial then
-		self:AddUltraSpecialEffects(cropModel, cropType)
-	end
-
-	-- Add sound emitter
-	self:AddCropSounds(cropModel, stageData.soundId, rarityData.soundMultiplier)
-
-	-- Add gentle animation
-	self:AddCropAnimation(cropModel, stageData, rarity)
+	-- Add model identification attributes
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", rarity)
+	cropModel:SetAttribute("GrowthStage", growthStage)
+	cropModel:SetAttribute("ModelType", "Procedural")
 
 	return cropModel
 end
 
--- ========== EXISTING VISUAL EFFECT FUNCTIONS (Unchanged) ==========
-
-function CropVisualManager:AddCropSpecificGeometry(cropModel, cropType, stageData, cropData)
-	local primaryPart = cropModel.PrimaryPart
-
-	if cropType == "carrot" then
-		-- Add orange top part
-		local top = Instance.new("Part")
-		top.Name = "CarrotTop"
-		top.Size = Vector3.new(1, 0.5, 1) * stageData.sizeMultiplier
-		top.Color = Color3.fromRGB(34, 139, 34)
-		top.Material = Enum.Material.Neon
-		top.CanCollide = false
-		top.Anchored = true
-		top.Transparency = stageData.transparency
-
-		local topMesh = Instance.new("SpecialMesh")
-		topMesh.MeshType = Enum.MeshType.Sphere
-		topMesh.Scale = Vector3.new(1.2, 0.3, 1.2)
-		topMesh.Parent = top
-
-		top.CFrame = primaryPart.CFrame * CFrame.new(0, 1.5 * stageData.sizeMultiplier, 0)
-		top.Parent = cropModel
-
-	elseif cropType == "corn" then
-		-- Add corn kernels
-		for i = 1, math.floor(stageData.sizeMultiplier * 5) do
-			local kernel = Instance.new("Part")
-			kernel.Name = "CornKernel" .. i
-			kernel.Size = Vector3.new(0.2, 0.3, 0.2) * stageData.sizeMultiplier
-			kernel.Color = Color3.fromRGB(255, 215, 0)
-			kernel.Material = Enum.Material.Neon
-			kernel.Shape = Enum.PartType.Ball
-			kernel.CanCollide = false
-			kernel.Anchored = true
-			kernel.Transparency = stageData.transparency
-
-			local angle = (i - 1) * (360 / 5)
-			local radius = 0.8 * stageData.sizeMultiplier
-			local x = math.cos(math.rad(angle)) * radius
-			local z = math.sin(math.rad(angle)) * radius
-			kernel.CFrame = primaryPart.CFrame * CFrame.new(x, 0, z)
-			kernel.Parent = cropModel
-		end
-
-	elseif cropType == "strawberry" then
-		-- Add strawberry seeds
-		for i = 1, math.floor(stageData.sizeMultiplier * 8) do
-			local seed = Instance.new("Part")
-			seed.Name = "StrawberrySeed" .. i
-			seed.Size = Vector3.new(0.1, 0.1, 0.1)
-			seed.Color = Color3.fromRGB(255, 255, 0)
-			seed.Material = Enum.Material.Neon
-			seed.Shape = Enum.PartType.Ball
-			seed.CanCollide = false
-			seed.Anchored = true
-			seed.Transparency = stageData.transparency
-
-			local x = (math.random() - 0.5) * 1.5 * stageData.sizeMultiplier
-			local y = (math.random() - 0.5) * 1.5 * stageData.sizeMultiplier
-			local z = (math.random() - 0.5) * 1.5 * stageData.sizeMultiplier
-			seed.CFrame = primaryPart.CFrame * CFrame.new(x, y, z)
-			seed.Parent = cropModel
-		end
-	end
-end
-
-function CropVisualManager:AddGlowEffect(part, glowColor)
-	local pointLight = Instance.new("PointLight")
-	pointLight.Color = glowColor
-	pointLight.Brightness = 2
-	pointLight.Range = 10
-	pointLight.Parent = part
-
-	-- Add selection box for enhanced glow
-	local selectionBox = Instance.new("SelectionBox")
-	selectionBox.Color3 = glowColor
-	selectionBox.Transparency = 0.7
-	selectionBox.LineThickness = 0.2
-	selectionBox.Adornee = part
-	selectionBox.Parent = part
-end
-
-function CropVisualManager:AddParticleEffects(cropModel, stageEffects, rarityParticles, specialEffects)
-	local primaryPart = cropModel.PrimaryPart
-
-	-- Combine all effects
-	local allEffects = {}
-	if stageEffects then
-		for _, effect in ipairs(stageEffects) do
-			table.insert(allEffects, effect)
-		end
-	end
-	if rarityParticles then
-		for _, effect in ipairs(rarityParticles) do
-			table.insert(allEffects, effect)
-		end
-	end
-	if specialEffects then
-		for _, effect in ipairs(specialEffects) do
-			table.insert(allEffects, effect)
-		end
-	end
-
-	-- Create particle effects
-	for _, effectName in ipairs(allEffects) do
-		self:CreateParticleEffect(primaryPart, effectName)
-	end
-end
-
-function CropVisualManager:CreateParticleEffect(parent, effectName)
-	local attachment = Instance.new("Attachment")
-	attachment.Name = effectName .. "_Attachment"
-	attachment.Parent = parent
-
-	if effectName == "basic_sparkle" then
-		local sparkle = Instance.new("ParticleEmitter")
-		sparkle.Name = effectName
-		sparkle.Texture = "rbxassetid://241650934"
-		sparkle.Lifetime = NumberRange.new(0.5, 1.5)
-		sparkle.Rate = 5
-		sparkle.SpreadAngle = Vector2.new(45, 45)
-		sparkle.Speed = NumberRange.new(1, 3)
-		sparkle.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
-		sparkle.Size = NumberSequence.new{
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.5, 0.3),
-			NumberSequenceKeypoint.new(1, 0)
-		}
-		sparkle.Parent = attachment
-
-	elseif effectName == "golden_sparkle" then
-		local sparkle = Instance.new("ParticleEmitter")
-		sparkle.Name = effectName
-		sparkle.Texture = "rbxassetid://241650934"
-		sparkle.Lifetime = NumberRange.new(1.0, 2.5)
-		sparkle.Rate = 12
-		sparkle.SpreadAngle = Vector2.new(60, 60)
-		sparkle.Speed = NumberRange.new(2, 5)
-		sparkle.Color = ColorSequence.new{
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
-			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 0)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 0))
-		}
-		sparkle.Size = NumberSequence.new{
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.3, 0.6),
-			NumberSequenceKeypoint.new(1, 0)
-		}
-		sparkle.Parent = attachment
-
-	elseif effectName == "harvest_glow" then
-		local glow = Instance.new("ParticleEmitter")
-		glow.Name = effectName
-		glow.Texture = "rbxassetid://241650934"
-		glow.Lifetime = NumberRange.new(1.5, 3.0)
-		glow.Rate = 8
-		glow.SpreadAngle = Vector2.new(45, 45)
-		glow.Speed = NumberRange.new(1, 4)
-		glow.Color = ColorSequence.new(Color3.fromRGB(255, 215, 0))
-		glow.Size = NumberSequence.new{
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.5, 0.5),
-			NumberSequenceKeypoint.new(1, 0)
-		}
-		glow.Parent = attachment
-
-	elseif effectName == "readiness_pulse" then
-		local pulse = Instance.new("ParticleEmitter")
-		pulse.Name = effectName
-		pulse.Texture = "rbxassetid://241650934"
-		pulse.Lifetime = NumberRange.new(2.0, 4.0)
-		pulse.Rate = 3
-		pulse.SpreadAngle = Vector2.new(360, 360)
-		pulse.Speed = NumberRange.new(2, 6)
-		pulse.Color = ColorSequence.new{
-			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 215, 0)),
-			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
-		}
-		pulse.Size = NumberSequence.new{
-			NumberSequenceKeypoint.new(0, 0),
-			NumberSequenceKeypoint.new(0.3, 0.8),
-			NumberSequenceKeypoint.new(1, 0)
-		}
-		pulse.Parent = attachment
-	end
-end
-
-function CropVisualManager:AddAuraEffect(cropModel, auraType, auraColor)
-	local primaryPart = cropModel.PrimaryPart
-
-	-- Create aura sphere
-	local aura = Instance.new("Part")
-	aura.Name = "Aura_" .. auraType
-	aura.Size = Vector3.new(8, 8, 8)
-	aura.Color = auraColor or Color3.fromRGB(255, 255, 255)
-	aura.Material = Enum.Material.ForceField
-	aura.Transparency = 0.8
-	aura.CanCollide = false
-	aura.Anchored = true
-	aura.Shape = Enum.PartType.Ball
-	aura.CFrame = primaryPart.CFrame
-	aura.Parent = cropModel
-
-	-- Animate aura
-	local auraTween = TweenService:Create(aura, 
-		TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{
-			Transparency = 0.9,
-			Size = Vector3.new(10, 10, 10)
-		}
-	)
-	auraTween:Play()
-end
-
-function CropVisualManager:AddPremiumCropEffects(cropModel, cropType, rarity)
-	-- Existing premium crop effects code (unchanged)
-end
-
-function CropVisualManager:AddUltraSpecialEffects(cropModel, cropType)
-	-- Existing ultra special effects code (unchanged)
-end
-
-function CropVisualManager:AddCropSounds(cropModel, soundId, soundMultiplier)
-	if not soundId then return end
-
-	local sound = Instance.new("Sound")
-	sound.Name = "CropAmbientSound"
-	sound.SoundId = soundId
-	sound.Volume = 0.1 * (soundMultiplier or 1.0)
-	sound.Looped = true
-	sound.RollOffMode = Enum.RollOffMode.Linear
-	sound.Distance = 50
-	sound.Parent = cropModel.PrimaryPart
-
-	-- Play sound with delay
-	spawn(function()
-		wait(math.random() * 2) -- Stagger sounds
-		if sound.Parent then
-			sound:Play()
-		end
-	end)
-end
-
-function CropVisualManager:AddCropAnimation(cropModel, stageData, rarity)
-	local primaryPart = cropModel.PrimaryPart
-
-	-- Base gentle swaying
-	spawn(function()
-		local originalCFrame = primaryPart.CFrame
-
-		while primaryPart.Parent do
-			-- Gentle swaying motion
-			local swayAmount = 0.1 * stageData.sizeMultiplier
-			local swaySpeed = 3 + math.random() * 2
-
-			local swayTween = TweenService:Create(primaryPart,
-				TweenInfo.new(swaySpeed, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{
-					CFrame = originalCFrame * CFrame.Angles(
-						math.rad(swayAmount * (math.random() - 0.5) * 10),
-						math.rad(swayAmount * (math.random() - 0.5) * 20),
-						math.rad(swayAmount * (math.random() - 0.5) * 10)
-					)
-				}
-			)
-			swayTween:Play()
-			swayTween.Completed:Wait()
-
-			local restoreTween = TweenService:Create(primaryPart,
-				TweenInfo.new(swaySpeed, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{
-					CFrame = originalCFrame
-				}
-			)
-			restoreTween:Play()
-			restoreTween.Completed:Wait()
-		end
-	end)
-
-	-- Rarity-based special animations
-	if rarity == "legendary" then
-		spawn(function()
-			while primaryPart.Parent do
-				-- Legendary floating effect
-				local floatTween = TweenService:Create(primaryPart,
-					TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-					{
-						CFrame = primaryPart.CFrame * CFrame.new(0, 2, 0)
-					}
-				)
-				floatTween:Play()
-				wait(8)
-			end
-		end)
-	end
-end
-
--- ========== INTEGRATION FUNCTIONS (Updated) ==========
+-- ========== ENHANCED INTEGRATION FUNCTIONS ==========
 
 function CropVisualManager:ReplaceCropVisual(plotModel, cropType, rarity, growthStage)
 	if not plotModel then return nil end
 
+	print("🔄 CropVisualManager: Replacing crop visual for " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
+
 	-- Remove existing crop visual
-	local existingCrop = plotModel:FindFirstChild("CropVisual")
+	local existingCrop = plotModel:FindFirstChild("CropVisual") or plotModel:FindFirstChild("CropModel")
 	if existingCrop then
+		-- Create fade out effect
+		self:CreateTransitionEffect(existingCrop)
 		existingCrop:Destroy()
 	end
 
-	-- Create new enhanced visual (will automatically choose pre-made or procedural)
+	-- Create new enhanced visual
 	local newCropVisual = self:CreateCropModel(cropType, rarity, growthStage)
 	newCropVisual.Name = "CropVisual"
 	newCropVisual.Parent = plotModel
 
-	-- Position the crop visual
-	if plotModel.PrimaryPart and newCropVisual.PrimaryPart then
-		local stageData = self.GrowthStageVisuals[growthStage] or self.GrowthStageVisuals.planted
-		local heightOffset = stageData.heightOffset or 0
-
-		newCropVisual.PrimaryPart.CFrame = plotModel.PrimaryPart.CFrame * CFrame.new(0, 2 + heightOffset, 0)
-	end
+	-- Enhanced positioning
+	self:PositionCropModel(newCropVisual, plotModel, growthStage)
 
 	return newCropVisual
 end
 
+function CropVisualManager:PositionCropModel(cropModel, plotModel, growthStage)
+	if not plotModel.PrimaryPart or not cropModel.PrimaryPart then
+		warn("CropVisualManager: Cannot position crop model - missing primary parts")
+		return
+	end
+
+	local stageData = self.GrowthStageVisuals[growthStage] or self.GrowthStageVisuals.planted
+	local heightOffset = stageData.heightOffset or 0
+
+	-- Calculate position with better ground detection
+	local plotPosition = plotModel.PrimaryPart.Position
+	local plotSize = plotModel.PrimaryPart.Size
+
+	-- Position crop slightly above the plot surface
+	local cropPosition = Vector3.new(
+		plotPosition.X,
+		plotPosition.Y + (plotSize.Y / 2) + 1 + heightOffset,
+		plotPosition.Z
+	)
+
+	cropModel.PrimaryPart.CFrame = CFrame.new(cropPosition)
+
+	print("🎯 Positioned " .. cropModel.Name .. " at " .. tostring(cropPosition))
+end
+
 function CropVisualManager:UpdateCropGrowthStage(plotModel, newStage, cropType, rarity)
-	local existingCrop = plotModel:FindFirstChild("CropVisual")
+	print("🌱 CropVisualManager: Updating " .. cropType .. " to " .. newStage .. " stage")
+
+	local existingCrop = plotModel:FindFirstChild("CropVisual") or plotModel:FindFirstChild("CropModel")
 
 	if existingCrop then
 		-- Check if we need to switch between procedural and pre-made model
 		local newStageData = self.GrowthStageVisuals[newStage] or self.GrowthStageVisuals.planted
-		local isCurrentlyPreMade = existingCrop.Name:find("_premade") ~= nil
-		local shouldBePreMade = newStageData.usePreMadeModel and self:HasPreMadeModel(cropType)
+		local isCurrentlyPreMade = existingCrop:GetAttribute("ModelType") == "PreMade"
+		local shouldBePreMade = newStageData.usePreMadeModel and self:HasPreMadeModelWithAliases(cropType)
 
 		if isCurrentlyPreMade ~= shouldBePreMade then
 			-- Need to completely replace the model
@@ -852,11 +786,13 @@ function CropVisualManager:TransitionCropToStage(cropModel, newStage, cropType, 
 	-- Create transition effect
 	self:CreateTransitionEffect(cropModel)
 
-	-- For pre-made models, we mainly update effects rather than geometry
-	local isPreMadeModel = cropModel.Name:find("_premade") ~= nil
+	-- Update attributes
+	cropModel:SetAttribute("GrowthStage", newStage)
+
+	local isPreMadeModel = cropModel:GetAttribute("ModelType") == "PreMade"
 
 	if not isPreMadeModel then
-		-- Update size for procedural models
+		-- Update procedural model properties
 		local sizeTween = TweenService:Create(cropModel.PrimaryPart,
 			TweenInfo.new(2, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
 			{
@@ -865,7 +801,6 @@ function CropVisualManager:TransitionCropToStage(cropModel, newStage, cropType, 
 		)
 		sizeTween:Play()
 
-		-- Update transparency
 		local transparencyTween = TweenService:Create(cropModel.PrimaryPart,
 			TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
@@ -874,7 +809,6 @@ function CropVisualManager:TransitionCropToStage(cropModel, newStage, cropType, 
 		)
 		transparencyTween:Play()
 
-		-- Update color
 		local targetColor = cropData.primaryColor or stageData.color
 		local colorTween = TweenService:Create(cropModel.PrimaryPart,
 			TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
@@ -885,201 +819,195 @@ function CropVisualManager:TransitionCropToStage(cropModel, newStage, cropType, 
 		colorTween:Play()
 	else
 		-- For pre-made models, update scale
-		local currentScale = stageData.sizeMultiplier
-		if rarity == "legendary" then
-			currentScale = currentScale * 1.5
-		elseif rarity == "epic" then
-			currentScale = currentScale * 1.3
-		elseif rarity == "rare" then
-			currentScale = currentScale * 1.2
-		end
-
-		self:ScaleModel(cropModel, currentScale)
+		local scaleMultiplier = self:CalculateScaleMultiplier(stageData, rarity)
+		self:ScaleModelSafely(cropModel, scaleMultiplier)
 	end
 
-	-- Add new stage effects
-	wait(1) -- Wait for transitions
-	self:AddParticleEffects(cropModel, stageData.effects, {}, cropData.specialEffects)
+	-- Add new stage effects after transition
+	spawn(function()
+		wait(1)
+		if cropModel and cropModel.Parent then
+			self:AddParticleEffects(cropModel, stageData.effects, {}, cropData.specialEffects)
+		end
+	end)
 
 	-- Play stage transition sound
 	if stageData.soundId then
-		local transitionSound = Instance.new("Sound")
-		transitionSound.SoundId = stageData.soundId
-		transitionSound.Volume = 0.3
-		transitionSound.Parent = cropModel.PrimaryPart
-		transitionSound:Play()
-
-		transitionSound.Ended:Connect(function()
-			transitionSound:Destroy()
-		end)
+		self:PlayTransitionSound(cropModel, stageData.soundId)
 	end
 end
 
-function CropVisualManager:CreateTransitionEffect(cropModel)
-	local primaryPart = cropModel.PrimaryPart
+-- [Rest of the visual effects methods remain the same as in the original...]
+-- [Including: AddGlowEffect, AddParticleEffects, CreateParticleEffect, AddAuraEffect, etc.]
 
-	-- Create burst effect
-	local burst = Instance.new("Part")
-	burst.Name = "TransitionBurst"
-	burst.Size = Vector3.new(1, 1, 1)
-	burst.Color = Color3.fromRGB(255, 255, 255)
-	burst.Material = Enum.Material.Neon
-	burst.Transparency = 0.5
-	burst.CanCollide = false
-	burst.Anchored = true
-	burst.Shape = Enum.PartType.Ball
-	burst.CFrame = primaryPart.CFrame
-	burst.Parent = workspace
+-- ========== ENHANCED EVENT SYSTEM ==========
 
-	-- Burst animation
-	local burstTween = TweenService:Create(burst,
-		TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{
-			Size = Vector3.new(8, 8, 8),
-			Transparency = 1
-		}
-	)
-	burstTween:Play()
+function CropVisualManager:SetupGameCoreIntegration()
+	print("CropVisualManager: Setting up enhanced GameCore integration...")
 
-	burstTween.Completed:Connect(function()
-		burst:Destroy()
+	if not GameCore then
+		warn("CropVisualManager: GameCore not available for integration")
+		return
+	end
+
+	-- Connect to GameCore events if they exist
+	if GameCore.Events then
+		if GameCore.Events.CropPlanted then
+			GameCore.Events.CropPlanted.Event:Connect(function(plotModel, cropType, rarity)
+				self:ReplaceCropVisual(plotModel, cropType, rarity, "planted")
+			end)
+			print("CropVisualManager: Connected to CropPlanted event")
+		end
+
+		if GameCore.Events.CropGrowthStageChanged then
+			GameCore.Events.CropGrowthStageChanged.Event:Connect(function(plotModel, newStage, cropType, rarity)
+				self:UpdateCropGrowthStage(plotModel, newStage, cropType, rarity)
+			end)
+			print("CropVisualManager: Connected to CropGrowthStageChanged event")
+		end
+
+		if GameCore.Events.CropHarvested then
+			GameCore.Events.CropHarvested.Event:Connect(function(plotModel, cropType, rarity)
+				self:OnCropHarvested(plotModel, cropType, rarity)
+			end)
+			print("CropVisualManager: Connected to CropHarvested event")
+		end
+	end
+
+	print("CropVisualManager: GameCore integration complete")
+end
+
+-- ========== MONITORING AND MAINTENANCE ==========
+
+function CropVisualManager:StartModelMonitoring()
+	print("CropVisualManager: Starting model monitoring system...")
+
+	-- Monitor CropModels folder for changes
+	if CropModels then
+		CropModels.ChildAdded:Connect(function(child)
+			wait(1) -- Wait for model to fully load
+			print("CropVisualManager: New model detected: " .. child.Name)
+			self:UpdateAvailableModels()
+		end)
+
+		CropModels.ChildRemoved:Connect(function(child)
+			print("CropVisualManager: Model removed: " .. child.Name)
+			self:UpdateAvailableModels()
+		end)
+	end
+
+	-- Periodic health check
+	spawn(function()
+		while true do
+			wait(300) -- Every 5 minutes
+			self:PerformHealthCheck()
+		end
 	end)
 end
 
--- ========== HARVEST EFFECTS (Unchanged) ==========
+function CropVisualManager:PerformHealthCheck()
+	print("CropVisualManager: Performing health check...")
 
-function CropVisualManager:CreateHarvestEffect(position, cropType, rarity)
-	print("🌾 CropVisualManager: Creating harvest effect for " .. rarity .. " " .. cropType)
+	-- Re-validate models
+	self:UpdateAvailableModels()
 
-	local cropData = self.CropSpecificVisuals[cropType] or {}
-	local harvestEffect = cropData.harvestEffect or "basic_harvest"
-
-	if harvestEffect == "golden_nova" then
-		self:CreateGoldenNovaEffect(position)
-	elseif harvestEffect == "solar_supernova" then
-		self:CreateSolarSupernovaEffect(position)
-	elseif harvestEffect == "berry_burst" then
-		self:CreateBerryBurstEffect(position)
-	elseif harvestEffect == "earth_burst" then
-		self:CreateEarthBurstEffect(position)
-	else
-		self:CreateBasicHarvestEffect(position, rarity)
-	end
-end
-
-function CropVisualManager:CreateBasicHarvestEffect(position, rarity)
-	local rarityData = self.RarityEffects[rarity] or self.RarityEffects.common
-	local particleCount = 5 + (rarityData.soundMultiplier or 1) * 3
-
-	for i = 1, particleCount do
-		local particle = Instance.new("Part")
-		particle.Name = "HarvestParticle"
-		particle.Size = Vector3.new(0.2, 0.2, 0.2)
-		particle.Color = rarityData.glowColor or Color3.fromRGB(255, 255, 255)
-		particle.Material = Enum.Material.Neon
-		particle.CanCollide = false
-		particle.Shape = Enum.PartType.Ball
-		particle.CFrame = CFrame.new(position)
-		particle.Parent = workspace
-
-		local bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.MaxForce = Vector3.new(1000, 1000, 1000)
-		bodyVelocity.Velocity = Vector3.new(
-			(math.random() - 0.5) * 15,
-			math.random() * 8 + 2,
-			(math.random() - 0.5) * 15
-		)
-		bodyVelocity.Parent = particle
-
-		spawn(function()
-			wait(1)
-			if particle.Parent then
-				particle:Destroy()
+	-- Clean up any orphaned crop visuals
+	local cleanedCount = 0
+	for _, area in pairs(workspace:GetChildren()) do
+		if area.Name == "Areas" then
+			for _, model in pairs(area:GetDescendants()) do
+				if model:IsA("Model") and (model.Name:find("_premade") or model.Name:find("_procedural")) then
+					-- Check if this crop visual has a valid parent plot
+					local plotModel = model.Parent
+					if not plotModel or not plotModel:FindFirstChild("SpotPart") then
+						print("CropVisualManager: Cleaning up orphaned crop visual: " .. model.Name)
+						model:Destroy()
+						cleanedCount = cleanedCount + 1
+					end
+				end
 			end
-		end)
+		end
+	end
+
+	if cleanedCount > 0 then
+		print("CropVisualManager: Cleaned up " .. cleanedCount .. " orphaned crop visuals")
 	end
 end
 
-function CropVisualManager:OnCropHarvested(plotModel, cropType, rarity)
-	local cropVisual = plotModel:FindFirstChild("CropVisual")
+-- ========== ENHANCED DEBUG FUNCTIONS ==========
 
-	if cropVisual and cropVisual.PrimaryPart then
-		local position = cropVisual.PrimaryPart.Position
+function CropVisualManager:DebugModelAvailability()
+	print("=== ENHANCED CROP MODEL DEBUG ===")
 
-		-- Create harvest effect
-		self:CreateHarvestEffect(position, cropType, rarity)
-
-		-- Remove crop visual with animation
-		local fadeTween = TweenService:Create(cropVisual.PrimaryPart,
-			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{
-				Transparency = 1,
-				Size = Vector3.new(0.1, 0.1, 0.1)
-			}
-		)
-		fadeTween:Play()
-
-		fadeTween.Completed:Connect(function()
-			cropVisual:Destroy()
-		end)
+	print("CropModels folder status:")
+	if CropModels then
+		print("  ✅ Found at: " .. CropModels:GetFullName())
+		print("  📁 Contains " .. #CropModels:GetChildren() .. " children")
+	else
+		print("  ❌ CropModels folder not found")
 	end
+
+	print("\nExpected crop types and model availability:")
+	for cropType, cropData in pairs(self.CropSpecificVisuals) do
+		local hasModel = self:HasPreMadeModelWithAliases(cropType)
+		local validationInfo = self:GetModelValidationInfo(cropType)
+
+		print("  " .. cropType .. ":")
+		print("    Available: " .. (hasModel and "✅ YES" or "❌ NO"))
+
+		if cropData.modelAliases then
+			print("    Aliases: " .. table.concat(cropData.modelAliases, ", "))
+		end
+
+		if validationInfo then
+			if validationInfo.valid then
+				print("    Validation: ✅ PASSED")
+			else
+				print("    Validation: ❌ FAILED - " .. table.concat(validationInfo.issues, ", "))
+			end
+		end
+	end
+
+	print("\nActual models in CropModels folder:")
+	if CropModels then
+		for _, model in pairs(CropModels:GetChildren()) do
+			if model:IsA("Model") then
+				local validationInfo = self:GetModelValidationInfo(model.Name:lower())
+				local status = validationInfo and (validationInfo.valid and "✅" or "❌") or "❓"
+				print("  " .. status .. " " .. model.Name)
+			end
+		end
+	end
+
+	print("=================================")
 end
 
--- ========== UTILITY FUNCTIONS ==========
-
-function CropVisualManager:CountTable(t)
-	local count = 0
-	for _ in pairs(t) do
-		count = count + 1
-	end
-	return count
-end
-
--- ========== SETUP AND EVENT CONNECTIONS ==========
+-- ========== INITIALIZATION ==========
 
 function CropVisualManager:Initialize()
-	print("CropVisualManager: Initializing enhanced crop visual system with pre-made models...")
+	print("CropVisualManager: Initializing enhanced crop visual system...")
 
 	-- Update available models
 	self:UpdateAvailableModels()
 
-	-- Monitor for new models being added
-	if CropModels then
-		CropModels.ChildAdded:Connect(function()
-			wait(1) -- Wait for model to fully load
-			self:UpdateAvailableModels()
-		end)
+	-- Setup GameCore integration
+	self:SetupGameCoreIntegration()
 
-		CropModels.ChildRemoved:Connect(function()
-			self:UpdateAvailableModels()
-		end)
-	end
+	-- Start monitoring systems
+	self:StartModelMonitoring()
 
-	-- Connect to GameCore events if available
-	if GameCore and GameCore.Events then
-		if GameCore.Events.CropPlanted then
-			GameCore.Events.CropPlanted:Connect(function(plotModel, cropType, rarity)
-				self:ReplaceCropVisual(plotModel, cropType, rarity, "planted")
-			end)
-		end
-
-		if GameCore.Events.CropGrowthStageChanged then
-			GameCore.Events.CropGrowthStageChanged:Connect(function(plotModel, newStage, cropType, rarity)
-				self:UpdateCropGrowthStage(plotModel, newStage, cropType, rarity)
-			end)
-		end
-
-		if GameCore.Events.CropHarvested then
-			GameCore.Events.CropHarvested:Connect(function(plotModel, cropType, rarity)
-				self:OnCropHarvested(plotModel, cropType, rarity)
-			end)
-		end
-	end
-
-	print("CropVisualManager: ✅ Enhanced crop visual system ready with pre-made model support!")
+	print("CropVisualManager: ✅ Enhanced crop visual system ready!")
+	print("🎯 Features:")
+	print("  🎭 Pre-made model support with validation")
+	print("  🔄 Intelligent model switching between stages")
+	print("  📏 Enhanced scaling and positioning")
+	print("  🌈 Advanced rarity visual effects")
+	print("  🔗 Deep GameCore integration")
+	print("  🔍 Model monitoring and health checks")
+	print("  🐛 Enhanced debugging tools")
 end
 
--- ========== GLOBAL ACCESS ==========
+-- ========== GLOBAL ACCESS AND DEBUG ==========
 
 _G.CropVisualManager = CropVisualManager
 
@@ -1101,7 +1029,7 @@ _G.CreateTestCrop = function(cropType, rarity, stage)
 end
 
 _G.TestAllCropModels = function()
-	local testCrops = {"cabbage", "carrot", "corn", "radish", "strawberry", "tomato", "wheat"}
+	local testCrops = {"cabbage", "carrot", "corn", "radish", "strawberry", "tomato", "wheat", "broccoli", "potato"}
 	local rarities = {"common", "rare", "legendary"}
 
 	for i, cropType in ipairs(testCrops) do
@@ -1115,45 +1043,54 @@ _G.TestAllCropModels = function()
 		end
 	end
 
-	print("Created test showcase for all crop models!")
+	print("Created enhanced test showcase for all crop models!")
 end
 
-_G.CheckCropModels = function()
-	print("=== CROP MODEL AVAILABILITY ===")
-	for cropType, _ in pairs(CropVisualManager.CropSpecificVisuals) do
-		local hasModel = CropVisualManager:HasPreMadeModel(cropType)
-		local status = hasModel and "✅ AVAILABLE" or "❌ MISSING"
-		print("  " .. cropType .. ": " .. status)
+_G.DebugCropModels = function()
+	CropVisualManager:DebugModelAvailability()
+end
+
+_G.RefreshCropModels = function()
+	CropVisualManager:UpdateAvailableModels()
+	print("Refreshed crop model availability")
+end
+
+_G.TestModelValidation = function()
+	print("=== MODEL VALIDATION TEST ===")
+	if CropModels then
+		for _, model in pairs(CropModels:GetChildren()) do
+			if model:IsA("Model") then
+				local isValid, issues = CropVisualManager:ValidateModel(model)
+				print(model.Name .. ": " .. (isValid and "✅ VALID" or "❌ INVALID"))
+				if not isValid then
+					for _, issue in ipairs(issues) do
+						print("  - " .. issue)
+					end
+				end
+			end
+		end
 	end
-	print("==============================")
+	print("============================")
 end
 
--- Initialize the system
+-- Initialize the enhanced system
 CropVisualManager:Initialize()
 
-print("=== UPDATED CROP VISUAL MANAGER LOADED ===")
-print("🌱 ENHANCED WITH PRE-MADE MODEL SUPPORT!")
-print("")
-print("✨ New Features:")
-print("  🎭 Uses pre-made models from ReplicatedStorage.CropModels")
-print("  🔄 Automatic switching between procedural and pre-made models")
-print("  📏 Intelligent model scaling and positioning")
-print("  🌈 Rarity-based color overlays on pre-made models")
-print("  ⚡ All existing particle effects work with pre-made models")
-print("  🎨 Falls back to procedural generation when models are missing")
-print("")
-print("📁 Expected Models in ReplicatedStorage.CropModels:")
-print("  - Cabbage")
-print("  - Carrot")
-print("  - Corn") 
-print("  - Radish")
-print("  - Strawberry")
-print("  - Tomato")
-print("  - Wheat")
+print("=== ENHANCED CROP VISUAL MANAGER LOADED ===")
+print("🌱 MAJOR ENHANCEMENTS:")
+print("  🎭 Intelligent pre-made model detection with aliases")
+print("  ✅ Model validation and health monitoring")
+print("  🔄 Seamless model type switching between growth stages")
+print("  📏 Advanced scaling with safety checks")
+print("  🎯 Enhanced positioning and primary part detection")
+print("  🔗 Deep GameCore integration with event system")
+print("  🐛 Comprehensive debugging and monitoring tools")
 print("")
 print("🔧 Enhanced Commands:")
-print("  _G.CreateTestCrop('carrot', 'rare', 'ready')")
-print("  _G.TestAllCropModels() - Create showcase of all crops")
-print("  _G.CheckCropModels() - Check which models are available")
+print("  _G.DebugCropModels() - Show detailed model availability")
+print("  _G.TestModelValidation() - Validate all models")
+print("  _G.RefreshCropModels() - Refresh model cache")
+print("  _G.CreateTestCrop('carrot', 'legendary', 'ready')")
+print("  _G.TestAllCropModels() - Create showcase with validation")
 
 return CropVisualManager

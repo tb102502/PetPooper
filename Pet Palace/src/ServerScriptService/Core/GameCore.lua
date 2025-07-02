@@ -82,6 +82,22 @@ GameCore.Models = {
 -- Reference to ShopSystem (will be injected)
 GameCore.ShopSystem = nil
 
+local function WaitForCropVisualManager()
+	local attempts = 0
+	while not _G.CropVisualManager and attempts < 30 do
+		wait(0.5)
+		attempts = attempts + 1
+	end
+
+	if not _G.CropVisualManager then
+		warn("GameCore: CropVisualManager not found after 15 seconds - crop visuals may not work properly")
+		return nil
+	end
+
+	print("GameCore: CropVisualManager integration established")
+	return _G.CropVisualManager
+end
+
 -- ========== INITIALIZATION ==========
 
 -- FIXED GameCore Initialize Method - Add this to your GameCore.lua
@@ -135,9 +151,50 @@ function GameCore:Initialize(shopSystem)
 	self:SetupAdminCommands()
 	self:InitializeClickerMilkingSystem()
 	self:AddClickerMilkingAdminCommands()
+	self:InitializeCropEventSystem()
 	print("GameCore: ✅ FIXED core game system initialization complete!")
 	return true
 end
+
+function GameCore:InitializeCropEventSystem()
+	print("GameCore: Initializing crop event system for CropVisualManager integration...")
+
+	-- Create events that CropVisualManager can listen to
+	if not self.Events then
+		self.Events = {}
+	end
+
+	-- Create bindable events for crop system communication
+	self.Events.CropPlanted = Instance.new("BindableEvent")
+	self.Events.CropGrowthStageChanged = Instance.new("BindableEvent")
+	self.Events.CropHarvested = Instance.new("BindableEvent")
+
+	print("GameCore: Crop event system initialized")
+end
+
+-- ADD this to your existing GameCore:Initialize() method (add this line):
+
+
+print("GameCore: ✅ CROPVISUALMANAGER INTEGRATION COMPLETE!")
+print("🌱 NEW CROP SYSTEM FEATURES:")
+print("  🎨 Integrated with CropVisualManager for enhanced visuals")
+print("  🏗️ Uses pre-made models from ReplicatedStorage.CropModels")
+print("  🔄 Automatic fallback to procedural generation")
+print("  ✨ Enhanced growth stage transitions")
+print("  🌾 Visual harvest effects using pre-made models")
+print("  🎯 Better click detection on crop models")
+print("")
+print("🔧 TECHNICAL IMPROVEMENTS:")
+print("  📡 Event system for crop state changes")
+print("  🎭 Smart model switching between growth stages")
+print("  🌈 Enhanced rarity visual effects")
+print("  🔗 Seamless integration with existing farming system")
+print("")
+print("📁 REQUIRED SETUP:")
+print("  1. Place crop models in ReplicatedStorage.CropModels")
+print("  2. Models should be named: Carrot, Corn, Strawberry, etc.")
+print("  3. CropVisualManager will automatically detect and use them")
+print("  4. Falls back to procedural generation if models missing")
 
 function GameCore:SetupClickerRemoteEvents()
 	local remoteFolder = ReplicatedStorage:FindFirstChild("GameRemotes")
@@ -1994,103 +2051,47 @@ function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 			return false
 		end
 
+		-- Remove any existing crop
 		local existingCrop = plotModel:FindFirstChild("CropModel")
 		if existingCrop then
 			existingCrop:Destroy()
 		end
 
-		-- Create crop model
-		local cropModel = Instance.new("Model")
-		cropModel.Name = "CropModel"
-		cropModel.Parent = plotModel
+		-- UPDATED: Use CropVisualManager for crop creation
+		local cropType = seedData.resultCropId
+		local growthStage = "planted" -- Start with planted stage
 
-		-- Get enhanced crop appearance with rarity
-		local cropAppearance = self:GetEnhancedCropAppearance(seedId, cropRarity)
+		local cropModel = nil
 
-		-- Create crop part with rarity effects
-		local cropPart = Instance.new("Part")
-		cropPart.Name = "Crop"
-		cropPart.Size = Vector3.new(2, 1, 2)
-		cropPart.Material = cropAppearance.material
-		cropPart.Color = cropAppearance.color
-		cropPart.Anchored = true
-		cropPart.CanCollide = false
-		cropPart.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
-		cropPart.Parent = cropModel
+		-- Try to use CropVisualManager if available
+		local CropVisualManager = _G.CropVisualManager or WaitForCropVisualManager()
 
-		-- Apply rarity-specific size multiplier
-		local raritySize = ItemConfig.GetRaritySize(cropRarity)
-		local baseSize = cropPart.Size
+		if CropVisualManager then
+			print("🎨 GameCore: Using CropVisualManager for " .. cropType .. " (" .. cropRarity .. ")")
+			cropModel = CropVisualManager:CreateCropModel(cropType, cropRarity, growthStage)
+			cropModel.Name = "CropModel"
+			cropModel.Parent = plotModel
 
-		-- Apply crop-specific shape and rarity scaling
-		if cropAppearance.shape == "corn" then
-			cropPart.Shape = Enum.PartType.Cylinder
-			cropPart.Size = Vector3.new(0.5 * raritySize, 3 * raritySize, 0.5 * raritySize)
-			cropPart.CFrame = spotPart.CFrame + Vector3.new(0, 1.5 * raritySize, 0)
-			cropPart.Orientation = Vector3.new(0, 0, 90)
-		elseif cropAppearance.shape == "strawberry" then
-			cropPart.Shape = Enum.PartType.Ball
-			cropPart.Size = Vector3.new(1.5 * raritySize, 1.5 * raritySize, 1.5 * raritySize)
-		elseif cropAppearance.shape == "golden" then
-			cropPart.Shape = Enum.PartType.Ball
-			cropPart.Material = Enum.Material.Neon
-			cropPart.Size = Vector3.new(2 * raritySize, 2 * raritySize, 2 * raritySize)
-		elseif cropAppearance.shape == "sunflower" then
-			cropPart.Shape = Enum.PartType.Cylinder
-			cropPart.Material = Enum.Material.Neon
-			cropPart.Size = Vector3.new(1 * raritySize, 4 * raritySize, 1 * raritySize)
-			cropPart.CFrame = spotPart.CFrame + Vector3.new(0, 2 * raritySize, 0)
+			-- Position the crop visual
+			if cropModel.PrimaryPart then
+				cropModel.PrimaryPart.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
+			end
 		else
-			cropPart.Size = Vector3.new(2 * raritySize, 1 * raritySize, 2 * raritySize)
+			-- Fallback to simple procedural creation
+			warn("GameCore: CropVisualManager not available, using fallback method")
+			cropModel = self:CreateSimpleCropModel(plotModel, seedId, seedData, cropRarity)
 		end
 
-		-- Add rarity effects
-		self:AddRarityEffects(cropPart, cropRarity)
+		if not cropModel then
+			warn("GameCore: Failed to create crop model")
+			return false
+		end
 
-		-- Create enhanced growth indicator
-		local indicator = Instance.new("Part")
-		indicator.Name = "GrowthIndicator"
-		indicator.Size = Vector3.new(0.5, 3, 0.5)
-		indicator.Material = Enum.Material.Neon
-		indicator.Color = Color3.fromRGB(255, 100, 100)
-		indicator.Anchored = true
-		indicator.CanCollide = false
-		indicator.CFrame = spotPart.CFrame + Vector3.new(2, 2, 0)
-		indicator.Parent = cropModel
+		-- Add click detector for harvesting with enhanced detection
+		self:SetupCropClickDetection(cropModel, plotModel)
 
-		-- Add rarity indicator
-		local rarityIndicator = Instance.new("Part")
-		rarityIndicator.Name = "RarityIndicator"
-		rarityIndicator.Size = Vector3.new(0.3, 0.3, 0.3)
-		rarityIndicator.Shape = Enum.PartType.Ball
-		rarityIndicator.Material = Enum.Material.Neon
-		rarityIndicator.Color = ItemConfig.GetRarityColor(cropRarity)
-		rarityIndicator.Anchored = true
-		rarityIndicator.CanCollide = false
-		rarityIndicator.CFrame = spotPart.CFrame + Vector3.new(-2, 2, 0)
-		rarityIndicator.Parent = cropModel
-
-		-- Add click detector for harvesting
-		local clickDetector = Instance.new("ClickDetector")
-		clickDetector.MaxActivationDistance = 10
-		clickDetector.Parent = cropPart
-
-		clickDetector.MouseClick:Connect(function(clickingPlayer)
-			local plotOwner = self:GetPlotOwner(plotModel)
-			if clickingPlayer.Name == plotOwner then
-				local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-				if growthStage >= 4 then
-					self:HarvestCrop(clickingPlayer, plotModel)
-				else
-					local timeLeft = self:GetCropTimeRemaining(plotModel)
-					self:SendNotification(clickingPlayer, "Crop Growing", 
-						"Crop is still growing! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "info")
-				end
-			end
-		end)
-
-		-- Start enhanced growth timer
-		self:StartEnhancedCropGrowthTimer(plotModel, seedData, cropAppearance, cropRarity)
+		-- Start enhanced growth timer with visual updates
+		self:StartEnhancedCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
 
 		return true
 	end)
@@ -2103,187 +2104,68 @@ function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 	return true
 end
 
-function GameCore:GetEnhancedCropAppearance(seedId, cropRarity)
-	local baseAppearances = {
-		carrot_seeds = {
-			color = Color3.fromRGB(255, 140, 0),
-			material = Enum.Material.SmoothPlastic,
-			shape = "carrot"
-		},
-		corn_seeds = {
-			color = Color3.fromRGB(255, 255, 0),
-			material = Enum.Material.SmoothPlastic,
-			shape = "corn"
-		},
-		strawberry_seeds = {
-			color = Color3.fromRGB(220, 20, 60),
-			material = Enum.Material.SmoothPlastic,
-			shape = "strawberry"
-		},
-		golden_seeds = {
-			color = Color3.fromRGB(255, 215, 0),
-			material = Enum.Material.Neon,
-			shape = "golden"
-		},
-		wheat_seeds = {
-			color = Color3.fromRGB(218, 165, 32),
-			material = Enum.Material.SmoothPlastic,
-			shape = "wheat"
-		},
-		potato_seeds = {
-			color = Color3.fromRGB(160, 82, 45),
-			material = Enum.Material.SmoothPlastic,
-			shape = "potato"
-		},
-		cabbage_seeds = {
-			color = Color3.fromRGB(34, 139, 34),
-			material = Enum.Material.LeafyGrass,
-			shape = "cabbage"
-		},
-		radish_seeds = {
-			color = Color3.fromRGB(220, 20, 60),
-			material = Enum.Material.SmoothPlastic,
-			shape = "radish"
-		},
-		broccoli_seeds = {
-			color = Color3.fromRGB(34, 139, 34),
-			material = Enum.Material.LeafyGrass,
-			shape = "broccoli"
-		},
-		tomato_seeds = {
-			color = Color3.fromRGB(255, 99, 71),
-			material = Enum.Material.SmoothPlastic,
-			shape = "tomato"
-		},
-		glorious_sunflower_seeds = {
-			color = Color3.fromRGB(255, 215, 0),
-			material = Enum.Material.Neon,
-			shape = "sunflower"
-		}
-	}
+-- ADD this new method for fallback crop creation
+function GameCore:CreateSimpleCropModel(plotModel, seedId, seedData, cropRarity)
+	local spotPart = plotModel:FindFirstChild("SpotPart")
+	if not spotPart then return nil end
 
-	local appearance = baseAppearances[seedId] or {
-		color = Color3.fromRGB(100, 200, 100),
-		material = Enum.Material.LeafyGrass,
-		shape = "default"
-	}
+	-- Create simple crop model as fallback
+	local cropModel = Instance.new("Model")
+	cropModel.Name = "CropModel"
+	cropModel.Parent = plotModel
 
-	-- Modify appearance based on rarity
-	local rarityColor = ItemConfig.GetRarityColor(cropRarity)
-	if cropRarity ~= "common" then
-		-- Blend base color with rarity color
-		local baseColor = appearance.color
-		local blendFactor = 0.3
-		appearance.color = Color3.new(
-			baseColor.R * (1 - blendFactor) + rarityColor.R * blendFactor,
-			baseColor.G * (1 - blendFactor) + rarityColor.G * blendFactor,
-			baseColor.B * (1 - blendFactor) + rarityColor.B * blendFactor
-		)
+	-- Create basic crop part
+	local cropPart = Instance.new("Part")
+	cropPart.Name = "Crop"
+	cropPart.Size = Vector3.new(2, 1, 2)
+	cropPart.Material = Enum.Material.SmoothPlastic
+	cropPart.Color = self:GetCropColor(seedData.resultCropId, cropRarity)
+	cropPart.Anchored = true
+	cropPart.CanCollide = false
+	cropPart.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
+	cropPart.Parent = cropModel
 
-		-- Upgrade material for higher rarities
-		if cropRarity == "epic" or cropRarity == "legendary" then
-			appearance.material = Enum.Material.Neon
-		elseif cropRarity == "rare" then
-			appearance.material = Enum.Material.ForceField
-		end
-	end
+	-- Apply rarity size scaling
+	local raritySize = ItemConfig.GetRaritySize(cropRarity)
+	cropPart.Size = cropPart.Size * raritySize
 
-	return appearance
+	-- Add rarity effects
+	self:AddBasicRarityEffects(cropPart, cropRarity)
+
+	cropModel.PrimaryPart = cropPart
+	return cropModel
 end
 
-function GameCore:AddRarityEffects(cropPart, cropRarity)
+-- ADD this method for basic rarity effects
+function GameCore:AddBasicRarityEffects(cropPart, cropRarity)
 	if cropRarity == "common" then return end
 
-	-- Add particle effects for higher rarities
-	if cropRarity == "uncommon" then
-		self:AddSparkleEffect(cropPart, Color3.fromRGB(0, 255, 0))
-	elseif cropRarity == "rare" then
-		self:AddGlowEffect(cropPart, Color3.fromRGB(255, 215, 0))
-		self:AddSparkleEffect(cropPart, Color3.fromRGB(255, 215, 0))
-	elseif cropRarity == "epic" then
-		self:AddAuraEffect(cropPart, Color3.fromRGB(128, 0, 128))
-		self:AddGlowEffect(cropPart, Color3.fromRGB(128, 0, 128))
-	elseif cropRarity == "legendary" then
-		self:AddLegendaryEffect(cropPart)
-		self:AddAuraEffect(cropPart, Color3.fromRGB(255, 100, 100))
-		self:AddGlowEffect(cropPart, Color3.fromRGB(255, 100, 100))
-	end
-end
-
-function GameCore:AddSparkleEffect(part, color)
-	spawn(function()
-		while part and part.Parent do
-			local sparkle = Instance.new("Part")
-			sparkle.Size = Vector3.new(0.1, 0.1, 0.1)
-			sparkle.Shape = Enum.PartType.Ball
-			sparkle.Material = Enum.Material.Neon
-			sparkle.Color = color
-			sparkle.CanCollide = false
-			sparkle.Anchored = true
-			sparkle.Position = part.Position + Vector3.new(
-				math.random(-2, 2),
-				math.random(0, 3),
-				math.random(-2, 2)
-			)
-			sparkle.Parent = part
-
-			local tween = TweenService:Create(sparkle,
-				TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{
-					Position = sparkle.Position + Vector3.new(0, 5, 0),
-					Transparency = 1
-				}
-			)
-			tween:Play()
-			tween.Completed:Connect(function()
-				sparkle:Destroy()
-			end)
-
-			wait(math.random(1, 3))
-		end
-	end)
-end
-
-function GameCore:AddGlowEffect(part, color)
+	-- Add glow for higher rarities
 	local light = Instance.new("PointLight")
-	light.Color = color
-	light.Brightness = 2
+	light.Parent = cropPart
+
+	if cropRarity == "uncommon" then
+		light.Color = Color3.fromRGB(0, 255, 0)
+		light.Brightness = 1
+	elseif cropRarity == "rare" then
+		light.Color = Color3.fromRGB(255, 215, 0)
+		light.Brightness = 1.5
+		cropPart.Material = Enum.Material.Neon
+	elseif cropRarity == "epic" then
+		light.Color = Color3.fromRGB(128, 0, 128)
+		light.Brightness = 2
+		cropPart.Material = Enum.Material.Neon
+	elseif cropRarity == "legendary" then
+		light.Color = Color3.fromRGB(255, 100, 100)
+		light.Brightness = 3
+		cropPart.Material = Enum.Material.Neon
+	end
+
 	light.Range = 10
-	light.Parent = part
 end
 
-function GameCore:AddAuraEffect(part, color)
-	local aura = Instance.new("SelectionBox")
-	aura.Color3 = color
-	aura.LineThickness = 0.2
-	aura.Transparency = 0.5
-	aura.Adornee = part
-	aura.Parent = part
-end
-
-function GameCore:AddLegendaryEffect(part)
-	-- Pulsing effect
-	spawn(function()
-		local originalSize = part.Size
-		while part and part.Parent do
-			local pulseUp = TweenService:Create(part,
-				TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{Size = originalSize * 1.1}
-			)
-			local pulseDown = TweenService:Create(part,
-				TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-				{Size = originalSize}
-			)
-
-			pulseUp:Play()
-			pulseUp.Completed:Wait()
-			pulseDown:Play()
-			pulseDown.Completed:Wait()
-		end
-	end)
-end
-
-function GameCore:StartEnhancedCropGrowthTimer(plotModel, seedData, cropAppearance, cropRarity)
+-- REPLACE your existing StartEnhancedCropGrowthTimer method with this updated version:
+function GameCore:StartEnhancedCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
 	spawn(function()
 		local growTime = seedData.growTime
 		local stages = seedData.stages or {"planted", "sprouting", "growing", "ready"}
@@ -2295,39 +2177,24 @@ function GameCore:StartEnhancedCropGrowthTimer(plotModel, seedData, cropAppearan
 			if plotModel and plotModel.Parent then
 				local currentStage = plotModel:GetAttribute("GrowthStage") or 0
 				if currentStage == stage then
-					plotModel:SetAttribute("GrowthStage", stage + 1)
+					local newStageIndex = stage + 1
+					local newStageName = stages[newStageIndex + 1] or "ready"
 
-					local cropModel = plotModel:FindFirstChild("CropModel")
-					if cropModel then
-						-- Update growth indicator
-						local indicator = cropModel:FindFirstChild("GrowthIndicator")
-						if indicator then
-							local colors = {
-								Color3.fromRGB(255, 100, 100),
-								Color3.fromRGB(255, 200, 100),
-								Color3.fromRGB(255, 255, 100),
-								Color3.fromRGB(100, 255, 100)
-							}
-							indicator.Color = colors[stage + 2] or colors[4]
-						end
+					plotModel:SetAttribute("GrowthStage", newStageIndex)
 
-						-- Scale crop as it grows with rarity multiplier
-						local crop = cropModel:FindFirstChild("Crop")
-						if crop then
-							local baseScale = 0.3 + (stage + 1) * 0.425
-							local rarityScale = ItemConfig.GetRaritySize(cropRarity)
-							local finalScale = baseScale * rarityScale
+					-- UPDATED: Use CropVisualManager for stage transitions
+					local CropVisualManager = _G.CropVisualManager
+					if CropVisualManager then
+						print("🌱 GameCore: Updating crop stage to " .. newStageName .. " for " .. cropType)
+						CropVisualManager:UpdateCropGrowthStage(plotModel, newStageName, cropType, cropRarity)
+					else
+						-- Fallback to basic visual update
+						self:UpdateCropVisualBasic(plotModel, newStageIndex, cropRarity)
+					end
 
-							if cropAppearance.shape == "corn" then
-								crop.Size = Vector3.new(0.5 * finalScale, 3 * finalScale, 0.5 * finalScale)
-							elseif cropAppearance.shape == "strawberry" then
-								crop.Size = Vector3.new(1.5 * finalScale, 1.5 * finalScale, 1.5 * finalScale)
-							elseif cropAppearance.shape == "golden" or cropAppearance.shape == "sunflower" then
-								crop.Size = Vector3.new(2 * finalScale, 2 * finalScale, 2 * finalScale)
-							else
-								crop.Size = Vector3.new(2 * finalScale, 1 * finalScale, 2 * finalScale)
-							end
-						end
+					-- Fire growth stage event if other systems need it
+					if self.Events and self.Events.CropGrowthStageChanged then
+						self.Events.CropGrowthStageChanged:Fire(plotModel, newStageName, cropType, cropRarity)
 					end
 				end
 			else
@@ -2338,24 +2205,273 @@ function GameCore:StartEnhancedCropGrowthTimer(plotModel, seedData, cropAppearan
 		-- Mark as fully grown
 		if plotModel and plotModel.Parent then
 			plotModel:SetAttribute("GrowthStage", #stages)
+
+			-- Final stage update to "ready" with pre-made models
+			local CropVisualManager = _G.CropVisualManager
+			if CropVisualManager then
+				print("🌾 GameCore: Crop fully grown - updating to ready stage with pre-made model")
+				CropVisualManager:UpdateCropGrowthStage(plotModel, "ready", cropType, cropRarity)
+			end
 		end
 	end)
 end
 
-function GameCore:GetCropTimeRemaining(plotModel)
-	local plantedTime = plotModel:GetAttribute("PlantedTime") or 0
-	local seedType = plotModel:GetAttribute("SeedType") or ""
+-- ADD this method for basic visual updates when CropVisualManager is not available
+function GameCore:UpdateCropVisualBasic(plotModel, stageIndex, cropRarity)
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if not cropModel or not cropModel.PrimaryPart then return end
 
-	if plantedTime == 0 or seedType == "" then return 0 end
+	local crop = cropModel.PrimaryPart
 
-	local seedData = ItemConfig.GetSeedData(seedType)
-	if not seedData then return 0 end
+	-- Update size based on growth stage
+	local baseScale = 0.3 + stageIndex * 0.425
+	local rarityScale = ItemConfig.GetRaritySize(cropRarity)
+	local finalScale = baseScale * rarityScale
 
-	local elapsedTime = os.time() - plantedTime
-	local totalGrowTime = seedData.growTime
+	-- Animate size change
+	local sizeTween = TweenService:Create(crop,
+		TweenInfo.new(1, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+		{Size = Vector3.new(2, 1, 2) * finalScale}
+	)
+	sizeTween:Play()
 
-	return math.max(0, totalGrowTime - elapsedTime)
+	-- Update color to show growth
+	local stageColors = {
+		Color3.fromRGB(139, 69, 19),  -- Brown (planted)
+		Color3.fromRGB(34, 139, 34),  -- Green (sprouting)
+		Color3.fromRGB(50, 205, 50),  -- Lime (growing)
+		Color3.fromRGB(255, 215, 0)   -- Gold (ready)
+	}
+
+	local targetColor = stageColors[stageIndex + 1] or stageColors[4]
+	local colorTween = TweenService:Create(crop,
+		TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{Color = targetColor}
+	)
+	colorTween:Play()
 end
+
+-- ADD this method for enhanced crop click detection
+function GameCore:SetupCropClickDetection(cropModel, plotModel)
+	-- Remove existing click detectors
+	for _, obj in pairs(cropModel:GetDescendants()) do
+		if obj:IsA("ClickDetector") then
+			obj:Destroy()
+		end
+	end
+
+	-- Find the best part for click detection
+	local clickablePart = cropModel.PrimaryPart
+	if not clickablePart then
+		-- Find any suitable part
+		for _, part in pairs(cropModel:GetDescendants()) do
+			if part:IsA("BasePart") then
+				clickablePart = part
+				break
+			end
+		end
+	end
+
+	if not clickablePart then
+		warn("GameCore: No suitable part found for click detection in crop model")
+		return
+	end
+
+	-- Add click detector
+	local clickDetector = Instance.new("ClickDetector")
+	clickDetector.MaxActivationDistance = 15
+	clickDetector.Parent = clickablePart
+
+	clickDetector.MouseClick:Connect(function(clickingPlayer)
+		local plotOwner = self:GetPlotOwner(plotModel)
+		if clickingPlayer.Name == plotOwner then
+			local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+			if growthStage >= 4 then
+				self:HarvestCrop(clickingPlayer, plotModel)
+			else
+				local timeLeft = self:GetCropTimeRemaining(plotModel)
+				self:SendNotification(clickingPlayer, "Crop Growing", 
+					"Crop is still growing! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "info")
+			end
+		end
+	end)
+end
+
+-- ADD this method to get crop colors for fallback
+function GameCore:GetCropColor(cropType, rarity)
+	local baseColors = {
+		carrot = Color3.fromRGB(255, 140, 0),
+		corn = Color3.fromRGB(255, 255, 0),
+		strawberry = Color3.fromRGB(220, 20, 60),
+		golden_fruit = Color3.fromRGB(255, 215, 0),
+		wheat = Color3.fromRGB(218, 165, 32),
+		potato = Color3.fromRGB(160, 82, 45),
+		cabbage = Color3.fromRGB(34, 139, 34),
+		radish = Color3.fromRGB(220, 20, 60),
+		broccoli = Color3.fromRGB(34, 139, 34),
+		tomato = Color3.fromRGB(255, 99, 71),
+		glorious_sunflower = Color3.fromRGB(255, 215, 0)
+	}
+
+	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)
+
+	-- Modify color based on rarity
+	if rarity == "legendary" then
+		return baseColor:lerp(Color3.fromRGB(255, 100, 100), 0.3)
+	elseif rarity == "epic" then
+		return baseColor:lerp(Color3.fromRGB(128, 0, 128), 0.2)
+	elseif rarity == "rare" then
+		return baseColor:lerp(Color3.fromRGB(255, 215, 0), 0.15)
+	elseif rarity == "uncommon" then
+		return baseColor:lerp(Color3.fromRGB(0, 255, 0), 0.1)
+	else
+		return baseColor
+	end
+end
+
+-- UPDATED: Enhanced HarvestCrop method with visual effects
+function GameCore:HarvestCrop(player, plotModel)
+	print("🌾 GameCore: Enhanced harvest request from " .. player.Name .. " for plot " .. plotModel.Name)
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then 
+		self:SendNotification(player, "Error", "Player data not found", "error")
+		return false
+	end
+
+	local plotOwner = self:GetPlotOwner(plotModel)
+	if plotOwner ~= player.Name then
+		self:SendNotification(player, "Not Your Plot", "You can only harvest your own crops!", "error")
+		return false
+	end
+
+	-- Check if crop is actually ready
+	local isActuallyEmpty = self:IsPlotActuallyEmpty(plotModel)
+	if isActuallyEmpty then
+		self:SendNotification(player, "Nothing to Harvest", "This plot doesn't have any crops to harvest!", "warning")
+		return false
+	end
+
+	local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+	if growthStage < 4 then
+		local timeLeft = self:GetCropTimeRemaining(plotModel)
+		self:SendNotification(player, "Not Ready", 
+			"Crop is not ready for harvest yet! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "warning")
+		return false
+	end
+
+	-- Get crop data
+	local plantType = plotModel:GetAttribute("PlantType") or ""
+	local seedType = plotModel:GetAttribute("SeedType") or ""
+	local cropRarity = plotModel:GetAttribute("Rarity") or "common"
+
+	local cropData = ItemConfig.GetCropData(plantType)
+	local seedData = ItemConfig.GetSeedData(seedType)
+
+	if not cropData or not seedData then
+		self:SendNotification(player, "Invalid Crop", "Crop data not found for " .. plantType, "error")
+		return false
+	end
+
+	-- UPDATED: Create harvest visual effect using CropVisualManager
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if cropModel and cropModel.PrimaryPart then
+		local position = cropModel.PrimaryPart.Position
+
+		-- Use CropVisualManager for harvest effects if available
+		local CropVisualManager = _G.CropVisualManager
+		if CropVisualManager then
+			print("✨ GameCore: Creating harvest effect using CropVisualManager")
+			CropVisualManager:OnCropHarvested(plotModel, plantType, cropRarity)
+		else
+			-- Fallback harvest effect
+			self:CreateBasicHarvestEffect(position, cropRarity)
+		end
+	end
+
+	-- Calculate yield with rarity bonus
+	local baseYield = seedData.yieldAmount or 1
+	local rarityMultiplier = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].valueMultiplier or 1.0
+	local finalYield = math.floor(baseYield * rarityMultiplier)
+
+	-- Initialize farming inventory if needed
+	if not playerData.farming then
+		playerData.farming = {inventory = {}}
+	end
+	if not playerData.farming.inventory then
+		playerData.farming.inventory = {}
+	end
+
+	-- Add crops to inventory
+	local currentAmount = playerData.farming.inventory[plantType] or 0
+	playerData.farming.inventory[plantType] = currentAmount + finalYield
+
+	-- Clear plot properly
+	self:ClearPlotProperly(plotModel)
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.cropsHarvested = (playerData.stats.cropsHarvested or 0) + finalYield
+	if cropRarity ~= "common" then
+		playerData.stats.rareCropsHarvested = (playerData.stats.rareCropsHarvested or 0) + 1
+	end
+
+	-- Save and notify
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	local rarityName = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].name or cropRarity
+	local rarityEmoji = cropRarity == "legendary" and "👑" or 
+		cropRarity == "epic" and "💜" or 
+		cropRarity == "rare" and "✨" or 
+		cropRarity == "uncommon" and "💚" or "⚪"
+
+	self:SendNotification(player, "🌾 Crop Harvested!", 
+		"Harvested " .. finalYield .. "x " .. rarityEmoji .. " " .. rarityName .. " " .. cropData.name .. "!\n" ..
+			(cropRarity ~= "common" and "🎉 Bonus yield from rarity!" or ""), "success")
+
+	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
+	return true
+end
+
+-- ADD this method for basic harvest effects
+function GameCore:CreateBasicHarvestEffect(position, rarity)
+	local particleCount = rarity == "legendary" and 10 or rarity == "epic" and 7 or rarity == "rare" and 5 or 3
+
+	for i = 1, particleCount do
+		local particle = Instance.new("Part")
+		particle.Name = "HarvestParticle"
+		particle.Size = Vector3.new(0.2, 0.2, 0.2)
+		particle.Color = ItemConfig.GetRarityColor(rarity)
+		particle.Material = Enum.Material.Neon
+		particle.CanCollide = false
+		particle.Anchored = true
+		particle.Shape = Enum.PartType.Ball
+		particle.Position = position + Vector3.new(
+			(math.random() - 0.5) * 4,
+			math.random() * 2,
+			(math.random() - 0.5) * 4
+		)
+		particle.Parent = workspace
+
+		local tween = TweenService:Create(particle,
+			TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = particle.Position + Vector3.new(0, 8, 0),
+				Transparency = 1,
+				Size = Vector3.new(0.05, 0.05, 0.05)
+			}
+		)
+		tween:Play()
+		tween.Completed:Connect(function()
+			particle:Destroy()
+		end)
+	end
+end
+
 
 --[[
     Farm Protection System Integration
@@ -3067,106 +3183,6 @@ function GameCore:ClearPlotProperly(plotModel)
 
 	print("🧹 Plot cleared successfully")
 end
-
--- UPDATED: Fixed HarvestCrop method to use proper clearing
-function GameCore:HarvestCrop(player, plotModel)
-	print("🌾 GameCore: Enhanced harvest request from " .. player.Name .. " for plot " .. plotModel.Name)
-
-	local playerData = self:GetPlayerData(player)
-	if not playerData then 
-		self:SendNotification(player, "Error", "Player data not found", "error")
-		return false
-	end
-
-	local plotOwner = self:GetPlotOwner(plotModel)
-	if plotOwner ~= player.Name then
-		self:SendNotification(player, "Not Your Plot", "You can only harvest your own crops!", "error")
-		return false
-	end
-
-	-- FIXED: Better crop readiness check
-	local isActuallyEmpty = self:IsPlotActuallyEmpty(plotModel)
-	if isActuallyEmpty then
-		self:SendNotification(player, "Nothing to Harvest", "This plot doesn't have any crops to harvest!", "warning")
-		return false
-	end
-
-	local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-	if growthStage < 4 then
-		local timeLeft = self:GetCropTimeRemaining(plotModel)
-		self:SendNotification(player, "Not Ready", 
-			"Crop is not ready for harvest yet! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "warning")
-		return false
-	end
-
-	-- Get enhanced crop data with rarity
-	local plantType = plotModel:GetAttribute("PlantType") or ""
-	local seedType = plotModel:GetAttribute("SeedType") or ""
-	local cropRarity = plotModel:GetAttribute("Rarity") or "common"
-
-	local cropData = ItemConfig.GetCropData(plantType)
-	local seedData = ItemConfig.GetSeedData(seedType)
-
-	if not cropData or not seedData then
-		self:SendNotification(player, "Invalid Crop", "Crop data not found for " .. plantType, "error")
-		return false
-	end
-
-	-- Calculate yield with rarity bonus
-	local baseYield = seedData.yieldAmount or 1
-	local rarityMultiplier = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].valueMultiplier or 1.0
-	local finalYield = math.floor(baseYield * rarityMultiplier)
-
-	-- Initialize farming inventory if needed
-	if not playerData.farming then
-		playerData.farming = {inventory = {}}
-	end
-	if not playerData.farming.inventory then
-		playerData.farming.inventory = {}
-	end
-
-	-- Add crops to inventory
-	local currentAmount = playerData.farming.inventory[plantType] or 0
-	playerData.farming.inventory[plantType] = currentAmount + finalYield
-
-	-- FIXED: Use proper plot clearing method
-	self:ClearPlotProperly(plotModel)
-
-	-- Update stats
-	playerData.stats = playerData.stats or {}
-	playerData.stats.cropsHarvested = (playerData.stats.cropsHarvested or 0) + finalYield
-	if cropRarity ~= "common" then
-		playerData.stats.rareCropsHarvested = (playerData.stats.rareCropsHarvested or 0) + 1
-	end
-
-	-- Save and notify
-	self:SavePlayerData(player)
-
-	if self.RemoteEvents.PlayerDataUpdated then
-		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-	end
-
-	local rarityName = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].name or cropRarity
-	local rarityEmoji = cropRarity == "legendary" and "👑" or 
-		cropRarity == "epic" and "💜" or 
-		cropRarity == "rare" and "✨" or 
-		cropRarity == "uncommon" and "💚" or "⚪"
-
-	self:SendNotification(player, "🌾 Crop Harvested!", 
-		"Harvested " .. finalYield .. "x " .. rarityEmoji .. " " .. rarityName .. " " .. cropData.name .. "!\n" ..
-			(cropRarity ~= "common" and "🎉 Bonus yield from rarity!" or ""), "success")
-
-	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
-	return true
-end
-
-print("GameCore: ✅ PLOT OCCUPIED LOGIC FIXED!")
-print("🔧 FIXES APPLIED:")
-print("  ✅ Added robust IsPlotActuallyEmpty method")
-print("  ✅ Fixed plot occupancy check to look for actual crops")
-print("  ✅ Added proper plot clearing method")
-print("  ✅ Enhanced harvest method with better validation")
-print("  ✅ Prevents false 'plot occupied' messages on empty plots")
 
 -- ========== ENSURE PLAYER HAS EXPANDABLE FARM ==========
 
