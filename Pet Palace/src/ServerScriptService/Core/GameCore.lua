@@ -966,10 +966,6 @@ function GameCore:CleanupMilkingSession(userId)
 			objects.bodyPosition:Destroy()
 		end
 
-		if objects.bodyAngularVelocity and objects.bodyAngularVelocity.Parent then
-			objects.bodyAngularVelocity:Destroy()
-		end
-
 		-- Clean up anchoring if using simple method
 		if objects.anchored and character and character:FindFirstChild("HumanoidRootPart") then
 			character.HumanoidRootPart.Anchored = false
@@ -990,7 +986,7 @@ function GameCore:InitializeClickerMilkingSystem()
 		SessionTimeouts = {}, -- [userId] = timeoutTime
 		PlayerPositions = {}, -- [userId] = originalPosition
 		MilkingCows = {}, -- [cowId] = userId (track which cow is being milked)
-		PositioningObjects = {} -- [userId] = {bodyPosition, bodyAngularVelocity}
+		PositioningObjects = {} -- [userId] = {bodyPosition}
 	}
 
 	-- Create remote events for clicker system
@@ -1225,8 +1221,6 @@ end
 
 print("GameCore: ✅ FIXED PLAYER POSITIONING SYSTEM!")
 print("🔧 KEY FIXES:")
-print("  ❌ Removed invalid BodyAngularVelocity.D property")
-print("  🔒 Fixed BodyPosition + BodyAngularVelocity system")
 print("  ⚓ Added alternative simple anchoring method")
 print("  🧹 Enhanced cleanup for all positioning objects")
 print("  🎯 More stable player locking")
