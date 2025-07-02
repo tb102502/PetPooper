@@ -2323,9 +2323,8 @@ function GameCore:GetCropColor(cropType, rarity)
 	end
 end
 
--- UPDATED: Enhanced HarvestCrop method with visual effects
 function GameCore:HarvestCrop(player, plotModel)
-	print("🌾 GameCore: Enhanced harvest request from " .. player.Name .. " for plot " .. plotModel.Name)
+	print("🌾 GameCore: ENHANCED harvest request from " .. player.Name .. " for plot " .. plotModel.Name)
 
 	local playerData = self:GetPlayerData(player)
 	if not playerData then 
@@ -2339,7 +2338,7 @@ function GameCore:HarvestCrop(player, plotModel)
 		return false
 	end
 
-	-- Check if crop is actually ready
+	-- ENHANCED: Check if crop is actually ready with better detection
 	local isActuallyEmpty = self:IsPlotActuallyEmpty(plotModel)
 	if isActuallyEmpty then
 		self:SendNotification(player, "Nothing to Harvest", "This plot doesn't have any crops to harvest!", "warning")
@@ -2367,18 +2366,15 @@ function GameCore:HarvestCrop(player, plotModel)
 		return false
 	end
 
-	-- UPDATED: Create harvest visual effect using CropVisualManager
+	-- ENHANCED: Create visual effects BEFORE removing the crop
 	local cropModel = plotModel:FindFirstChild("CropModel")
 	if cropModel and cropModel.PrimaryPart then
 		local position = cropModel.PrimaryPart.Position
 
-		-- Use CropVisualManager for harvest effects if available
-		local CropVisualManager = _G.CropVisualManager
-		if CropVisualManager then
-			print("✨ GameCore: Creating harvest effect using CropVisualManager")
-			CropVisualManager:OnCropHarvested(plotModel, plantType, cropRarity)
+		-- Create harvest visual effect
+		if _G.CropVisualManager then
+			_G.CropVisualManager:CreateEnhancedHarvestEffect(cropModel, plantType, cropRarity)
 		else
-			-- Fallback harvest effect
 			self:CreateBasicHarvestEffect(position, cropRarity)
 		end
 	end
@@ -2400,8 +2396,11 @@ function GameCore:HarvestCrop(player, plotModel)
 	local currentAmount = playerData.farming.inventory[plantType] or 0
 	playerData.farming.inventory[plantType] = currentAmount + finalYield
 
-	-- Clear plot properly
-	self:ClearPlotProperly(plotModel)
+	-- ENHANCED: Clear plot with comprehensive cleanup
+	local cleanupSuccess = self:ClearPlotProperly(plotModel)
+	if not cleanupSuccess then
+		warn("🚨 Plot cleanup may have failed!")
+	end
 
 	-- Update stats
 	playerData.stats = playerData.stats or {}
@@ -2426,6 +2425,19 @@ function GameCore:HarvestCrop(player, plotModel)
 	self:SendNotification(player, "🌾 Crop Harvested!", 
 		"Harvested " .. finalYield .. "x " .. rarityEmoji .. " " .. rarityName .. " " .. cropData.name .. "!\n" ..
 			(cropRarity ~= "common" and "🎉 Bonus yield from rarity!" or ""), "success")
+
+	-- FINAL VERIFICATION
+	spawn(function()
+		wait(0.5)
+		local verificationCheck = self:VerifyPlotIsClean(plotModel)
+		if verificationCheck then
+			print("✅ Harvest verification passed - plot is clean")
+		else
+			warn("❌ Harvest verification failed - plot may still have crops")
+			-- Force cleanup again
+			self:ClearPlotProperly(plotModel)
+		end
+	end)
 
 	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
 	return true
@@ -3152,14 +3164,26 @@ end
 
 -- ENHANCED: Method to properly clear a plot (use this when harvesting)
 function GameCore:ClearPlotProperly(plotModel)
-	print("🧹 GameCore: Properly clearing plot: " .. plotModel.Name)
+	print("🧹 GameCore: ENHANCED clearing plot: " .. plotModel.Name)
 
-	-- Remove physical crop
-	local cropModel = plotModel:FindFirstChild("CropModel")
-	if cropModel then
-		cropModel:Destroy()
-		print("🧹 Removed CropModel")
+	if not plotModel or not plotModel.Parent then
+		warn("🧹 Invalid plot model provided")
+		return
 	end
+
+	local cropsRemoved = 0
+	local remainingCrops = 0
+	local allChildren = plotModel:GetChildren()
+
+	-- Method 1: Remove ALL instances of CropModel (not just first one)
+	for _, child in pairs(allChildren) do
+		if child:IsA("Model") and child.Name == "CropModel" then
+			print("🧹 Removing CropModel instance: " .. child:GetDebugId())
+			child:Destroy()
+			cropsRemoved = cropsRemoved + 1
+		end
+	end
+	print("🧹 Removed " .. cropsRemoved .. " crops + " .. remainingCrops .. " remaining = " .. (cropsRemoved + remainingCrops) .. " total")
 
 	-- Clear all crop-related attributes
 	plotModel:SetAttribute("IsEmpty", true)
@@ -3173,11 +3197,53 @@ function GameCore:ClearPlotProperly(plotModel)
 	local indicator = plotModel:FindFirstChild("Indicator")
 	if indicator then
 		indicator.Color = Color3.fromRGB(100, 255, 100)
+		print("🧹 Restored indicator to green")
 	end
 
-	print("🧹 Plot cleared successfully")
+	-- Notify CropVisualManager about the harvest
+	if _G.CropVisualManager and _G.CropVisualManager.OnCropHarvested then
+		spawn(function()
+			_G.CropVisualManager:OnCropHarvested(plotModel, plotModel:GetAttribute("PlantType") or "unknown", plotModel:GetAttribute("Rarity") or "common")
+		end)
+	end
+
+	-- Verification - ensure plot is actually clean
+	local finalCheck = self:VerifyPlotIsClean(plotModel)
+	if finalCheck then
+		print("✅ Plot successfully cleaned and verified")
+	else
+		warn("❌ Plot cleanup verification failed!")
+	end
+
+	print("🧹 Plot clearing complete")
+	return cropsRemoved + remainingCrops > 0
 end
 
+-- NEW: Verification method
+function GameCore:VerifyPlotIsClean(plotModel)
+	if not plotModel then return false end
+
+	-- Check for any remaining crop models
+	for _, child in pairs(plotModel:GetChildren()) do
+		if child:IsA("Model") and (
+			child.Name == "CropModel" or 
+				child.Name == "CropVisual" or
+				child:GetAttribute("CropType")
+			) then
+			warn("🚨 Plot not clean - found: " .. child.Name)
+			return false
+		end
+	end
+
+	-- Check attributes
+	local isEmpty = plotModel:GetAttribute("IsEmpty")
+	if isEmpty ~= true then
+		warn("🚨 Plot not clean - IsEmpty = " .. tostring(isEmpty))
+		return false
+	end
+
+	return true
+end
 -- ========== ENSURE PLAYER HAS EXPANDABLE FARM ==========
 
 function GameCore:EnsurePlayerHasExpandableFarm(player)
@@ -4278,7 +4344,381 @@ function GameCore:SetupAdminCommands()
 
 						print("✅ Reset farm for " .. targetPlayer.Name)
 					end
+					
+				elseif command == "/checkduplicates" then
+					print("=== CHECKING FOR DUPLICATE CROPS ===")
+					local duplicatesFound = 0
 
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							for _, spot in pairs(plantingSpots:GetChildren()) do
+								if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+									local cropCount = 0
+									for _, child in pairs(spot:GetChildren()) do
+										if child:IsA("Model") and child.Name == "CropModel" then
+											cropCount = cropCount + 1
+										end
+									end
+
+									if cropCount > 1 then
+										print("🚨 DUPLICATE FOUND: " .. spot.Name .. " has " .. cropCount .. " CropModels")
+										duplicatesFound = duplicatesFound + 1
+
+										-- List all duplicates
+										for _, child in pairs(spot:GetChildren()) do
+											if child:IsA("Model") and child.Name == "CropModel" then
+												print("  - " .. child:GetDebugId() .. " (CropType: " .. tostring(child:GetAttribute("CropType")) .. ")")
+											end
+										end
+									elseif cropCount == 1 then
+										print("✅ " .. spot.Name .. " has correct single crop")
+									end
+								end
+							end
+						end
+					end
+
+					print("Total duplicates found: " .. duplicatesFound)
+					print("=====================================")
+
+				elseif command == "/cleanduplicates" then
+					print("🧹 Cleaning duplicate crops...")
+					local cleanedCount = 0
+
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							for _, spot in pairs(plantingSpots:GetChildren()) do
+								if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+									local crops = {}
+
+									-- Collect all CropModels
+									for _, child in pairs(spot:GetChildren()) do
+										if child:IsA("Model") and child.Name == "CropModel" then
+											table.insert(crops, child)
+										end
+									end
+
+									-- If more than one, remove extras
+									if #crops > 1 then
+										print("🧹 Cleaning " .. spot.Name .. " (" .. #crops .. " crops found)")
+
+										-- Keep the first one, remove the rest
+										for i = 2, #crops do
+											crops[i]:Destroy()
+											cleanedCount = cleanedCount + 1
+										end
+									end
+								end
+							end
+						end
+					end
+
+					print("✅ Cleaned " .. cleanedCount .. " duplicate crops")
+
+				elseif command == "/forcecleanplot" then
+					local plotName = args[2] or "PlantingSpot_1"
+
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local targetSpot = plantingSpots:FindFirstChild(plotName)
+							if targetSpot then
+								print("🔧 Force cleaning " .. plotName)
+								self:ClearPlotProperly(targetSpot)
+
+								-- Double check
+								wait(0.5)
+								local verification = self:VerifyPlotIsClean(targetSpot)
+								print("Verification result: " .. tostring(verification))
+							else
+								print("❌ Plot " .. plotName .. " not found")
+							end
+						end
+					end
+
+					print("🌾 COMPLETE HARVEST FIX LOADED!")
+					print("🔧 Enhanced Commands:")
+					print("  /checkduplicates - Find plots with multiple crops")
+					print("  /cleanduplicates - Remove duplicate crops") 
+					print("  /forcecleanplot [name] - Force clean specific plot")
+					print("  /debugharvest - Standard harvest debug")
+				elseif command == "/debugcrops" then
+					print("=== CROP MOVEMENT DEBUG ===")
+					local cropsFound = 0
+
+					for _, model in pairs(workspace:GetDescendants()) do
+						if model:IsA("Model") and (model.Name:find("_premade") or model.Name:find("_procedural")) then
+							cropsFound = cropsFound + 1
+							local cropType = model:GetAttribute("CropType") or "unknown"
+							local rarity = model:GetAttribute("Rarity") or "unknown"
+							local isStable = model:GetAttribute("IsStable") or false
+
+							print("Crop " .. cropsFound .. ": " .. cropType .. " (" .. rarity .. ")")
+							print("  Model: " .. model.Name)
+							print("  Stable: " .. tostring(isStable))
+
+							if model.PrimaryPart then
+								print("  Position: " .. tostring(model.PrimaryPart.Position))
+								print("  Anchored: " .. tostring(model.PrimaryPart.Anchored))
+								print("  Velocity: " .. tostring(model.PrimaryPart.AssemblyLinearVelocity.Magnitude))
+							end
+							print("")
+						end
+					end
+
+					if cropsFound == 0 then
+						print("No crops found in workspace")
+					else
+						print("Total crops found: " .. cropsFound)
+					end
+					print("============================")
+
+				elseif command == "/fixmovingcrops" then
+					print("🔧 Fixing all moving crops...")
+					local fixedCount = 0
+
+					for _, model in pairs(workspace:GetDescendants()) do
+						if model:IsA("Model") and (model.Name:find("_premade") or model.Name:find("_procedural")) then
+							-- Force re-anchor all parts
+							for _, part in pairs(model:GetDescendants()) do
+								if part:IsA("BasePart") then
+									part.Anchored = true
+									part.CanCollide = false
+									part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+									part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+								end
+							end
+
+							model:SetAttribute("IsStable", true)
+							fixedCount = fixedCount + 1
+						end
+					end
+
+					print("✅ Fixed " .. fixedCount .. " crops")
+
+				elseif command == "/testcropstability" then
+					print("🧪 Testing crop stability...")
+
+					-- Create a test crop
+					if _G.CropVisualManager then
+						local testCrop = _G.CropVisualManager:CreateCropModel("carrot", "common", "ready")
+						testCrop.Name = "StabilityTestCrop"
+						testCrop.Parent = workspace
+
+						if testCrop.PrimaryPart then
+							testCrop.PrimaryPart.CFrame = CFrame.new(0, 10, 0)
+						end
+
+						-- Monitor for 10 seconds
+						spawn(function()
+							local originalPos = testCrop.PrimaryPart.Position
+							print("📍 Test crop created at: " .. tostring(originalPos))
+
+							for i = 1, 10 do
+								wait(1)
+								if testCrop and testCrop.PrimaryPart then
+									local currentPos = testCrop.PrimaryPart.Position
+									local distance = (currentPos - originalPos).Magnitude
+									print("Second " .. i .. ": Distance moved = " .. math.round(distance * 100) / 100 .. " studs")
+
+									if distance > 0.5 then
+										print("⚠️ MOVEMENT DETECTED at second " .. i)
+									end
+								else
+									print("❌ Test crop was destroyed")
+									break
+								end
+							end
+
+							print("🧪 Stability test complete")
+							if testCrop then
+								testCrop:Destroy()
+								print("🗑️ Test crop cleaned up")
+							end
+						end)
+					else
+						print("❌ CropVisualManager not found")
+					end
+
+				elseif command == "/monitorcrops" then
+					print("👁️ Starting crop movement monitoring...")
+
+					-- Monitor all existing crops for movement
+					spawn(function()
+						local monitoredCrops = {}
+
+						-- Collect all current crops and their positions
+						for _, model in pairs(workspace:GetDescendants()) do
+							if model:IsA("Model") and (model.Name:find("_premade") or model.Name:find("_procedural")) then
+								if model.PrimaryPart then
+									monitoredCrops[model] = {
+										originalPos = model.PrimaryPart.Position,
+										name = model.Name,
+										alertCount = 0
+									}
+								end
+							end
+						end
+
+						print("📊 Monitoring " .. self:CountTable(monitoredCrops) .. " crops for movement...")
+
+						-- Monitor for 30 seconds
+						for i = 1, 30 do
+							wait(1)
+
+							for crop, data in pairs(monitoredCrops) do
+								if crop and crop.Parent and crop.PrimaryPart then
+									local currentPos = crop.PrimaryPart.Position
+									local distance = (currentPos - data.originalPos).Magnitude
+
+									if distance > 1 then -- Alert if moved more than 1 stud
+										data.alertCount = data.alertCount + 1
+										print("🚨 CROP MOVEMENT: " .. data.name .. " moved " .. math.round(distance * 100) / 100 .. " studs (Alert #" .. data.alertCount .. ")")
+
+										-- Try to fix it
+										crop.PrimaryPart.Anchored = true
+										crop.PrimaryPart.CFrame = CFrame.new(data.originalPos)
+
+										for _, part in pairs(crop:GetDescendants()) do
+											if part:IsA("BasePart") then
+												part.Anchored = true
+												part.CanCollide = false
+												part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+												part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+											end
+										end
+									end
+								else
+									-- Crop was destroyed or removed
+									monitoredCrops[crop] = nil
+								end
+							end
+						end
+
+						print("👁️ Crop monitoring complete")
+					end)
+
+				elseif command == "/createstablecrop" then
+					local cropType = args[2] or "carrot"
+					local rarity = args[3] or "common"
+
+					if _G.CropVisualManager then
+						print("🌱 Creating stable " .. rarity .. " " .. cropType .. " crop...")
+						local stableCrop = _G.CropVisualManager:CreateCropModel(cropType, rarity, "ready")
+						stableCrop.Parent = workspace
+
+						if stableCrop.PrimaryPart then
+							stableCrop.PrimaryPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(5, 0, 0)
+						end
+
+						-- Apply enhanced stability
+						_G.CropVisualManager:EnsureModelIsProperlyAnchored(stableCrop)
+						stableCrop:SetAttribute("IsStable", true)
+
+						print("✅ Stable crop created: " .. stableCrop.Name)
+					else
+						print("❌ CropVisualManager not available")
+					end
+				
+
+				print("🔧 CROP STABILITY DEBUG COMMANDS LOADED:")
+				print("  /debugcrops - Show all crops and their status")
+				print("  /fixmovingcrops - Force fix all moving crops")
+				print("  /testcropstability - Create test crop and monitor for movement")
+				print("  /monitorcrops - Monitor all crops for movement for 30 seconds")
+					print("  /createstablecrop [type] [rarity] - Create a stable test crop")
+				elseif command == "/debugharvest" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						print("=== HARVEST DEBUG FOR " .. targetPlayer.Name .. " ===")
+
+						-- Find player's farm
+						local farm = self:GetPlayerSimpleFarm(targetPlayer)
+						if farm then
+							print("✅ Found farm: " .. farm.Name)
+
+							local plantingSpots = farm:FindFirstChild("PlantingSpots")
+							if plantingSpots then
+								for _, spot in pairs(plantingSpots:GetChildren()) do
+									if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+										local isEmpty = spot:GetAttribute("IsEmpty")
+										if not isEmpty then
+											print("🌱 Found crop on " .. spot.Name)
+											print("  PlantType: " .. tostring(spot:GetAttribute("PlantType")))
+											print("  GrowthStage: " .. tostring(spot:GetAttribute("GrowthStage")))
+											print("  Children:")
+											for _, child in pairs(spot:GetChildren()) do
+												print("    - " .. child.Name .. " (" .. child.ClassName .. ")")
+											end
+										end
+									end
+								end
+							end
+						else
+							print("❌ No farm found")
+						end
+						print("=====================================")
+					end
+
+				elseif command == "/testharvest" then
+					print("🧪 Testing harvest system...")
+
+					-- Find a plot with a crop
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							for _, spot in pairs(plantingSpots:GetChildren()) do
+								if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+									local isEmpty = spot:GetAttribute("IsEmpty")
+									if not isEmpty then
+										print("🌾 Testing harvest on " .. spot.Name)
+										self:HarvestCrop(player, spot)
+										break
+									end
+								end
+							end
+						end
+					end
+
+				elseif command == "/forceharvest" then
+					local plotName = args[2] or "PlantingSpot_1"
+
+					-- Find the specific plot
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local targetSpot = plantingSpots:FindFirstChild(plotName)
+							if targetSpot then
+								print("🔧 Force harvesting " .. plotName)
+
+								-- Set it as ready and harvest
+								targetSpot:SetAttribute("IsEmpty", false)
+								targetSpot:SetAttribute("GrowthStage", 4)
+								targetSpot:SetAttribute("PlantType", "carrot")
+								targetSpot:SetAttribute("Rarity", "common")
+
+								self:HarvestCrop(player, targetSpot)
+							else
+								print("❌ Plot " .. plotName .. " not found")
+							end
+						end
+					end
+
+					print("🌾 HARVEST FIX LOADED!")
+					print("🔧 Debug Commands:")
+					print("  /debugharvest [player] - Debug harvest system")
+					print("  /testharvest - Test harvest on first available crop")
+					print("  /forceharvest [plotName] - Force harvest specific plot")
+					
 				elseif command == "/inspectfarm" then
 					local targetName = args[2] or player.Name
 					local targetPlayer = Players:FindFirstChild(targetName)

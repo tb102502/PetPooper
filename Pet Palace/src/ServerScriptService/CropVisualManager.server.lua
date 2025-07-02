@@ -449,16 +449,44 @@ function CropVisualManager:GetPreMadeModelWithAliases(cropType)
 	return nil, nil
 end
 function CropVisualManager:EnsureModelIsProperlyAnchored(cropModel)
-	if not cropModel then return end
+	if not cropModel then 
+		warn("CropVisualManager: No cropModel provided for anchoring")
+		return 
+	end
 
-	-- Anchor all parts and make them non-collidable
+	print("🔒 Ensuring model is properly anchored: " .. cropModel.Name)
+
+	-- First pass: Anchor all parts immediately
 	for _, part in pairs(cropModel:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.Anchored = true
 			part.CanCollide = false
+			part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 		end
 	end
+
+	-- Second pass: Ensure PrimaryPart is anchored
+	if cropModel.PrimaryPart then
+		cropModel.PrimaryPart.Anchored = true
+		cropModel.PrimaryPart.CanCollide = false
+		cropModel.PrimaryPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		cropModel.PrimaryPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+	end
+
+	-- Third pass: Stop any existing motion
+	wait(0.1) -- Small delay to ensure physics settle
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true -- Re-anchor to be absolutely sure
+			part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		end
+	end
+
+	print("🔒 Model anchoring complete: " .. cropModel.Name)
 end
+
 -- Enhanced pre-made model creation
 function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	local templateModel, actualModelName = self:GetPreMadeModelWithAliases(cropType)
@@ -467,7 +495,7 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	end
 
-	print("🎭 Using model '" .. actualModelName .. "' for crop type '" .. cropType .. "'")
+	print("🎭 Creating STABLE pre-made model for " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
 
 	-- Clone the pre-made model
 	local success, cropModel = pcall(function()
@@ -481,7 +509,17 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 
 	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_premade"
 
-	-- Enhanced primary part detection
+	-- STEP 1: Immediately anchor all parts before any other operations
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+			part.CanCollide = false
+			part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+			part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		end
+	end
+
+	-- STEP 2: Enhanced primary part detection
 	local primaryPart = self:FindBestPrimaryPart(cropModel)
 	if not primaryPart then
 		warn("CropVisualManager: Pre-made model for " .. cropType .. " has no suitable primary part, falling back to procedural")
@@ -491,7 +529,11 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 
 	cropModel.PrimaryPart = primaryPart
 
-	-- Enhanced scaling with validation
+	-- STEP 3: Ensure primary part is anchored
+	cropModel.PrimaryPart.Anchored = true
+	cropModel.PrimaryPart.CanCollide = false
+
+	-- STEP 4: Enhanced scaling with improved stability
 	local scaleMultiplier = self:CalculateScaleMultiplier(stageData, rarity)
 	local scaleSuccess = self:ScaleModelSafely(cropModel, scaleMultiplier)
 
@@ -499,28 +541,65 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 		warn("CropVisualManager: Failed to scale model for " .. cropType)
 	end
 
-	-- Make all parts uncollidable and anchored
-	for _, part in pairs(cropModel:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.CanCollide = false
-			part.Anchored = true
-		end
-	end
-
-	-- Add enhanced visual effects
-	self:AddEnhancedVisualEffects(cropModel, cropType, stageData, rarityData, cropData, rarity)
+	-- STEP 5: Final anchoring pass
 	self:EnsureModelIsProperlyAnchored(cropModel)
-	-- Add model identification attributes
+
+	-- STEP 6: Add enhanced visual effects (but no movement animations yet)
+	self:AddEnhancedVisualEffectsStable(cropModel, cropType, stageData, rarityData, cropData, rarity)
+
+	-- STEP 7: Add model identification attributes
 	cropModel:SetAttribute("CropType", cropType)
 	cropModel:SetAttribute("Rarity", rarity)
 	cropModel:SetAttribute("GrowthStage", growthStage)
 	cropModel:SetAttribute("ModelType", "PreMade")
 	cropModel:SetAttribute("ModelSource", actualModelName)
+	cropModel:SetAttribute("IsStable", true)
 
-	print("✅ Created enhanced pre-made model crop: " .. cropType .. " (" .. rarity .. ")")
+	print("✅ Created STABLE pre-made model crop: " .. cropType .. " (" .. rarity .. ")")
 	return cropModel
 end
 
+-- NEW: Enhanced visual effects that don't cause movement
+function CropVisualManager:AddEnhancedVisualEffectsStable(cropModel, cropType, stageData, rarityData, cropData, rarity)
+	-- Add all visual effects EXCEPT animations that could cause movement
+
+	-- Add rarity-based glow to primary part
+	if rarityData.glow then
+		self:AddGlowEffect(cropModel.PrimaryPart, rarityData.glowColor or Color3.fromRGB(255, 255, 255))
+	end
+
+	-- Add particle effects
+	self:AddParticleEffects(cropModel, stageData.effects, rarityData.particles, cropData.specialEffects)
+
+	-- Add aura effects
+	if rarityData.aura and rarityData.aura ~= "none" then
+		self:AddAuraEffect(cropModel, rarityData.aura, rarityData.glowColor)
+	end
+
+	-- Add special effects for premium crops
+	if cropData.premiumCrop then
+		self:AddPremiumCropEffects(cropModel, cropType, rarity)
+	end
+
+	-- Add ultra special effects for ultra special crops
+	if cropData.ultraSpecial then
+		self:AddUltraSpecialEffects(cropModel, cropType)
+	end
+
+	-- Add sound emitter
+	self:AddCropSounds(cropModel, stageData.soundId, rarityData.soundMultiplier)
+
+	-- Add rarity coloring overlay for pre-made models
+	self:AddRarityColorOverlay(cropModel, rarity, rarityData)
+
+	-- IMPORTANT: Add animations AFTER the model is positioned and stable
+	spawn(function()
+		wait(1) -- Wait for model to be positioned
+		if cropModel and cropModel.Parent then
+			self:AddCropAnimation(cropModel, stageData, rarity)
+		end
+	end)
+end
 
 -- NEW: Find the best primary part for a model
 function CropVisualManager:FindBestPrimaryPart(model)
@@ -581,9 +660,14 @@ function CropVisualManager:ScaleModelSafely(model, scaleFactor)
 		return false
 	end
 
+	print("📏 Safely scaling model " .. model.Name .. " by factor " .. scaleFactor)
+
 	local success, error = pcall(function()
-		-- Store original primary part position
+		-- Store original primary part position to maintain it
 		local originalCFrame = model.PrimaryPart.CFrame
+
+		-- Ensure model is anchored before scaling
+		self:EnsureModelIsProperlyAnchored(model)
 
 		-- Get all parts before scaling
 		local parts = {}
@@ -597,9 +681,13 @@ function CropVisualManager:ScaleModelSafely(model, scaleFactor)
 			end
 		end
 
-		-- Scale all parts
+		-- Scale all parts while maintaining anchoring
 		for _, partData in ipairs(parts) do
 			local part = partData.part
+
+			-- Ensure part is anchored during scaling
+			part.Anchored = true
+			part.CanCollide = false
 
 			-- Scale size
 			part.Size = partData.originalSize * scaleFactor
@@ -609,11 +697,20 @@ function CropVisualManager:ScaleModelSafely(model, scaleFactor)
 				local relativePosition = model.PrimaryPart.CFrame:inverse() * partData.originalCFrame
 				local scaledRelativePosition = CFrame.new(relativePosition.Position * scaleFactor) * relativePosition.Rotation
 				part.CFrame = model.PrimaryPart.CFrame * scaledRelativePosition
+
+				-- Re-anchor after positioning
+				part.Anchored = true
+				part.CanCollide = false
 			end
 		end
 
-		-- Restore primary part position
+		-- Restore primary part position and ensure it's anchored
 		model.PrimaryPart.CFrame = originalCFrame
+		model.PrimaryPart.Anchored = true
+		model.PrimaryPart.CanCollide = false
+
+		-- Final anchoring pass
+		self:EnsureModelIsProperlyAnchored(model)
 	end)
 
 	if not success then
@@ -621,6 +718,7 @@ function CropVisualManager:ScaleModelSafely(model, scaleFactor)
 		return false
 	end
 
+	print("📏 Model scaling completed successfully")
 	return true
 end
 function CropVisualManager:AddCropSpecificGeometry(cropModel, cropType, stageData, cropData)
@@ -876,22 +974,86 @@ end
 function CropVisualManager:AddCropAnimation(cropModel, stageData, rarity)
 	if not cropModel or not cropModel.PrimaryPart then return end
 
-	-- Gentle swaying animation
-	local swayTween = TweenService:Create(cropModel.PrimaryPart,
-		TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-		{CFrame = cropModel.PrimaryPart.CFrame * CFrame.Angles(math.rad(2), 0, 0)}
-	)
-	swayTween:Play()
+	print("🎭 Adding SAFE crop animation to " .. cropModel.Name)
 
-	-- Scale pulsing for higher rarities
-	if rarity == "legendary" or rarity == "epic" then
-		local pulseTween = TweenService:Create(cropModel.PrimaryPart,
-			TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1, true),
-			{Size = cropModel.PrimaryPart.Size * 1.1}
+	-- Store original CFrame for animation reference
+	local originalCFrame = cropModel.PrimaryPart.CFrame
+	cropModel:SetAttribute("OriginalCFrame", originalCFrame)
+
+	-- SAFE swaying animation that doesn't affect world position
+	local function createSafeSwayAnimation()
+		if not cropModel or not cropModel.Parent or not cropModel.PrimaryPart then 
+			return 
+		end
+
+		-- Calculate sway offset from current position (not world position)
+		local currentCFrame = cropModel.PrimaryPart.CFrame
+		local swayOffset = CFrame.Angles(math.rad(2), 0, 0)
+		local targetCFrame = currentCFrame * swayOffset
+
+		local swayTween = TweenService:Create(cropModel.PrimaryPart,
+			TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+			{CFrame = targetCFrame}
 		)
-		pulseTween:Play()
+
+		swayTween:Play()
+
+		swayTween.Completed:Connect(function()
+			-- Return to original position and create reverse sway
+			if cropModel and cropModel.Parent and cropModel.PrimaryPart then
+				local returnTween = TweenService:Create(cropModel.PrimaryPart,
+					TweenInfo.new(4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{CFrame = currentCFrame}
+				)
+				returnTween:Play()
+
+				returnTween.Completed:Connect(function()
+					-- Restart animation loop
+					spawn(createSafeSwayAnimation)
+				end)
+			end
+		end)
 	end
+
+	-- Start safe sway animation
+	spawn(createSafeSwayAnimation)
+
+	-- SAFE scale pulsing for higher rarities (doesn't affect position)
+	if rarity == "legendary" or rarity == "epic" then
+		local originalSize = cropModel.PrimaryPart.Size
+
+		local function createSafePulseAnimation()
+			if not cropModel or not cropModel.Parent or not cropModel.PrimaryPart then 
+				return 
+			end
+
+			local pulseTween = TweenService:Create(cropModel.PrimaryPart,
+				TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+				{Size = originalSize * 1.1}
+			)
+			pulseTween:Play()
+
+			pulseTween.Completed:Connect(function()
+				if cropModel and cropModel.Parent and cropModel.PrimaryPart then
+					local returnTween = TweenService:Create(cropModel.PrimaryPart,
+						TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut),
+						{Size = originalSize}
+					)
+					returnTween:Play()
+
+					returnTween.Completed:Connect(function()
+						spawn(createSafePulseAnimation)
+					end)
+				end
+			end)
+		end
+
+		spawn(createSafePulseAnimation)
+	end
+
+	print("🎭 Safe animation setup complete for " .. cropModel.Name)
 end
+
 
 function CropVisualManager:AddRarityColorOverlay(cropModel, rarity, rarityData)
 	if not cropModel then return end
@@ -1043,26 +1205,170 @@ end
 function CropVisualManager:ReplaceCropVisual(plotModel, cropType, rarity, growthStage)
 	if not plotModel then return nil end
 
-	print("🔄 CropVisualManager: Replacing crop visual for " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
+	print("🔄 CropVisualManager: ENHANCED ReplaceCropVisual for " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
 
-	-- Remove existing crop visual
-	local existingCrop = plotModel:FindFirstChild("CropVisual") or plotModel:FindFirstChild("CropModel")
-	if existingCrop then
-		-- Create fade out effect
-		self:CreateTransitionEffect(existingCrop)
-		existingCrop:Destroy()
+	-- STEP 1: COMPREHENSIVE cleanup of existing crops
+	self:ForceCleanPlot(plotModel)
+
+	-- STEP 2: Wait a moment to ensure cleanup completed
+	wait(0.1)
+
+	-- STEP 3: Verify plot is clean before creating new crop
+	if not self:IsPlotActuallyEmpty(plotModel) then
+		warn("🚨 Plot still has crops after cleanup - forcing additional cleanup")
+		self:ForceCleanPlot(plotModel)
+		wait(0.1)
 	end
 
-	-- Create new enhanced visual
+	-- STEP 4: Create new enhanced visual
 	local newCropVisual = self:CreateCropModel(cropType, rarity, growthStage)
-	newCropVisual.Name = "CropVisual"
+
+	-- IMPORTANT: Use consistent naming that GameCore expects
+	newCropVisual.Name = "CropModel"
+
+	-- Add detailed attributes for identification
+	newCropVisual:SetAttribute("CropType", cropType)
+	newCropVisual:SetAttribute("Rarity", rarity)
+	newCropVisual:SetAttribute("GrowthStage", growthStage)
+	newCropVisual:SetAttribute("DetailedName", cropType .. "_" .. rarity .. "_" .. growthStage)
+	newCropVisual:SetAttribute("CreatedTime", os.time())
+	newCropVisual:SetAttribute("CreatedBy", "CropVisualManager")
+
 	newCropVisual.Parent = plotModel
 
-	-- Enhanced positioning
+	-- STEP 5: Enhanced positioning
 	self:PositionCropModel(newCropVisual, plotModel, growthStage)
 	self:EnsureModelIsProperlyAnchored(newCropVisual)
+
+	-- STEP 6: Verify successful creation (SAFE VERSION)
+	local verification = plotModel:FindFirstChild("CropModel")
+	if verification then
+		print("✅ Successfully created and verified CropModel: " .. self:GetObjectDescription(verification))
+	else
+		warn("❌ Failed to create CropModel - not found after creation!")
+	end
+
 	return newCropVisual
 end
+function CropVisualManager:GetSafeObjectId(object)
+	if not object then return "nil" end
+
+	local id = object.Name
+
+	-- Add additional identifiers if available
+	local cropType = object:GetAttribute("CropType")
+	if cropType then
+		id = id .. "_" .. cropType
+	end
+
+	local createdTime = object:GetAttribute("CreatedTime")
+	if createdTime then
+		id = id .. "_" .. createdTime
+	end
+
+	return id
+end
+
+function CropVisualManager:GetObjectDescription(object)
+	if not object then return "nil object" end
+
+	local desc = object.Name .. " (" .. object.ClassName .. ")"
+
+	local cropType = object:GetAttribute("CropType")
+	if cropType then
+		desc = desc .. " [" .. cropType .. "]"
+	end
+
+	return desc
+end
+
+-- NEW: Force clean plot method
+function CropVisualManager:ForceCleanPlot(plotModel)
+	if not plotModel then return end
+
+	print("🧽 CropVisualManager: Force cleaning plot " .. plotModel.Name)
+
+	local removedCount = 0
+	local children = plotModel:GetChildren()
+
+	for _, child in pairs(children) do
+		if child:IsA("Model") and child ~= plotModel and (
+			child.Name == "CropModel" or
+				child.Name == "CropVisual" or
+				child.Name == "Crop" or
+				child:GetAttribute("CropType") or
+				child.Name:find("_premade") or 
+				child.Name:find("_procedural") or
+				child.Name:find("carrot") or child.Name:find("corn") or 
+				child.Name:find("strawberry")
+			) then
+			print("🧽 Force removing: " .. self:GetObjectDescription(child))
+			child:Destroy()
+			removedCount = removedCount + 1
+		end
+	end
+
+	print("🧽 Force cleanup removed " .. removedCount .. " items")
+end
+-- ENHANCED: Better empty plot detection
+function CropVisualManager:IsPlotActuallyEmpty(plotModel)
+	if not plotModel then return true end
+
+	-- Check for any crop models
+	for _, child in pairs(plotModel:GetChildren()) do
+		if child:IsA("Model") and (
+			child.Name == "CropModel" or
+				child.Name == "CropVisual" or
+				child:GetAttribute("CropType")
+			) then
+			print("🔍 Plot not empty - found: " .. child.Name)
+			return false
+		end
+	end
+
+	print("🔍 Plot is empty")
+	return true
+end
+
+
+-- NEW: Comprehensive method to find existing crop visuals
+function CropVisualManager:FindExistingCropVisual(plotModel)
+	if not plotModel then return nil end
+
+	-- Try multiple possible names in order of preference
+	local possibleNames = {
+		"CropModel",    -- GameCore standard
+		"CropVisual",   -- CropVisualManager standard  
+		"Crop",         -- Generic name
+		"Plant",        -- Alternative name
+	}
+
+	for _, name in ipairs(possibleNames) do
+		local crop = plotModel:FindFirstChild(name)
+		if crop and crop:IsA("Model") then
+			print("🔍 Found existing crop with name: " .. name)
+			return crop
+		end
+	end
+
+	-- If no exact name match, look for any model with crop-like attributes
+	for _, child in pairs(plotModel:GetChildren()) do
+		if child:IsA("Model") and (
+			child:GetAttribute("CropType") or 
+				child.Name:find("_premade") or 
+				child.Name:find("_procedural") or
+				child.Name:find("carrot") or child.Name:find("corn") or 
+				child.Name:find("strawberry") or child.Name:find("wheat")
+			) then
+			print("🔍 Found crop by attributes/pattern: " .. child.Name)
+			return child
+		end
+	end
+
+	print("🔍 No existing crop found in plot " .. plotModel.Name)
+	return nil
+end
+
 
 function CropVisualManager:PositionCropModel(cropModel, plotModel, growthStage)
 	if not plotModel or not cropModel then
@@ -1070,7 +1376,12 @@ function CropVisualManager:PositionCropModel(cropModel, plotModel, growthStage)
 		return
 	end
 
-	-- Find the plot's main part (could be SpotPart, Base, or PrimaryPart)
+	print("🎯 STABLE positioning crop model: " .. cropModel.Name .. " on plot: " .. plotModel.Name)
+
+	-- STEP 1: Ensure model is anchored BEFORE positioning
+	self:EnsureModelIsProperlyAnchored(cropModel)
+
+	-- STEP 2: Find the plot's main part
 	local plotPart = plotModel:FindFirstChild("SpotPart") 
 		or plotModel:FindFirstChild("Base") 
 		or plotModel:FindFirstChild("Plot")
@@ -1086,34 +1397,64 @@ function CropVisualManager:PositionCropModel(cropModel, plotModel, growthStage)
 		return
 	end
 
+	-- STEP 3: Calculate stable position
 	local stageData = self.GrowthStageVisuals[growthStage] or self.GrowthStageVisuals.planted
 	local heightOffset = stageData.heightOffset or 0
 
-	-- Calculate position above the plot
 	local plotPosition = plotPart.Position
 	local plotSize = plotPart.Size
 
 	-- Position crop on the center of the plot, slightly above surface
 	local cropPosition = Vector3.new(
 		plotPosition.X,
-		plotPosition.Y + (plotSize.Y / 2) + 0.5 + heightOffset, -- Reduced base height
+		plotPosition.Y + (plotSize.Y / 2) + 0.5 + heightOffset,
 		plotPosition.Z
 	)
 
-	-- Set the crop position and ensure it's anchored
+	-- STEP 4: Position with physics disabled
+	cropModel.PrimaryPart.Anchored = true -- Ensure anchored before moving
 	cropModel.PrimaryPart.CFrame = CFrame.new(cropPosition)
-	cropModel.PrimaryPart.Anchored = true
-	cropModel.PrimaryPart.CanCollide = false
 
-	-- Ensure ALL parts in the crop model are properly anchored
-	for _, part in pairs(cropModel:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.Anchored = true
-			part.CanCollide = false
+	-- STEP 5: Final anchoring pass after positioning
+	spawn(function()
+		wait(0.1) -- Allow position to settle
+		self:EnsureModelIsProperlyAnchored(cropModel)
+
+		-- Add stable monitoring to prevent movement
+		self:AddStabilityMonitoring(cropModel, cropPosition)
+	end)
+
+	print("🎯 Stable positioning complete for " .. cropModel.Name .. " at " .. tostring(cropPosition))
+end
+function CropVisualManager:AddStabilityMonitoring(cropModel, originalPosition)
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	-- Store original position for monitoring
+	cropModel:SetAttribute("OriginalPosition", originalPosition.X .. "," .. originalPosition.Y .. "," .. originalPosition.Z)
+	cropModel:SetAttribute("StabilityMonitored", true)
+
+	-- Monitor for unwanted movement every few seconds
+	spawn(function()
+		local monitorCount = 0
+		while cropModel and cropModel.Parent and monitorCount < 10 do -- Monitor for 30 seconds max
+			wait(3)
+			monitorCount = monitorCount + 1
+
+			if cropModel.PrimaryPart then
+				local currentPos = cropModel.PrimaryPart.Position
+				local distance = (currentPos - originalPosition).Magnitude
+
+				if distance > 2 then -- If moved more than 2 studs
+					warn("🚨 Crop movement detected! Repositioning " .. cropModel.Name)
+
+					-- Force reposition
+					cropModel.PrimaryPart.Anchored = true
+					cropModel.PrimaryPart.CFrame = CFrame.new(originalPosition)
+					self:EnsureModelIsProperlyAnchored(cropModel)
+				end
+			end
 		end
-	end
-
-	print("🎯 Positioned " .. cropModel.Name .. " at " .. tostring(cropPosition) .. " on plot " .. plotModel.Name)
+	end)
 end
 function CropVisualManager:UpdateCropGrowthStage(plotModel, newStage, cropType, rarity)
 	print("🌱 CropVisualManager: Updating " .. cropType .. " to " .. newStage .. " stage")
@@ -1746,87 +2087,220 @@ end
 
 -- Enhanced harvest function with better cleanup
 function CropVisualManager:OnCropHarvested(plotModel, cropType, rarity)
-	print("🌾 OnCropHarvested called for " .. tostring(cropType) .. " on plot " .. tostring(plotModel and plotModel.Name or "unknown"))
+	print("🌾 CropVisualManager: ENHANCED OnCropHarvested for " .. tostring(cropType) .. " on plot " .. tostring(plotModel and plotModel.Name or "unknown"))
 
 	if not plotModel then 
 		warn("CropVisualManager: No plotModel provided for harvest")
-		return 
+		return false
 	end
 
-	-- Find the crop visual with multiple possible names
-	local existingCrop = plotModel:FindFirstChild("CropVisual") 
-		or plotModel:FindFirstChild("CropModel")
-		or plotModel:FindFirstChild("Crop")
+	-- Find the crop visual with comprehensive search
+	local existingCrop = self:FindExistingCropVisual(plotModel)
 
 	if existingCrop then
-		print("🌾 Found crop visual to remove: " .. existingCrop.Name)
+		print("🌾 Found crop visual to harvest: " .. existingCrop.Name)
+		print("🌾 Crop details: " .. tostring(existingCrop:GetAttribute("DetailedName") or "no details"))
 
-		-- Create harvest effect
-		self:CreateHarvestEffect(existingCrop, cropType)
+		-- Create enhanced harvest effect
+		self:CreateEnhancedHarvestEffect(existingCrop, cropType, rarity)
 
 		-- Play harvest sound
-		local cropData = self.CropSpecificVisuals[cropType] or {}
-		if cropData.harvestEffect then
-			self:PlayTransitionSound(existingCrop, "rbxassetid://131961136")
-		end
+		self:PlayHarvestSound(existingCrop, cropType)
 
-		-- Remove crop visual after effect
+		-- Remove crop visual after effect with delay
 		spawn(function()
-			wait(0.5) -- Shorter wait time
+			wait(1) -- Give time for harvest effects
 			if existingCrop and existingCrop.Parent then
 				print("🌾 Destroying crop visual: " .. existingCrop.Name)
 				existingCrop:Destroy()
+
+				-- Verify removal
+				wait(0.1)
+				local stillExists = self:FindExistingCropVisual(plotModel)
+				if stillExists then
+					warn("🚨 Crop visual still exists after harvest! Force removing...")
+					stillExists:Destroy()
+				end
 			end
 		end)
+
+		return true
 	else
 		warn("CropVisualManager: No crop visual found to harvest on plot " .. plotModel.Name)
 
-		-- Debug: Print all children of the plot
-		print("Plot children:")
+		-- Enhanced debugging
+		print("🔍 Plot contents for debugging:")
 		for _, child in pairs(plotModel:GetChildren()) do
-			print("  " .. child.Name .. " (" .. child.ClassName .. ")")
+			print("  - " .. child.Name .. " (" .. child.ClassName .. ")")
+			if child:IsA("Model") then
+				print("    Attributes: CropType=" .. tostring(child:GetAttribute("CropType")))
+			end
 		end
+
+		return false
 	end
 end
 
--- New function for creating harvest effects
-function CropVisualManager:CreateHarvestEffect(cropModel, cropType)
+function CropVisualManager:CreateEnhancedHarvestEffect(cropModel, cropType, rarity)
 	if not cropModel or not cropModel.PrimaryPart then return end
 
-	print("🎆 Creating harvest effect for " .. tostring(cropType))
+	print("🎆 Creating enhanced harvest effect for " .. tostring(cropType) .. " (" .. tostring(rarity) .. ")")
 
-	-- Create burst effect
-	local attachment = Instance.new("Attachment")
-	attachment.Parent = cropModel.PrimaryPart
-
-	local particles = Instance.new("ParticleEmitter")
-	particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-
-	-- Different colors based on crop type
+	local position = cropModel.PrimaryPart.Position
 	local cropData = self.CropSpecificVisuals[cropType] or {}
-	if cropData.primaryColor then
-		particles.Color = ColorSequence.new(cropData.primaryColor)
-	else
-		particles.Color = ColorSequence.new(Color3.fromRGB(255, 215, 0))
+
+	-- Create multiple burst effects based on rarity
+	local effectCount = 1
+	if rarity == "uncommon" then effectCount = 2
+	elseif rarity == "rare" then effectCount = 3
+	elseif rarity == "epic" then effectCount = 4
+	elseif rarity == "legendary" then effectCount = 5
 	end
 
-	particles.Rate = 100
-	particles.Lifetime = NumberRange.new(1, 2)
-	particles.Speed = NumberRange.new(5, 10)
-	particles.SpreadAngle = Vector2.new(360, 360)
-	particles.Parent = attachment
+	for i = 1, effectCount do
+		spawn(function()
+			wait(i * 0.1) -- Stagger effects
 
-	-- Stop effect after burst
-	spawn(function()
-		wait(0.2)
-		if particles then
-			particles.Enabled = false
-			game:GetService("Debris"):AddItem(particles, 2)
-		end
-		if attachment then
-			game:GetService("Debris"):AddItem(attachment, 2)
-		end
+			local attachment = Instance.new("Attachment")
+			attachment.Parent = cropModel.PrimaryPart
+
+			local particles = Instance.new("ParticleEmitter")
+			particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+
+			-- Color based on crop type and rarity
+			if cropData.primaryColor then
+				particles.Color = ColorSequence.new(cropData.primaryColor)
+			else
+				particles.Color = ColorSequence.new(Color3.fromRGB(255, 215, 0))
+			end
+
+			particles.Rate = 50 * effectCount
+			particles.Lifetime = NumberRange.new(1, 3)
+			particles.Speed = NumberRange.new(5, 15)
+			particles.SpreadAngle = Vector2.new(360, 360)
+			particles.Parent = attachment
+
+			-- Burst effect
+			spawn(function()
+				wait(0.3)
+				if particles then
+					particles.Enabled = false
+					game:GetService("Debris"):AddItem(particles, 3)
+				end
+				if attachment then
+					game:GetService("Debris"):AddItem(attachment, 3)
+				end
+			end)
+		end)
+	end
+
+	-- Create floating text effect
+	self:CreateHarvestTextEffect(position, cropType, rarity)
+end
+
+-- NEW: Harvest text effect
+function CropVisualManager:CreateHarvestTextEffect(position, cropType, rarity)
+	local textPart = Instance.new("Part")
+	textPart.Name = "HarvestText"
+	textPart.Size = Vector3.new(4, 1, 0.1)
+	textPart.Material = Enum.Material.ForceField
+	textPart.CanCollide = false
+	textPart.Anchored = true
+	textPart.Position = position + Vector3.new(0, 3, 0)
+	textPart.Parent = workspace
+
+	local surfaceGui = Instance.new("SurfaceGui")
+	surfaceGui.Parent = textPart
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	textLabel.TextScaled = true
+	textLabel.Font = Enum.Font.GothamBold
+	textLabel.Text = "+" .. (cropType or "crop"):upper() .. "!"
+	textLabel.Parent = surfaceGui
+
+	-- Color based on rarity
+	if rarity == "legendary" then
+		textLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+	elseif rarity == "epic" then
+		textLabel.TextColor3 = Color3.fromRGB(128, 0, 128)
+	elseif rarity == "rare" then
+		textLabel.TextColor3 = Color3.fromRGB(255, 215, 0)
+	elseif rarity == "uncommon" then
+		textLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+	end
+
+	-- Animate text
+	local moveTween = TweenService:Create(textPart,
+		TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{Position = position + Vector3.new(0, 8, 0), Transparency = 1}
+	)
+	moveTween:Play()
+
+	moveTween.Completed:Connect(function()
+		textPart:Destroy()
 	end)
+end
+
+-- NEW: Play harvest sound
+function CropVisualManager:PlayHarvestSound(cropModel, cropType)
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://131961136" -- Default harvest sound
+	sound.Volume = 0.8
+	sound.Parent = cropModel.PrimaryPart
+	sound:Play()
+
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
+end
+
+-- ========== FIX 3: Enhanced GameCore integration ==========
+-- ADD this to your GameCore.lua to improve harvest detection:
+
+function GameCore:ClearPlotProperly(plotModel)
+	print("🧹 GameCore: ENHANCED clearing plot: " .. plotModel.Name)
+
+	-- Try multiple approaches to find and remove the crop
+	local cropRemoved = false
+
+	-- Method 1: Standard CropModel lookup
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if cropModel then
+		print("🧹 Found CropModel - removing")
+		cropModel:Destroy()
+		cropRemoved = true
+	end
+
+	if cropRemoved then
+		print("🧹 Successfully removed crop visual")
+	else
+		warn("🧹 No crop visual found to remove")
+		print("🧹 Plot contents:")
+		for _, child in pairs(plotModel:GetChildren()) do
+			print("  - " .. child.Name .. " (" .. child.ClassName .. ")")
+		end
+	end
+
+	-- Clear all crop-related attributes
+	plotModel:SetAttribute("IsEmpty", true)
+	plotModel:SetAttribute("PlantType", "")
+	plotModel:SetAttribute("SeedType", "")
+	plotModel:SetAttribute("GrowthStage", 0)
+	plotModel:SetAttribute("PlantedTime", 0)
+	plotModel:SetAttribute("Rarity", "common")
+
+	-- Restore green indicator if it exists
+	local indicator = plotModel:FindFirstChild("Indicator")
+	if indicator then
+		indicator.Color = Color3.fromRGB(100, 255, 100)
+	end
+
+	print("🧹 Plot clearing complete")
 end
 
 -- ========== MANUAL HARVEST TESTING FUNCTION ==========
@@ -2079,7 +2553,65 @@ function CropVisualManager:Initialize()
 	print("  🔍 Model monitoring and health checks")
 	print("  🐛 Enhanced debugging tools")
 end
+function CropVisualManager:DebugCropStability(cropModel)
+	if not cropModel then
+		print("❌ No crop model provided for stability debug")
+		return
+	end
 
+	print("=== CROP STABILITY DEBUG: " .. cropModel.Name .. " ===")
+
+	print("Model attributes:")
+	for _, attrName in ipairs({"CropType", "Rarity", "GrowthStage", "ModelType", "IsStable"}) do
+		local value = cropModel:GetAttribute(attrName)
+		print("  " .. attrName .. ": " .. tostring(value))
+	end
+
+	print("Primary part status:")
+	if cropModel.PrimaryPart then
+		print("  Position: " .. tostring(cropModel.PrimaryPart.Position))
+		print("  Anchored: " .. tostring(cropModel.PrimaryPart.Anchored))
+		print("  CanCollide: " .. tostring(cropModel.PrimaryPart.CanCollide))
+		print("  Velocity: " .. tostring(cropModel.PrimaryPart.AssemblyLinearVelocity))
+	else
+		print("  ❌ No PrimaryPart found")
+	end
+
+	print("All parts status:")
+	local anchoredCount = 0
+	local totalParts = 0
+
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			totalParts = totalParts + 1
+			if part.Anchored then
+				anchoredCount = anchoredCount + 1
+			else
+				print("  ⚠️ Unanchored part: " .. part.Name)
+			end
+		end
+	end
+
+	print("  Anchored parts: " .. anchoredCount .. "/" .. totalParts)
+	print("==========================================")
+end
+
+-- Global debug function
+_G.DebugCropStability = function(cropName)
+	for _, model in pairs(workspace:GetDescendants()) do
+		if model:IsA("Model") and model.Name:find(cropName or "") then
+			CropVisualManager:DebugCropStability(model)
+			break
+		end
+	end
+end
+
+print("🔒 CROP STABILITY FIXES LOADED!")
+print("✅ Enhanced anchoring system")
+print("✅ Stable positioning logic") 
+print("✅ Safe animation system")
+print("✅ Movement monitoring")
+print("✅ Debug tools: _G.DebugCropStability('cropName')")
 -- ========== GLOBAL ACCESS AND DEBUG ==========
 
 _G.CropVisualManager = CropVisualManager
