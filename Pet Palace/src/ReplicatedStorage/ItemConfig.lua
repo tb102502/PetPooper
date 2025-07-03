@@ -1204,7 +1204,7 @@ function ItemConfig.IsItemSellable(itemId)
 
 	-- Check if it's milk or other sellable items
 	local sellableItems = {
-		"milk", "fresh_milk", "chicken_egg", "guinea_egg", "rooster_egg",
+		"milk", "fresh_milk", "chicken_egg", "guinea_egg", "rooster_egg", "Broccoli", "Cabbage", "Carrot", "Corn", "Potato", "Radish", "Strawberry", "Tomato", "Wheat",
 		"copper_ore", "bronze_ore", "silver_ore", "gold_ore", "platinum_ore", "obsidian_ore"
 	}
 

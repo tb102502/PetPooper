@@ -100,7 +100,7 @@ function ShopSystem:Initialize(gameCore)
 	self:SetupRemoteConnections()
 	self:SetupRemoteHandlers()
 	self:ValidateShopData()
-
+	self:SetupSeedDebugCommands()
 	print("ShopSystem: ✅ FIXED shop system initialization complete")
 	return true
 end
@@ -481,14 +481,14 @@ function ShopSystem:HandleGetSellableItems(player)
 		-- Define sellable item types with their locations and properties
 		local sellableItemTypes = {
 			-- Crops
-			{id = "carrot", name = "🥕 Carrots", sellPrice = 8},
+			{id = "carrot", name = "🥕 Carrot", sellPrice = 8},
 			{id = "corn", name = "🌽 Corn", sellPrice = 725},
-			{id = "strawberry", name = "🍓 Strawberries", sellPrice = 350},
+			{id = "strawberry", name = "🍓 Strawberry", sellPrice = 350},
 			{id = "wheat", name = "🌾 Wheat", sellPrice = 600},
-			{id = "potato", name = "🥔 Potatoes", sellPrice = 40},
-			{id = "tomato", name = "🍅 Tomatoes", sellPrice = 675},
+			{id = "potato", name = "🥔 Potato", sellPrice = 40},
+			{id = "tomato", name = "🍅 Tomato", sellPrice = 675},
 			{id = "cabbage", name = "🥬 Cabbage", sellPrice = 75},
-			{id = "radish", name = "🌶️ Radishes", sellPrice = 140},
+			{id = "radish", name = "🌶️ Radish", sellPrice = 140},
 			{id = "broccoli", name = "🥦 Broccoli", sellPrice = 110},
 
 			-- Animal Products
@@ -543,6 +543,197 @@ function ShopSystem:HandleGetSellableItems(player)
 	end
 end
 
+function ShopSystem:HandleSell(player, itemId, quantity)
+	print("🏪 ShopSystem: Sell request - " .. player.Name .. " wants to sell " .. quantity .. "x " .. itemId)
+
+	-- Validate inputs
+	if not itemId or not quantity or quantity <= 0 then
+		self:SendNotification(player, "Invalid Sell Request", "Invalid item or quantity!", "error")
+		return false
+	end
+
+	-- Get player data
+	local playerData = self.GameCore and self.GameCore:GetPlayerData(player)
+	if not playerData then
+		self:SendNotification(player, "Player Data Error", "Could not load player data!", "error")
+		return false
+	end
+
+	-- Check if player has the item
+	local playerStock = self:GetPlayerStockComprehensive(playerData, itemId)
+	if playerStock < quantity then
+		self:SendNotification(player, "Insufficient Stock", "You only have " .. playerStock .. "x " .. itemId .. "!", "error")
+		return false
+	end
+
+	-- Get sell price
+	local sellPrice = self:GetItemSellPrice(itemId)
+	if sellPrice <= 0 then
+		self:SendNotification(player, "Cannot Sell", "This item cannot be sold!", "error")
+		return false
+	end
+
+	-- Calculate total value
+	local totalValue = sellPrice * quantity
+	local currency = self:GetItemSellCurrency(itemId)
+
+	-- Process the sale
+	local success, errorMsg = pcall(function()
+		return self:ProcessSale(player, playerData, itemId, quantity, totalValue, currency)
+	end)
+
+	if success and errorMsg then
+		self:SendSaleConfirmation(player, itemId, quantity, totalValue, currency)
+		print("🏪 ShopSystem: Sale successful - " .. player.Name .. " sold " .. quantity .. "x " .. itemId .. " for " .. totalValue .. " " .. currency)
+		return true
+	else
+		local error = success and "Unknown error" or tostring(errorMsg)
+		self:SendNotification(player, "Sale Failed", "Transaction failed: " .. error, "error")
+		return false
+	end
+end
+
+function ShopSystem:ProcessSale(player, playerData, itemId, quantity, totalValue, currency)
+	print("💰 Processing sale:")
+	print("  Player: " .. player.Name)
+	print("  Item: " .. itemId)
+	print("  Quantity: " .. quantity)
+	print("  Total Value: " .. totalValue .. " " .. currency)
+
+	-- Remove items from player inventory
+	local removed = self:RemoveItemFromPlayerInventory(playerData, itemId, quantity)
+	if not removed then
+		error("Failed to remove items from inventory")
+	end
+
+	-- Add currency to player
+	playerData[currency] = (playerData[currency] or 0) + totalValue
+	print("💳 Added " .. totalValue .. " " .. currency .. " to player")
+
+	-- Save and update
+	if self.GameCore then
+		self.GameCore:SavePlayerData(player)
+		if self.GameCore.RemoteEvents and self.GameCore.RemoteEvents.PlayerDataUpdated then
+			self.GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+		end
+		if self.GameCore.RemoteEvents and self.GameCore.RemoteEvents.CurrencyUpdated then
+			self.GameCore.RemoteEvents.CurrencyUpdated:FireClient(player, currency, playerData[currency])
+		end
+	end
+
+	-- Fire item sold event
+	if self.RemoteEvents.ItemSold then
+		self.RemoteEvents.ItemSold:FireClient(player, itemId, quantity, totalValue, currency)
+	end
+
+	return true
+end
+
+function ShopSystem:RemoveItemFromPlayerInventory(playerData, itemId, quantity)
+	if not playerData then return false end
+
+	local remaining = quantity
+
+	-- Check different inventory locations and remove items
+	local locations = {
+		{"farming", "inventory"},
+		{"livestock", "inventory"},
+		{"inventory"}
+	}
+
+	for _, path in ipairs(locations) do
+		if remaining <= 0 then break end
+
+		local inventory = playerData
+		for _, key in ipairs(path) do
+			if inventory and inventory[key] then
+				inventory = inventory[key]
+			else
+				inventory = nil
+				break
+			end
+		end
+
+		if inventory and inventory[itemId] then
+			local available = inventory[itemId]
+			local toRemove = math.min(available, remaining)
+
+			inventory[itemId] = available - toRemove
+			remaining = remaining - toRemove
+
+			if inventory[itemId] <= 0 then
+				inventory[itemId] = nil
+			end
+
+			print("📦 Removed " .. toRemove .. "x " .. itemId .. " from " .. table.concat(path, "."))
+		end
+	end
+
+	-- Special case for milk
+	if itemId == "milk" and remaining > 0 and playerData.milk then
+		local available = playerData.milk
+		local toRemove = math.min(available, remaining)
+
+		playerData.milk = available - toRemove
+		remaining = remaining - toRemove
+
+		print("🥛 Removed " .. toRemove .. "x milk from direct milk storage")
+	end
+
+	-- Check if we removed all requested items
+	return remaining <= 0
+end
+
+function ShopSystem:GetItemSellPrice(itemId)
+	-- Check if it's a crop first
+	if self.ItemConfig and self.ItemConfig.Crops and self.ItemConfig.Crops[itemId] then
+		return self.ItemConfig.Crops[itemId].sellValue or 0
+	end
+
+	-- Check mining ores
+	if self.ItemConfig and self.ItemConfig.MiningSystem and self.ItemConfig.MiningSystem.ores and self.ItemConfig.MiningSystem.ores[itemId] then
+		return self.ItemConfig.MiningSystem.ores[itemId].sellValue or 0
+	end
+
+	-- Other sellable items with fixed prices
+	local sellPrices = {
+		-- Animal products
+		milk = 75,
+		fresh_milk = 75,
+		chicken_egg = 15,
+		guinea_egg = 20,
+		rooster_egg = 25,
+
+		-- Materials
+		wood = 10,
+		stone = 5
+	}
+
+	return sellPrices[itemId] or 0
+end
+
+function ShopSystem:GetItemSellCurrency(itemId)
+	-- Check if it's a crop first
+	if self.ItemConfig and self.ItemConfig.Crops and self.ItemConfig.Crops[itemId] then
+		return "coins" -- Most crops sell for coins
+	end
+
+	-- Check mining ores
+	if self.ItemConfig and self.ItemConfig.MiningSystem and self.ItemConfig.MiningSystem.ores and self.ItemConfig.MiningSystem.ores[itemId] then
+		local oreData = self.ItemConfig.MiningSystem.ores[itemId]
+		return oreData.sellCurrency or "coins"
+	end
+
+	-- Default to coins for other items
+	return "coins"
+end
+
+function ShopSystem:SendSaleConfirmation(player, itemId, quantity, totalValue, currency)
+	local currencyName = currency == "farmTokens" and "Farm Tokens" or "Coins"
+	local message = "Sold " .. quantity .. "x " .. itemId .. " for " .. totalValue .. " " .. currencyName .. "!"
+
+	self:SendNotification(player, "Sale Successful", message, "success")
+end
 -- ========== UTILITY FUNCTIONS ==========
 
 function ShopSystem:CompareItemsForSorting(a, b)
@@ -957,6 +1148,306 @@ function ShopSystem:DeepCopyTable(original)
 end
 
 -- ========== DEBUG COMMANDS ==========
+
+function ShopSystem:DebugSeedVisibility(player)
+	print("=== SEED VISIBILITY DEBUG ===")
+
+	if not self.ItemConfig or not self.ItemConfig.ShopItems then
+		print("❌ ItemConfig.ShopItems not available!")
+		return
+	end
+
+	local playerData = self.GameCore and self.GameCore:GetPlayerData(player)
+	local seedsInConfig = {}
+	local seedsShown = {}
+	local seedsHidden = {}
+
+	-- Find all seeds in ItemConfig
+	for itemId, item in pairs(self.ItemConfig.ShopItems) do
+		if item.type == "seed" or item.category == "seeds" or string.find(itemId, "seed") then
+			table.insert(seedsInConfig, {
+				id = itemId,
+				name = item.name,
+				price = item.price,
+				category = item.category,
+				type = item.type,
+				valid = self:ValidateItemFixed(item, itemId),
+				shown = self:ShouldShowItemFixed(item, itemId, playerData)
+			})
+		end
+	end
+
+	print("📊 SEED ANALYSIS:")
+	print("  Total seeds found in ItemConfig: " .. #seedsInConfig)
+
+	for _, seedData in ipairs(seedsInConfig) do
+		local status = "✅"
+		local reason = "OK"
+
+		if not seedData.valid then
+			status = "❌"
+			reason = "INVALID"
+			table.insert(seedsHidden, seedData)
+		elseif not seedData.shown then
+			status = "🔒"
+			reason = "HIDDEN"
+			table.insert(seedsHidden, seedData)
+		else
+			table.insert(seedsShown, seedData)
+		end
+
+		print("  " .. status .. " " .. seedData.id .. " (" .. seedData.name .. ") - " .. reason)
+	end
+
+	print("\n📈 SUMMARY:")
+	print("  Seeds that WILL show: " .. #seedsShown)
+	print("  Seeds that WON'T show: " .. #seedsHidden)
+
+	if #seedsHidden > 0 then
+		print("\n🔍 HIDDEN SEEDS ANALYSIS:")
+		for _, seed in ipairs(seedsHidden) do
+			print("  🔒 " .. seed.id .. ":")
+			print("    Name: " .. (seed.name or "MISSING"))
+			print("    Price: " .. (seed.price or "MISSING"))
+			print("    Category: " .. (seed.category or "MISSING"))
+			print("    Type: " .. (seed.type or "MISSING"))
+			print("    Valid: " .. tostring(seed.valid))
+			print("    Shown: " .. tostring(seed.shown))
+
+			-- Check specific issues
+			if not seed.name or seed.name == "" then
+				print("    ❌ ISSUE: Missing or empty name")
+			end
+			if not seed.price or type(seed.price) ~= "number" then
+				print("    ❌ ISSUE: Missing or invalid price")
+			end
+			if not seed.category then
+				print("    ❌ ISSUE: Missing category")
+			end
+			if not seed.type then
+				print("    ❌ ISSUE: Missing type")
+			end
+		end
+	end
+
+	return seedsShown, seedsHidden
+end
+
+-- ========== AUTOMATIC SEED FIXING ==========
+
+function ShopSystem:FixSeedVisibilityIssues()
+	print("🔧 FIXING SEED VISIBILITY ISSUES...")
+
+	if not self.ItemConfig or not self.ItemConfig.ShopItems then
+		print("❌ ItemConfig.ShopItems not available!")
+		return false
+	end
+
+	local fixedCount = 0
+	local seedsProcessed = 0
+
+	for itemId, item in pairs(self.ItemConfig.ShopItems) do
+		if item.type == "seed" or item.category == "seeds" or string.find(itemId, "seed") then
+			seedsProcessed = seedsProcessed + 1
+			local wasFixed = false
+
+			-- Fix missing name
+			if not item.name or item.name == "" then
+				item.name = "🌱 " .. itemId:gsub("_", " "):gsub("^%l", string.upper)
+				print("  Fixed name for " .. itemId)
+				wasFixed = true
+			end
+
+			-- Fix missing price
+			if not item.price or type(item.price) ~= "number" then
+				-- Default seed prices based on name complexity
+				local defaultPrices = {
+					carrot_seeds = 5,
+					potato_seeds = 25,
+					cabbage_seeds = 50,
+					radish_seeds = 140,
+					strawberry_seeds = 250,
+					wheat_seeds = 400,
+					corn_seeds = 450,
+					tomato_seeds = 500,
+					broccoli_seeds = 75,
+					golden_seeds = 50,
+					glorious_sunflower_seeds = 999
+				}
+				item.price = defaultPrices[itemId] or 100
+				print("  Fixed price for " .. itemId .. " to " .. item.price)
+				wasFixed = true
+			end
+
+			-- Fix missing currency
+			if not item.currency then
+				if itemId == "golden_seeds" or itemId == "glorious_sunflower_seeds" then
+					item.currency = "farmTokens"
+				else
+					item.currency = "coins"
+				end
+				print("  Fixed currency for " .. itemId)
+				wasFixed = true
+			end
+
+			-- Fix missing category
+			if not item.category then
+				item.category = "seeds"
+				print("  Fixed category for " .. itemId)
+				wasFixed = true
+			end
+
+			-- Fix missing type
+			if not item.type then
+				item.type = "seed"
+				print("  Fixed type for " .. itemId)
+				wasFixed = true
+			end
+
+			-- Fix missing description
+			if not item.description then
+				item.description = "Plant these seeds to grow crops on your farm!"
+				print("  Fixed description for " .. itemId)
+				wasFixed = true
+			end
+
+			-- Fix missing icon
+			if not item.icon then
+				item.icon = "🌱"
+				print("  Fixed icon for " .. itemId)
+				wasFixed = true
+			end
+
+			-- Fix missing maxQuantity
+			if not item.maxQuantity then
+				item.maxQuantity = 100
+				wasFixed = true
+			end
+
+			-- Remove any blocking flags
+			if item.notPurchasable then
+				item.notPurchasable = nil
+				print("  Removed notPurchasable flag from " .. itemId)
+				wasFixed = true
+			end
+
+			if item.requiresPurchase and itemId ~= "glorious_sunflower_seeds" then
+				-- Only keep requirements for premium seeds
+				item.requiresPurchase = nil
+				print("  Removed requiresPurchase from " .. itemId)
+				wasFixed = true
+			end
+
+			if wasFixed then
+				fixedCount = fixedCount + 1
+			end
+		end
+	end
+
+	print("🔧 SEED FIXING COMPLETE:")
+	print("  Seeds processed: " .. seedsProcessed)
+	print("  Seeds fixed: " .. fixedCount)
+
+	return fixedCount > 0
+end
+
+-- ========== ENHANCED SEED VALIDATION ==========
+
+function ShopSystem:ValidateSeedSpecifically(item, itemId)
+	local issues = {}
+
+	-- Check required properties for seeds
+	if not item.name or item.name == "" then
+		table.insert(issues, "Missing name")
+	end
+
+	if not item.price or type(item.price) ~= "number" or item.price < 0 then
+		table.insert(issues, "Invalid price: " .. tostring(item.price))
+	end
+
+	if not item.currency then
+		table.insert(issues, "Missing currency")
+	elseif item.currency ~= "coins" and item.currency ~= "farmTokens" then
+		table.insert(issues, "Invalid currency: " .. item.currency)
+	end
+
+	if not item.category then
+		table.insert(issues, "Missing category")
+	elseif item.category ~= "seeds" then
+		table.insert(issues, "Wrong category: " .. item.category .. " (should be 'seeds')")
+	end
+
+	if not item.type then
+		table.insert(issues, "Missing type")
+	elseif item.type ~= "seed" then
+		table.insert(issues, "Wrong type: " .. item.type .. " (should be 'seed')")
+	end
+
+	-- Check farming data
+	if not item.farmingData then
+		table.insert(issues, "Missing farmingData")
+	else
+		if not item.farmingData.growTime then
+			table.insert(issues, "Missing farmingData.growTime")
+		end
+		if not item.farmingData.resultCropId then
+			table.insert(issues, "Missing farmingData.resultCropId")
+		end
+	end
+
+	return #issues == 0, issues
+end
+
+-- ========== DEBUG COMMANDS ==========
+
+function ShopSystem:SetupSeedDebugCommands()
+	game:GetService("Players").PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
+
+				if command == "/debugseeds" then
+					self:DebugSeedVisibility(player)
+
+				elseif command == "/fixseeds" then
+					local fixed = self:FixSeedVisibilityIssues()
+					if fixed then
+						print("✅ Seeds fixed! Try /debugseeds to see results.")
+					else
+						print("ℹ️ No seed fixes needed.")
+					end
+
+				elseif command == "/testseeds" then
+					local seedItems = self:HandleGetShopItemsByCategory(player, "seeds")
+					print("=== SEED CATEGORY TEST ===")
+					print("Seeds returned: " .. #seedItems)
+					for i, seed in ipairs(seedItems) do
+						print("  " .. i .. ". " .. seed.name .. " - " .. seed.price .. " " .. seed.currency)
+					end
+					print("========================")
+
+				elseif command == "/forceseeds" then
+					print("Forcing all seeds to show...")
+					-- Temporarily make all seeds visible
+					for itemId, item in pairs(self.ItemConfig.ShopItems) do
+						if item.type == "seed" or string.find(itemId, "seed") then
+							item.notPurchasable = nil
+							item.requiresPurchase = nil
+							if not item.category then item.category = "seeds" end
+							if not item.type then item.type = "seed" end
+							if not item.name then item.name = "🌱 " .. itemId end
+							if not item.price then item.price = 100 end
+							if not item.currency then item.currency = "coins" end
+						end
+					end
+					print("✅ All seeds should now be visible!")
+				end
+			end
+		end)
+	end)
+end
+
 
 game:GetService("Players").PlayerAdded:Connect(function(player)
 	player.Chatted:Connect(function(message)
