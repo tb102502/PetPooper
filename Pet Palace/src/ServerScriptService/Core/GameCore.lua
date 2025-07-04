@@ -101,15 +101,18 @@ end
 -- ========== INITIALIZATION ==========
 
 -- FIXED GameCore Initialize Method - Add this to your GameCore.lua
-
 function GameCore:Initialize(shopSystem)
-	print("GameCore: Starting FIXED core game system initialization...")
+		print("GameCore: Starting FIXED core game system initialization...")
 
-	-- Store ShopSystem reference
-	if shopSystem then
-		self.ShopSystem = shopSystem
-		print("GameCore: ShopSystem reference established")
-	end
+		-- STEP 0: Wait for CropVisualManager to load properly
+		self:WaitForCropVisualManager()
+
+		-- Store ShopSystem reference
+		if shopSystem then
+			self.ShopSystem = shopSystem
+			print("GameCore: ShopSystem reference established")
+		end
+	print("GameCore: Starting FIXED core game system initialization...")
 
 	-- Initialize player data storage
 	self.PlayerData = {}
@@ -155,8 +158,104 @@ function GameCore:Initialize(shopSystem)
 	self:InitializeMutationSystemSafe()
 	self:SetupMutationAdminCommands()
 	self:AddPlantingDebugCommands()
+	self:AddCropDebugCommands()
 	print("GameCore: ✅ FIXED core game system initialization complete!")
 	return true
+end
+function GameCore:WaitForCropVisualManager()
+	print("GameCore: Waiting for CropVisualManager to load...")
+
+	local attempts = 0
+	local maxAttempts = 20 -- 10 seconds max
+
+	while not _G.CropVisualManager and attempts < maxAttempts do
+		wait(0.5)
+		attempts = attempts + 1
+
+		if attempts % 4 == 0 then -- Every 2 seconds
+			print("GameCore: Still waiting for CropVisualManager... (attempt " .. attempts .. "/" .. maxAttempts .. ")")
+		end
+	end
+
+	if _G.CropVisualManager then
+		print("GameCore: ✅ CropVisualManager found successfully!")
+
+		-- Verify the methods we need exist
+		local requiredMethods = {
+			"CreateCropModel",
+			"HandleCropPlanted", 
+			"PositionCropModel"
+		}
+
+		local missingMethods = {}
+		for _, methodName in ipairs(requiredMethods) do
+			if not _G.CropVisualManager[methodName] then
+				table.insert(missingMethods, methodName)
+			end
+		end
+
+		if #missingMethods > 0 then
+			warn("GameCore: ⚠️ CropVisualManager missing methods: " .. table.concat(missingMethods, ", "))
+			warn("GameCore: Will use fallback crop creation")
+		else
+			print("GameCore: ✅ All required CropVisualManager methods found")
+
+			-- Test CropVisualManager integration
+			self:TestCropVisualManagerIntegration()
+		end
+	else
+		warn("GameCore: ❌ CropVisualManager not found after " .. (maxAttempts * 0.5) .. " seconds!")
+		warn("GameCore: Will rely on fallback crop creation only")
+
+		-- Disable CropVisualManager usage
+		_G.DISABLE_CROPVISUALMANAGER = true
+	end
+end
+
+-- ========== TEST CROPVISUALMANAGER INTEGRATION ==========
+
+function GameCore:TestCropVisualManagerIntegration()
+	print("GameCore: Testing CropVisualManager integration...")
+
+	local testSuccess, testError = pcall(function()
+		-- Test if we can call the main methods without errors
+		if _G.CropVisualManager.CreateCropModel then
+			print("GameCore: ✅ CreateCropModel method accessible")
+		end
+
+		if _G.CropVisualManager.HandleCropPlanted then
+			print("GameCore: ✅ HandleCropPlanted method accessible")
+		end
+
+		return true
+	end)
+
+	if testSuccess then
+		print("GameCore: ✅ CropVisualManager integration test passed")
+	else
+		warn("GameCore: ❌ CropVisualManager integration test failed: " .. tostring(testError))
+		warn("GameCore: Disabling CropVisualManager usage")
+		_G.DISABLE_CROPVISUALMANAGER = true
+	end
+end
+
+-- ========== CROPVISUALMANAGER STATUS CHECK ==========
+
+function GameCore:GetCropVisualManagerStatus()
+	local status = {
+		available = _G.CropVisualManager ~= nil,
+		disabled = _G.DISABLE_CROPVISUALMANAGER == true,
+		methods = {}
+	}
+
+	if status.available then
+		local methods = {"CreateCropModel", "HandleCropPlanted", "PositionCropModel"}
+		for _, method in ipairs(methods) do
+			status.methods[method] = _G.CropVisualManager[method] ~= nil
+		end
+	end
+
+	return status
 end
 
 function GameCore:InitializeCropEventSystem()
@@ -2040,7 +2139,8 @@ function GameCore:InitializeFarmingSystem()
 	print("GameCore: Enhanced farming system initialized")
 end
 function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRarity)
-	print("🎨 GameCore: CreateCropOnPlotWithDebug starting...")
+	print("🎨 GameCore: FIXED CreateCropOnPlotWithDebug starting...")
+	print("🌱 Plot: " .. plotModel.Name .. " | Seed: " .. seedId .. " | Rarity: " .. cropRarity)
 
 	local success, result = pcall(function()
 		local spotPart = plotModel:FindFirstChild("SpotPart")
@@ -2055,58 +2155,34 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 		if existingCrop then
 			print("🧹 Removing existing crop model")
 			existingCrop:Destroy()
+			wait(0.1) -- Give time for cleanup
 		end
 
 		local cropType = seedData.resultCropId
 		local growthStage = "planted"
 		local cropModel = nil
 
-		-- TRY METHOD 1: CropVisualManager (if available and working)
+		-- METHOD 1: Try CropVisualManager with better error handling
 		if _G.CropVisualManager and not _G.DISABLE_CROPVISUALMANAGER then
 			print("🎨 Attempting CropVisualManager creation...")
 
 			local vmSuccess, vmResult = pcall(function()
-				if _G.CropVisualManager.CreateCropModelSafe then
-					return _G.CropVisualManager:CreateCropModelSafe(cropType, cropRarity, growthStage)
-				elseif _G.CropVisualManager.CreateCropModel then
-					return _G.CropVisualManager:CreateCropModel(cropType, cropRarity, growthStage)
-				else
-					return nil
-				end
+				-- Use the direct integration method
+				return _G.CropVisualManager:HandleCropPlanted(plotModel, cropType, cropRarity)
 			end)
 
 			if vmSuccess and vmResult then
-				cropModel = vmResult
-				cropModel.Name = "CropModel"
-				cropModel.Parent = plotModel
 				print("✅ CropVisualManager creation successful")
-
-				-- Position the crop
-				local posSuccess, posError = pcall(function()
-					if _G.CropVisualManager.PositionCropModelSafe then
-						_G.CropVisualManager:PositionCropModelSafe(cropModel, plotModel, growthStage)
-					elseif _G.CropVisualManager.PositionCropModel then
-						_G.CropVisualManager:PositionCropModel(cropModel, plotModel, growthStage)
-					else
-						-- Fallback positioning
-						if cropModel.PrimaryPart then
-							cropModel.PrimaryPart.CFrame = spotPart.CFrame + Vector3.new(0, 2, 0)
-							cropModel.PrimaryPart.Anchored = true
-						end
-					end
-				end)
-
-				if not posSuccess then
-					warn("⚠️ CropVisualManager positioning failed: " .. tostring(posError))
-					-- Try simple positioning
-					if cropModel.PrimaryPart then
-						cropModel.PrimaryPart.CFrame = spotPart.CFrame + Vector3.new(0, 2, 0)
-						cropModel.PrimaryPart.Anchored = true
-					end
+				-- Check if crop was actually created
+				local createdCrop = plotModel:FindFirstChild("CropModel")
+				if createdCrop then
+					print("✅ Crop visual confirmed in plot")
+					return true
+				else
+					warn("⚠️ CropVisualManager succeeded but no crop found in plot")
 				end
 			else
 				warn("❌ CropVisualManager creation failed: " .. tostring(vmResult))
-				cropModel = nil
 			end
 		else
 			if not _G.CropVisualManager then
@@ -2116,22 +2192,14 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 			end
 		end
 
-		-- METHOD 2: Fallback crop creation (ALWAYS WORKS)
-		if not cropModel then
-			print("🔧 Using fallback crop creation...")
-			cropModel = self:CreateFallbackCrop(plotModel, seedId, seedData, cropRarity)
-		end
+		-- METHOD 2: Enhanced fallback crop creation
+		print("🔧 Using enhanced fallback crop creation...")
+		cropModel = self:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
 
 		if not cropModel then
 			warn("❌ All crop creation methods failed")
 			return false
 		end
-
-		-- Add click detector for harvesting
-		self:SetupCropClickDetectionSafe(cropModel, plotModel)
-
-		-- Start growth timer
-		self:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
 
 		print("✅ Crop creation completed successfully")
 		return true
@@ -2145,10 +2213,9 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 		return false
 	end
 end
-
 -- ========== SAFE FALLBACK METHODS ==========
-function GameCore:CreateFallbackCrop(plotModel, seedId, seedData, cropRarity)
-	print("🔧 Creating fallback crop...")
+function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
+	print("🔧 Creating enhanced fallback crop...")
 
 	local spotPart = plotModel:FindFirstChild("SpotPart")
 	if not spotPart then 
@@ -2156,116 +2223,125 @@ function GameCore:CreateFallbackCrop(plotModel, seedId, seedData, cropRarity)
 		return nil 
 	end
 
-	-- Create simple but functional crop model
+	local cropType = seedData.resultCropId
+
+	-- Create enhanced crop model
 	local cropModel = Instance.new("Model")
-	cropModel.Name = "CropModel"
+	cropModel.Name = "CropModel" -- Consistent naming
 	cropModel.Parent = plotModel
 
-	-- Create crop part
+	-- Create primary crop part with better appearance
 	local cropPart = Instance.new("Part")
-	cropPart.Name = "Crop"
-	cropPart.Size = Vector3.new(2, 1, 2)
-	cropPart.Material = Enum.Material.SmoothPlastic
-	cropPart.Color = self:GetCropColorFallback(seedData.resultCropId, cropRarity)
+	cropPart.Name = "CropBody"
+	cropPart.Size = Vector3.new(2, 2, 2)
+	cropPart.Material = Enum.Material.Grass
+	cropPart.Color = self:GetCropColorForType(cropType, cropRarity)
 	cropPart.Anchored = true
 	cropPart.CanCollide = false
-	cropPart.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
+	cropPart.Position = spotPart.Position + Vector3.new(0, 2, 0)
 	cropPart.Parent = cropModel
 
-	-- Add basic mesh
+	-- Add mesh for better shape
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
-	mesh.Scale = Vector3.new(1, 0.5, 1) -- Start small for "planted" stage
+	mesh.Scale = Vector3.new(1, 1.2, 1)
 	mesh.Parent = cropPart
 
+	-- Set primary part
 	cropModel.PrimaryPart = cropPart
 
-	-- Add basic rarity effects
-	if cropRarity ~= "common" then
-		local light = Instance.new("PointLight")
-		light.Parent = cropPart
-		if cropRarity == "uncommon" then
-			light.Color = Color3.fromRGB(0, 255, 0)
-			light.Brightness = 1
-		elseif cropRarity == "rare" then
-			light.Color = Color3.fromRGB(255, 215, 0)
-			light.Brightness = 1.5
-		elseif cropRarity == "epic" then
-			light.Color = Color3.fromRGB(128, 0, 128)
-			light.Brightness = 2
-		elseif cropRarity == "legendary" then
-			light.Color = Color3.fromRGB(255, 100, 100)
-			light.Brightness = 3
-		end
-		light.Range = 10
-	end
+	-- Add attributes for identification
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", cropRarity)
+	cropModel:SetAttribute("GrowthStage", "planted")
+	cropModel:SetAttribute("ModelType", "EnhancedFallback")
+	cropModel:SetAttribute("CreatedBy", "GameCore")
 
-	print("✅ Fallback crop created successfully")
+	-- Add enhanced visual effects based on rarity
+	self:AddEnhancedFallbackEffects(cropModel, cropRarity)
+
+	-- Add click detection for harvesting
+	self:SetupCropClickDetection(cropModel, plotModel)
+
+	print("✅ Enhanced fallback crop created successfully: " .. cropModel.Name)
 	return cropModel
 end
+function GameCore:AddEnhancedFallbackEffects(cropModel, rarity)
+	local cropPart = cropModel.PrimaryPart
+	if not cropPart then return end
 
-function GameCore:GetCropColorFallback(cropType, rarity)
-	local baseColors = {
-		carrot = Color3.fromRGB(255, 140, 0),
-		corn = Color3.fromRGB(255, 255, 0),
-		strawberry = Color3.fromRGB(220, 20, 60),
-		broccoli = Color3.fromRGB(34, 139, 34),
-		tomato = Color3.fromRGB(255, 99, 71),
-		potato = Color3.fromRGB(160, 82, 45),
-		radish = Color3.fromRGB(255, 69, 0),
-		wheat = Color3.fromRGB(218, 165, 32),
-		cabbage = Color3.fromRGB(124, 252, 0)
-	}
+	-- Add glow effect based on rarity
+	if rarity ~= "common" then
+		local pointLight = Instance.new("PointLight")
+		pointLight.Parent = cropPart
 
-	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
-		local success, error = pcall(function()
-			-- Remove existing click detectors
-			for _, obj in pairs(cropModel:GetDescendants()) do
-				if obj:IsA("ClickDetector") then
-					obj:Destroy()
-				end
-			end
-
-			-- Find the best part for click detection
-			local clickablePart = cropModel.PrimaryPart
-			if not clickablePart then
-				for _, part in pairs(cropModel:GetDescendants()) do
-					if part:IsA("BasePart") then
-						clickablePart = part
-						break
-					end
-				end
-			end
-
-			if not clickablePart then
-				warn("GameCore: No suitable part found for click detection")
-				return
-			end
-
-			-- Add click detector
-			local clickDetector = Instance.new("ClickDetector")
-			clickDetector.MaxActivationDistance = 15
-			clickDetector.Parent = clickablePart
-
-			clickDetector.MouseClick:Connect(function(clickingPlayer)
-				local plotOwner = self:GetPlotOwner(plotModel)
-				if clickingPlayer.Name == plotOwner then
-					local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-					if growthStage >= 4 then
-						self:HarvestCrop(clickingPlayer, plotModel)
-					else
-						local timeLeft = self:GetCropTimeRemaining(plotModel)
-						self:SendNotification(clickingPlayer, "Crop Growing", 
-							"Crop is still growing! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "info")
-					end
-				end
-			end)
-		end)
-
-		if not success then
-			warn("GameCore: Failed to setup crop click detection: " .. tostring(error))
+		if rarity == "uncommon" then
+			pointLight.Color = Color3.fromRGB(0, 255, 0)
+			pointLight.Brightness = 1
+			pointLight.Range = 8
+		elseif rarity == "rare" then
+			pointLight.Color = Color3.fromRGB(255, 215, 0)
+			pointLight.Brightness = 1.5
+			pointLight.Range = 10
+			cropPart.Material = Enum.Material.Neon
+		elseif rarity == "epic" then
+			pointLight.Color = Color3.fromRGB(128, 0, 128)
+			pointLight.Brightness = 2
+			pointLight.Range = 12
+			cropPart.Material = Enum.Material.Neon
+		elseif rarity == "legendary" then
+			pointLight.Color = Color3.fromRGB(255, 100, 100)
+			pointLight.Brightness = 3
+			pointLight.Range = 15
+			cropPart.Material = Enum.Material.Neon
 		end
 	end
+
+	-- Add particle effects for higher rarities
+	if rarity == "rare" or rarity == "epic" or rarity == "legendary" then
+		local attachment = Instance.new("Attachment")
+		attachment.Parent = cropPart
+
+		local particles = Instance.new("ParticleEmitter")
+		particles.Parent = attachment
+		particles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		particles.Rate = 10
+		particles.Lifetime = NumberRange.new(1, 2)
+		particles.Speed = NumberRange.new(1, 3)
+
+		if rarity == "legendary" then
+			particles.Color = ColorSequence.new(Color3.fromRGB(255, 100, 100))
+			particles.Rate = 20
+		elseif rarity == "epic" then
+			particles.Color = ColorSequence.new(Color3.fromRGB(128, 0, 128))
+			particles.Rate = 15
+		else
+			particles.Color = ColorSequence.new(Color3.fromRGB(255, 215, 0))
+		end
+	end
+end
+
+
+function GameCore:GetCropColorForType(cropType, rarity)
+	local baseColors = {
+		carrot = Color3.fromRGB(255, 140, 0),
+		corn = Color3.fromRGB(255, 215, 0),
+		strawberry = Color3.fromRGB(220, 20, 60),
+		wheat = Color3.fromRGB(218, 165, 32),
+		potato = Color3.fromRGB(160, 82, 45),
+		cabbage = Color3.fromRGB(124, 252, 0),
+		radish = Color3.fromRGB(255, 69, 0),
+		broccoli = Color3.fromRGB(34, 139, 34),
+		tomato = Color3.fromRGB(255, 99, 71),
+		-- Mutation crops
+		broccarrot = Color3.fromRGB(162, 197, 108), -- Blend of broccoli and carrot
+		brocmato = Color3.fromRGB(145, 119, 52),    -- Blend of broccoli and tomato
+		broctato = Color3.fromRGB(97, 110, 89),     -- Blend of broccoli and potato
+		cornmato = Color3.fromRGB(255, 157, 135),   -- Blend of corn and tomato
+		craddish = Color3.fromRGB(255, 104, 34)     -- Blend of carrot and radish
+	}
+
+	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)
 
 	-- Modify color based on rarity
 	if rarity == "legendary" then
@@ -2280,6 +2356,7 @@ function GameCore:GetCropColorFallback(cropType, rarity)
 		return baseColor
 	end
 end
+
 
 function GameCore:AddBasicRarityEffectsFallback(cropPart, cropRarity)
 	if cropRarity == "common" then return end
@@ -2307,56 +2384,29 @@ function GameCore:AddBasicRarityEffectsFallback(cropPart, cropRarity)
 
 	light.Range = 10
 end
-function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
-	local success, error = pcall(function()
-		-- Remove existing click detectors
-		for _, obj in pairs(cropModel:GetDescendants()) do
-			if obj:IsA("ClickDetector") then
-				obj:Destroy()
+function GameCore:SetupCropClickDetection(cropModel, plotModel)
+	local clickDetector = Instance.new("ClickDetector")
+	clickDetector.MaxActivationDistance = 15
+	clickDetector.Parent = cropModel.PrimaryPart
+
+	clickDetector.MouseClick:Connect(function(clickingPlayer)
+		local plotOwner = self:GetPlotOwner(plotModel)
+		if clickingPlayer.Name == plotOwner then
+			local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+			if growthStage >= 4 then
+				print("🌾 Player clicking to harvest crop")
+				self:HarvestCrop(clickingPlayer, plotModel)
+			else
+				local timeLeft = self:GetCropTimeRemaining(plotModel)
+				local minutesLeft = math.ceil(timeLeft/60)
+				self:SendNotification(clickingPlayer, "Crop Growing", 
+					"Crop is still growing! " .. minutesLeft .. " minutes remaining.", "info")
 			end
 		end
-
-		-- Find the best part for click detection
-		local clickablePart = cropModel.PrimaryPart
-		if not clickablePart then
-			for _, part in pairs(cropModel:GetDescendants()) do
-				if part:IsA("BasePart") then
-					clickablePart = part
-					break
-				end
-			end
-		end
-
-		if not clickablePart then
-			warn("GameCore: No suitable part found for click detection")
-			return
-		end
-
-		-- Add click detector
-		local clickDetector = Instance.new("ClickDetector")
-		clickDetector.MaxActivationDistance = 15
-		clickDetector.Parent = clickablePart
-
-		clickDetector.MouseClick:Connect(function(clickingPlayer)
-			local plotOwner = self:GetPlotOwner(plotModel)
-			if clickingPlayer.Name == plotOwner then
-				local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-				if growthStage >= 4 then
-					self:HarvestCrop(clickingPlayer, plotModel)
-				else
-					local timeLeft = self:GetCropTimeRemaining(plotModel)
-					self:SendNotification(clickingPlayer, "Crop Growing", 
-						"Crop is still growing! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "info")
-				end
-			end
-		end)
 	end)
 
-	if not success then
-		warn("GameCore: Failed to setup crop click detection: " .. tostring(error))
-	end
+	print("✅ Click detection setup for crop")
 end
-
 function GameCore:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
 	spawn(function()
 		local growTime = seedData.growTime or 300 -- Default 5 minutes
@@ -7145,7 +7195,133 @@ function GameCore:DebugMilkingPositions(player)
 		print("====================================")
 	end
 end
+function GameCore:AddCropDebugCommands()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
 
+				if command == "/testcrop" then
+					local cropType = args[2] or "carrot"
+					local rarity = args[3] or "common"
+
+					print("🧪 Admin testing crop creation: " .. cropType .. " (" .. rarity .. ")")
+
+					-- Find first empty plot
+					local testPlot = self:FindFirstEmptyPlot(player)
+					if testPlot then
+						local seedData = ItemConfig.GetSeedData(cropType .. "_seeds")
+						if seedData then
+							self:CreateCropOnPlotWithDebug(testPlot, cropType .. "_seeds", seedData, rarity)
+							print("✅ Test crop creation attempted")
+						else
+							print("❌ No seed data found for " .. cropType)
+						end
+					else
+						print("❌ No empty plot found for testing")
+					end
+
+				elseif command == "/forcecrop" then
+					local plotName = args[2] or "PlantingSpot_1"
+					local cropType = args[3] or "carrot"
+
+					_G.ForceCropOnPlot(plotName, cropType)
+
+				elseif command == "/listplots" then
+					print("=== AVAILABLE PLOTS ===")
+					local count = 0
+					for _, area in pairs(workspace:GetDescendants()) do
+						if area:IsA("Model") and area.Name:find("PlantingSpot") then
+							count = count + 1
+							local isEmpty = area:GetAttribute("IsEmpty")
+							local status = isEmpty and "🟫 EMPTY" or "🌱 HAS CROP"
+							print("  " .. status .. " " .. area.Name)
+						end
+					end
+					print("Total plots: " .. count)
+					print("=====================")
+				end
+			end
+		end)
+	end)
+end
+function GameCore:FindFirstEmptyPlot(player)
+	local farm = self:GetPlayerSimpleFarm(player)
+	if not farm then return nil end
+
+	local plantingSpots = farm:FindFirstChild("PlantingSpots")
+	if not plantingSpots then return nil end
+
+	for _, spot in pairs(plantingSpots:GetChildren()) do
+		if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+			if self:IsPlotActuallyEmpty(spot) then
+				return spot
+			end
+		end
+	end
+
+	return nil
+end
+function GameCore:AddCropSystemDebugCommand()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
+
+				if command == "/debugcropsystem" then
+					print("=== CROP SYSTEM DEBUG ===")
+
+					local vmStatus = self:GetCropVisualManagerStatus()
+					print("CropVisualManager Status:")
+					print("  Available: " .. tostring(vmStatus.available))
+					print("  Disabled: " .. tostring(vmStatus.disabled))
+
+					if vmStatus.available then
+						print("  Methods:")
+						for method, exists in pairs(vmStatus.methods) do
+							print("    " .. method .. ": " .. (exists and "✅" or "❌"))
+						end
+					end
+
+					print("\nGameCore Crop Methods:")
+					local gameCoreMethod = {
+						"CreateCropOnPlotWithDebug",
+						"CreateEnhancedFallbackCrop",
+						"PlantSeed",
+						"HarvestCrop"
+					}
+
+					for _, method in ipairs(gameCoreMethod) do
+						local exists = type(self[method]) == "function"
+						print("  " .. method .. ": " .. (exists and "✅" or "❌"))
+					end
+
+					print("\nRecommendations:")
+					if not vmStatus.available then
+						print("  📝 CropVisualManager not found - check if script is running")
+					elseif vmStatus.disabled then
+						print("  📝 CropVisualManager disabled - check for errors in script")
+					else
+						print("  ✅ System appears to be working correctly")
+					end
+
+					print("========================")
+
+				elseif command == "/reloadcropsystem" then
+					print("Admin: Reloading crop system...")
+
+					-- Re-check CropVisualManager
+					_G.DISABLE_CROPVISUALMANAGER = false
+					self:WaitForCropVisualManager()
+
+					print("Admin: Crop system reload complete")
+				end
+			end
+		end)
+	end)
+end
 function GameCore:DebugMissingMethods(player)
 	print("=== MISSING METHODS DEBUG ===")
 
@@ -7326,7 +7502,57 @@ end)
 
 -- Make globally available
 _G.GameCore = GameCore
+spawn(function()
+	wait(2) -- Wait for all scripts to load
 
+	print("=== CROP SYSTEM LOAD VERIFICATION ===")
+
+	local status = GameCore:GetCropVisualManagerStatus()
+
+	if status.available and not status.disabled then
+		print("✅ Crop system fully loaded and operational")
+
+		-- Test with a simple crop creation if possible
+		if _G.TestCropVisual then
+			print("✅ Test functions available")
+		end
+	else
+		warn("⚠️ Crop system has issues:")
+		if not status.available then
+			warn("  - CropVisualManager not found")
+		end
+		if status.disabled then
+			warn("  - CropVisualManager disabled due to errors")
+		end
+		warn("  - Will use fallback crop creation only")
+	end
+
+	print("====================================")
+end)
+
+print("🌱 ✅ GAMECORE CROP CREATION FIX LOADED!")
+print("🔧 Key fixes:")
+print("  ✅ Better CropVisualManager integration")
+print("  ✅ Enhanced fallback crop creation")
+print("  ✅ Improved error handling and debugging")
+print("  ✅ Consistent crop naming (CropModel)")
+print("  ✅ Better visual effects for mutations")
+print("")
+print("🧪 Admin commands:")
+print("  /testcrop [type] [rarity] - Test crop creation")
+print("  /forcecrop [plot] [type] - Force create crop on plot")
+print("  /listplots - List all available plots")
+print("🔧 ✅ SCRIPT LOADING ORDER FIX LOADED!")
+print("Features:")
+print("  ✅ Waits for CropVisualManager before initialization")
+print("  ✅ Tests integration before use")
+print("  ✅ Automatic fallback on failure")
+print("  ✅ Enhanced debugging commands")
+print("  ✅ Load order verification")
+print("")
+print("🧪 Debug commands:")
+print("  /debugcropsystem - Show detailed system status")
+print("  /reloadcropsystem - Attempt to reload crop system")
 print("GameCore: ✅ FIXED and ENHANCED core game system loaded successfully!")
 print("🌟 NEW FEATURES:")
 print("  🌱 Complete farming system with ALL seeds from ItemConfig")

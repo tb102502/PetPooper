@@ -1070,41 +1070,6 @@ function CropVisualManager:EnsureModelIsProperlyAnchoredSafe(cropModel)
 	end)
 end
 
--- Safe positioning method
-function CropVisualManager:PositionCropModelSafe(cropModel, plotModel, growthStage)
-	if not plotModel or not cropModel then return end
-
-	pcall(function()
-		-- Use existing positioning method if it exists
-		if self.PositionCropModel and self.PositionCropModel ~= self.PositionCropModelSafe then
-			self:PositionCropModel(cropModel, plotModel, growthStage)
-		else
-			-- Fallback positioning
-			local plotPart = plotModel:FindFirstChild("SpotPart") 
-				or plotModel:FindFirstChild("Base") 
-				or plotModel.PrimaryPart
-
-			if plotPart and cropModel.PrimaryPart then
-				local plotPosition = plotPart.Position
-				local cropPosition = Vector3.new(
-					plotPosition.X,
-					plotPosition.Y + 2,
-					plotPosition.Z
-				)
-				cropModel.PrimaryPart.CFrame = CFrame.new(cropPosition)
-				self:EnsureModelIsProperlyAnchoredSafe(cropModel)
-			end
-		end
-	end)
-end
-
-print("CropVisualManager: ✅ SAFE MUTATION INTEGRATION LOADED!")
-print("🔧 SAFETY FEATURES:")
-print("  ✅ Error handling and fallback methods")
-print("  ✅ Backward compatibility with existing system")
-print("  ✅ Safe method wrapping and testing")
-print("  ✅ Prevents infinite loops and memory leaks")
-print("  ✅ Mutation effects only for mutation crops")
 -- Enhanced model scaling with safety checks
 function CropVisualManager:ScaleModelSafely(model, scaleFactor)
 	if not model.PrimaryPart then 
@@ -1598,6 +1563,175 @@ function CropVisualManager:AddEnhancedVisualEffects(cropModel, cropType, stageDa
 	-- Add rarity coloring overlay for pre-made models
 	self:AddRarityColorOverlay(cropModel, rarity, rarityData)
 end
+-- Add the missing methods that GameCore is looking for
+function CropVisualManager:CreateCropModelSafe(cropType, rarity, growthStage)
+	print("🔧 CropVisualManager: CreateCropModelSafe called for " .. cropType)
+
+	local success, cropModel = pcall(function()
+		return self:CreateCropModel(cropType, rarity, growthStage)
+	end)
+
+	if success and cropModel then
+		print("✅ CropVisualManager: Successfully created " .. cropModel.Name)
+		return cropModel
+	else
+		warn("❌ CropVisualManager: Failed to create crop: " .. tostring(cropModel))
+		return nil
+	end
+end
+
+function CropVisualManager:PositionCropModelSafe(cropModel, plotModel, growthStage)
+	print("🎯 CropVisualManager: PositionCropModelSafe called")
+
+	local success, error = pcall(function()
+		self:PositionCropModel(cropModel, plotModel, growthStage)
+	end)
+
+	if not success then
+		warn("❌ CropVisualManager: Positioning failed: " .. tostring(error))
+
+		-- Fallback positioning
+		if cropModel and cropModel.PrimaryPart and plotModel then
+			local plotPart = plotModel:FindFirstChild("SpotPart")
+			if plotPart then
+				cropModel.PrimaryPart.CFrame = CFrame.new(plotPart.Position + Vector3.new(0, 2, 0))
+				cropModel.PrimaryPart.Anchored = true
+				print("🔧 Used fallback positioning")
+			end
+		end
+	end
+end
+
+-- ========== ENHANCED GAMECORE INTEGRATION ==========
+
+-- Direct integration function that GameCore can call
+function CropVisualManager:HandleCropPlanted(plotModel, cropType, rarity)
+	print("🌱 CropVisualManager: HandleCropPlanted - " .. cropType .. " (" .. rarity .. ")")
+
+	if not plotModel then
+		warn("❌ No plotModel provided")
+		return false
+	end
+
+	-- Create and position the crop
+	local cropModel = self:CreateCropModelSafe(cropType, rarity, "planted")
+	if cropModel then
+		cropModel.Name = "CropModel" -- GameCore expects this name
+		cropModel.Parent = plotModel
+
+		self:PositionCropModelSafe(cropModel, plotModel, "planted")
+
+		print("✅ Crop visual created successfully")
+		return true
+	else
+		warn("❌ Failed to create crop visual")
+		return false
+	end
+end
+
+-- ========== DIRECT GAMECORE HOOKUP ==========
+
+-- Wait for GameCore and connect directly
+spawn(function()
+	local attempts = 0
+	while not _G.GameCore and attempts < 20 do
+		wait(0.5)
+		attempts = attempts + 1
+	end
+
+	if _G.GameCore then
+		print("🔗 CropVisualManager: Connecting to GameCore...")
+
+		-- Make CropVisualManager available to GameCore
+		_G.GameCore.CropVisualManager = CropVisualManager
+
+		print("✅ CropVisualManager: Connected to GameCore")
+	else
+		warn("❌ CropVisualManager: Could not connect to GameCore")
+	end
+end)
+
+-- ========== DEBUG FUNCTIONS ==========
+
+-- Test crop creation function
+_G.TestCropVisual = function(plotName, cropType, rarity, stage)
+	plotName = plotName or "PlantingSpot_1"
+	cropType = cropType or "carrot"
+	rarity = rarity or "common"
+	stage = stage or "ready"
+
+	print("🧪 Testing crop visual creation...")
+
+	-- Find the plot
+	local plot = nil
+	for _, area in pairs(workspace:GetDescendants()) do
+		if area:IsA("Model") and area.Name == plotName then
+			plot = area
+			break
+		end
+	end
+
+	if plot then
+		print("✅ Found plot: " .. plot.Name)
+		local success = CropVisualManager:HandleCropPlanted(plot, cropType, rarity)
+		if success then
+			print("✅ Test successful!")
+		else
+			print("❌ Test failed!")
+		end
+	else
+		print("❌ Could not find plot: " .. plotName)
+		print("Available plots:")
+		for _, area in pairs(workspace:GetDescendants()) do
+			if area:IsA("Model") and area.Name:find("PlantingSpot") then
+				print("  - " .. area.Name)
+			end
+		end
+	end
+end
+
+-- Force a crop on any plot
+_G.ForceCropOnPlot = function(plotName, cropType)
+	plotName = plotName or "PlantingSpot_1"
+	cropType = cropType or "carrot"
+
+	-- Find plot
+	local plot = nil
+	for _, area in pairs(workspace:GetDescendants()) do
+		if area:IsA("Model") and area.Name == plotName then
+			plot = area
+			break
+		end
+	end
+
+	if plot then
+		-- Clear existing crops
+		for _, child in pairs(plot:GetChildren()) do
+			if child:IsA("Model") and child.Name == "CropModel" then
+				child:Destroy()
+			end
+		end
+
+		-- Create new crop
+		local cropModel = CropVisualManager:CreateCropModel(cropType, "common", "ready")
+		if cropModel then
+			cropModel.Name = "CropModel"
+			cropModel.Parent = plot
+			CropVisualManager:PositionCropModel(cropModel, plot, "ready")
+			print("✅ Force created crop on " .. plotName)
+		else
+			print("❌ Failed to force create crop")
+		end
+	else
+		print("❌ Plot not found: " .. plotName)
+	end
+end
+
+print("🔧 ✅ CROPVISUALMANAGER INTEGRATION FIX LOADED!")
+print("🧪 Test commands:")
+print("  _G.TestCropVisual('PlantingSpot_1', 'carrot', 'common', 'ready')")
+print("  _G.ForceCropOnPlot('PlantingSpot_1', 'broccarrot')")
+print("  _G.TestCropVisual() -- uses defaults")
 function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
 	print("🌱 CropVisualManager: Creating crop model - " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
 
