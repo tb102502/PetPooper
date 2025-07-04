@@ -1871,14 +1871,11 @@ end
 function UIManager:ShowShopTab(tabId)
 	print("UIManager: Switching to shop tab: " .. tabId)
 
-	if not self.State.ShopTabs[tabId].populated then
-		self:PopulateExtraLargeShopTabContent(tabId)
-		self.State.ShopTabs[tabId].populated = true
-	end
-	
+	-- Update active tab first
 	local previousTab = self.State.ActiveShopTab
 	self.State.ActiveShopTab = tabId
 
+	-- Handle tab visual states
 	for id, tab in pairs(self.State.ShopTabs) do
 		local isActive = (id == tabId)
 
@@ -1914,12 +1911,12 @@ function UIManager:ShowShopTab(tabId)
 		end
 	end
 
+	-- FIXED: Populate content with correct method name
 	if not self.State.ShopTabs[tabId].populated then
-		self:PopulateShopTabContent(tabId)
+		self:PopulateExtraLargeShopTabContent(tabId)
 		self.State.ShopTabs[tabId].populated = true
 	end
 end
-
 -- ========== FARM MENU (Simple example of consistent structure) ==========
 
 function UIManager:CreateFarmMenu()
@@ -2084,7 +2081,8 @@ function UIManager:RefreshMenuContent(menuName)
 		local activeTab = self.State.ShopTabs[self.State.ActiveShopTab]
 		if activeTab then
 			activeTab.populated = false
-			self:PopulateShopTabContent(self.State.ActiveShopTab)
+			-- FIXED: Use correct method name
+			self:PopulateExtraLargeShopTabContent(self.State.ActiveShopTab)
 		end
 	else
 		local currentMenus = self.State.ActiveMenus
@@ -2096,6 +2094,7 @@ function UIManager:RefreshMenuContent(menuName)
 		end)
 	end
 end
+
 
 function UIManager:GetCurrentPage()
 	return self.State.CurrentPage

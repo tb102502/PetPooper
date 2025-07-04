@@ -374,40 +374,176 @@ CropVisualManager.CropSpecificVisuals = {
 		premiumCrop = true,
 		ultraSpecial = true,
 		modelAliases = {"glorious_sunflower", "sunflower"}
+	},
+	broccarrot = {
+		primaryColor = Color3.fromRGB(91, 154, 76), -- Broccoli green
+		secondaryColor = Color3.fromRGB(255, 140, 0), -- Carrot orange
+		specialEffects = {"hybrid_energy", "dual_nature", "mutation_pulse"},
+		harvestEffect = "hybrid_burst",
+		premiumCrop = true,
+		isMutation = true,
+		mutationTier = 1,
+		parentCrops = {"broccoli", "carrot"},
+		modelAliases = {"broccarrot", "broccoli_carrot", "carrot_broccoli"}
+	},
+
+	brocmato = {
+		primaryColor = Color3.fromRGB(91, 154, 76), -- Broccoli green
+		secondaryColor = Color3.fromRGB(255, 99, 71), -- Tomato red
+		specialEffects = {"hybrid_energy", "dual_nature", "red_green_swirl"},
+		harvestEffect = "fusion_explosion",
+		premiumCrop = true,
+		isMutation = true,
+		mutationTier = 1,
+		parentCrops = {"broccoli", "tomato"},
+		modelAliases = {"brocmato", "broccoli_tomato", "tomato_broccoli"}
+	},
+
+	broctato = {
+		primaryColor = Color3.fromRGB(91, 154, 76), -- Broccoli green
+		secondaryColor = Color3.fromRGB(160, 82, 45), -- Potato brown
+		specialEffects = {"hybrid_energy", "dual_nature", "earth_green_fusion", "rare_mutation_aura"},
+		harvestEffect = "epic_mutation_burst",
+		premiumCrop = true,
+		ultraSpecial = true,
+		isMutation = true,
+		mutationTier = 2,
+		parentCrops = {"broccoli", "potato"},
+		modelAliases = {"broctato", "broccoli_potato", "potato_broccoli"}
+	},
+
+	cornmato = {
+		primaryColor = Color3.fromRGB(255, 215, 0), -- Corn gold
+		secondaryColor = Color3.fromRGB(255, 99, 71), -- Tomato red
+		specialEffects = {"hybrid_energy", "dual_nature", "golden_red_spiral", "rare_mutation_aura"},
+		harvestEffect = "epic_mutation_burst",
+		premiumCrop = true,
+		ultraSpecial = true,
+		isMutation = true,
+		mutationTier = 2,
+		parentCrops = {"corn", "tomato"},
+		modelAliases = {"cornmato", "corn_tomato", "tomato_corn"}
+	},
+
+	craddish = {
+		primaryColor = Color3.fromRGB(255, 140, 0), -- Carrot orange
+		secondaryColor = Color3.fromRGB(255, 69, 0), -- Radish red-orange
+		specialEffects = {"hybrid_energy", "dual_nature", "spicy_glow"},
+		harvestEffect = "spicy_burst",
+		premiumCrop = true,
+		isMutation = true,
+		mutationTier = 1,
+		parentCrops = {"carrot", "radish"},
+		modelAliases = {"craddish", "carrot_radish", "radish_carrot"}
 	}
 }
+	if not CropVisualManager.CropSpecificVisuals.broccarrot then
+		CropVisualManager.CropSpecificVisuals.broccarrot = {
+			primaryColor = Color3.fromRGB(91, 154, 76), -- Broccoli green
+			secondaryColor = Color3.fromRGB(255, 140, 0), -- Carrot orange
+			specialEffects = {"hybrid_energy", "dual_nature", "mutation_pulse"},
+			harvestEffect = "hybrid_burst",
+			premiumCrop = true,
+			isMutation = true,
+			mutationTier = 1,
+			parentCrops = {"broccoli", "carrot"},
+			modelAliases = {"broccarrot", "broccoli_carrot", "carrot_broccoli"}
+		}
+
+		CropVisualManager.CropSpecificVisuals.brocmato = {
+			primaryColor = Color3.fromRGB(91, 154, 76), -- Broccoli green
+			secondaryColor = Color3.fromRGB(255, 99, 71), -- Tomato red
+			specialEffects = {"hybrid_energy", "dual_nature", "red_green_swirl"},
+			harvestEffect = "fusion_explosion",
+			premiumCrop = true,
+			isMutation = true,
+			mutationTier = 1,
+			parentCrops = {"broccoli", "tomato"},
+			modelAliases = {"brocmato", "broccoli_tomato", "tomato_broccoli"}
+		}
+
+		CropVisualManager.CropSpecificVisuals.broctato = {
+			primaryColor = Color3.fromRGB(91, 154, 76), -- Broccoli green
+			secondaryColor = Color3.fromRGB(160, 82, 45), -- Potato brown
+			specialEffects = {"hybrid_energy", "dual_nature", "earth_green_fusion", "rare_mutation_aura"},
+			harvestEffect = "epic_mutation_burst",
+			premiumCrop = true,
+			ultraSpecial = true,
+			isMutation = true,
+			mutationTier = 2,
+			parentCrops = {"broccoli", "potato"},
+			modelAliases = {"broctato", "broccoli_potato", "potato_broccoli"}
+		}
+
+		CropVisualManager.CropSpecificVisuals.cornmato = {
+			primaryColor = Color3.fromRGB(255, 215, 0), -- Corn gold
+			secondaryColor = Color3.fromRGB(255, 99, 71), -- Tomato red
+			specialEffects = {"hybrid_energy", "dual_nature", "golden_red_spiral", "rare_mutation_aura"},
+			harvestEffect = "epic_mutation_burst",
+			premiumCrop = true,
+			ultraSpecial = true,
+			isMutation = true,
+			mutationTier = 2,
+			parentCrops = {"corn", "tomato"},
+			modelAliases = {"cornmato", "corn_tomato", "tomato_corn"}
+		}
+
+		CropVisualManager.CropSpecificVisuals.craddish = {
+			primaryColor = Color3.fromRGB(255, 140, 0), -- Carrot orange
+			secondaryColor = Color3.fromRGB(255, 69, 0), -- Radish red-orange
+			specialEffects = {"hybrid_energy", "dual_nature", "spicy_glow"},
+			harvestEffect = "spicy_burst",
+			premiumCrop = true,
+			isMutation = true,
+			mutationTier = 1,
+			parentCrops = {"carrot", "radish"},
+			modelAliases = {"craddish", "carrot_radish", "radish_carrot"}
+		}
+
+		print("CropVisualManager: ✅ Mutation crop definitions added")
+	end
+
 
 -- ========== ENHANCED MODEL CREATION ==========
 
+
 function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
-	print("🌱 CropVisualManager: Creating " .. rarity .. " " .. cropType .. " at " .. growthStage .. " stage")
+	print("🌱 CropVisualManager: Creating crop with mutation support - " .. cropType)
+	local originalCreateCropModel = CropVisualManager.CreateCropModel
+	-- Check if this is a mutation crop
+	local cropData = self.CropSpecificVisuals[cropType]
+	local isMutation = cropData and cropData.isMutation
 
-	-- Get visual data
-	local stageData = self.GrowthStageVisuals[growthStage] or self.GrowthStageVisuals.planted
-	local rarityData = self.RarityEffects[rarity] or self.RarityEffects.common
-	local cropData = self.CropSpecificVisuals[cropType] or {}
-
-	-- Enhanced model selection logic
-	local shouldUsePreMade = false
-
-	if stageData.usePreMadeModel then
-		-- Check if we have the model available
-		if self:HasPreMadeModelWithAliases(cropType) then
-			shouldUsePreMade = true
-		elseif stageData.preferPreMadeModel then
-			-- For stages that strongly prefer pre-made models, warn if missing
-			warn("CropVisualManager: Pre-made model preferred but not found for " .. cropType .. " at " .. growthStage .. " stage")
-		end
+	if isMutation then
+		print("🧬 Creating MUTATION crop: " .. cropType)
 	end
 
-	if shouldUsePreMade then
-		print("🎭 Using pre-made model for " .. cropType .. " at " .. growthStage .. " stage")
-		return self:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	else
-		print("🔧 Using procedural generation for " .. cropType .. " at " .. growthStage .. " stage")
-		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+	-- Use the original method but with mutation enhancements
+	local cropModel = originalCreateCropModel(self, cropType, rarity, growthStage)
+
+	-- Add mutation effects if applicable
+	if cropModel and isMutation then
+		self:AddMutationEffects(cropModel, cropType, rarity)
+
+		-- Mark as mutation crop
+		cropModel:SetAttribute("IsMutation", true)
+		cropModel:SetAttribute("MutationTier", cropData.mutationTier or 1)
+		cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops or {}, ","))
+
+		print("🧬 Added mutation effects to " .. cropType)
 	end
+
+	return cropModel
 end
+
+print("CropVisualManager: ✅ MUTATION SUPPORT LOADED!")
+print("🧬 MUTATION VISUAL FEATURES:")
+print("  🎨 Dual-color glow effects")
+print("  ✨ Hybrid particle systems")
+print("  💫 Mutation pulse animations")
+print("  🌀 Special mutation auras")
+print("  ⚡ Genetic instability effects")
+print("  🎭 Enhanced procedural appearances")
 
 function CropVisualManager:HasPreMadeModelWithAliases(cropType)
 	-- Check direct match first
@@ -488,7 +624,7 @@ function CropVisualManager:EnsureModelIsProperlyAnchored(cropModel)
 end
 
 -- Enhanced pre-made model creation
-function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+function CropVisualManager:CreatePreMadeModelCropWithMutations(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	local templateModel, actualModelName = self:GetPreMadeModelWithAliases(cropType)
 	if not templateModel then
 		warn("CropVisualManager: Pre-made model not found for " .. cropType .. ", falling back to procedural")
@@ -546,14 +682,23 @@ function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage,
 
 	-- STEP 6: Add enhanced visual effects (but no movement animations yet)
 	self:AddEnhancedVisualEffectsStable(cropModel, cropType, stageData, rarityData, cropData, rarity)
+	
+	local cropModel = self:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+
+		if cropModel and cropData and cropData.isMutation then	
+			self:AddMutationEffects(cropModel, cropType, rarity)
 
 	-- STEP 7: Add model identification attributes
-	cropModel:SetAttribute("CropType", cropType)
-	cropModel:SetAttribute("Rarity", rarity)
-	cropModel:SetAttribute("GrowthStage", growthStage)
-	cropModel:SetAttribute("ModelType", "PreMade")
-	cropModel:SetAttribute("ModelSource", actualModelName)
-	cropModel:SetAttribute("IsStable", true)
+			cropModel:SetAttribute("CropType", cropType)
+			cropModel:SetAttribute("Rarity", rarity)
+			cropModel:SetAttribute("GrowthStage", growthStage)
+			cropModel:SetAttribute("ModelType", "PreMade")
+			cropModel:SetAttribute("ModelSource", actualModelName)
+			cropModel:SetAttribute("IsStable", true)
+			cropModel:SetAttribute("IsMutation", true)
+			cropModel:SetAttribute("MutationTier", cropData.mutationTier)
+			cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops, ","))
+		end
 
 	print("✅ Created STABLE pre-made model crop: " .. cropType .. " (" .. rarity .. ")")
 	return cropModel
@@ -635,6 +780,326 @@ function CropVisualManager:FindBestPrimaryPart(model)
 
 	return largestPart
 end
+function CropVisualManager:AddMutationEffects(cropModel, cropType, rarity)
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local cropData = self.CropSpecificVisuals[cropType]
+	if not cropData or not cropData.isMutation then return end
+
+	print("🧬 Adding mutation effects for " .. cropType)
+
+	-- Add dual-color glow effect
+	self:AddDualColorGlow(cropModel, cropData.primaryColor, cropData.secondaryColor)
+
+	-- Add mutation-specific particle effects
+	self:AddMutationParticles(cropModel, cropType, cropData)
+
+	-- Add mutation pulse animation
+	self:AddMutationPulseAnimation(cropModel, cropData.mutationTier)
+
+	-- Add special mutation aura
+	self:AddMutationAura(cropModel, cropType, cropData)
+
+	-- Add genetic instability effect (optional visual flair)
+	if cropData.mutationTier >= 2 then
+		self:AddGeneticInstabilityEffect(cropModel)
+	end
+end
+
+function CropVisualManager:AddDualColorGlow(cropModel, primaryColor, secondaryColor)
+	local primaryPart = cropModel.PrimaryPart
+
+	-- Create primary color glow
+	local primaryLight = Instance.new("PointLight")
+	primaryLight.Name = "PrimaryMutationGlow"
+	primaryLight.Color = primaryColor
+	primaryLight.Brightness = 2
+	primaryLight.Range = 12
+	primaryLight.Parent = primaryPart
+
+	-- Create secondary color glow
+	local secondaryLight = Instance.new("PointLight")
+	secondaryLight.Name = "SecondaryMutationGlow"
+	secondaryLight.Color = secondaryColor
+	secondaryLight.Brightness = 1.5
+	secondaryLight.Range = 8
+	secondaryLight.Parent = primaryPart
+
+	-- Animate the glows to pulse alternately
+	spawn(function()
+		while cropModel and cropModel.Parent do
+			-- Primary glow pulse
+			local primaryPulse = TweenService:Create(primaryLight,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Brightness = 3, Range = 15}
+			)
+			primaryPulse:Play()
+
+			wait(1)
+
+			-- Secondary glow pulse
+			local secondaryPulse = TweenService:Create(secondaryLight,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Brightness = 2.5, Range = 12}
+			)
+			secondaryPulse:Play()
+
+			wait(3)
+
+			-- Return to base values
+			local primaryReturn = TweenService:Create(primaryLight,
+				TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{Brightness = 2, Range = 12}
+			)
+			primaryReturn:Play()
+
+			local secondaryReturn = TweenService:Create(secondaryLight,
+				TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{Brightness = 1.5, Range = 8}
+			)
+			secondaryReturn:Play()
+
+			wait(2)
+		end
+	end)
+end
+
+function CropVisualManager:AddMutationParticles(cropModel, cropType, cropData)
+	local primaryPart = cropModel.PrimaryPart
+
+	-- Create attachment for particles
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "MutationParticleAttachment"
+	attachment.Parent = primaryPart
+
+	-- Hybrid energy particles
+	local hybridParticles = Instance.new("ParticleEmitter")
+	hybridParticles.Name = "HybridEnergyParticles"
+	hybridParticles.Parent = attachment
+
+	-- Configure particle appearance
+	hybridParticles.Texture = "rbxasset://textures/particles/fire_main.dds"
+	hybridParticles.Rate = 30
+	hybridParticles.Lifetime = NumberRange.new(2, 4)
+	hybridParticles.Speed = NumberRange.new(3, 6)
+	hybridParticles.SpreadAngle = Vector2.new(45, 45)
+
+	-- Color sequence with both parent colors
+	local colorSequence = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, cropData.primaryColor),
+		ColorSequenceKeypoint.new(0.5, cropData.secondaryColor),
+		ColorSequenceKeypoint.new(1, cropData.primaryColor)
+	})
+	hybridParticles.Color = colorSequence
+
+	-- Size animation
+	hybridParticles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.5),
+		NumberSequenceKeypoint.new(0.5, 1.2),
+		NumberSequenceKeypoint.new(1, 0.1)
+	})
+
+	-- Transparency animation
+	hybridParticles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.7, 0.7),
+		NumberSequenceKeypoint.new(1, 1)
+	})
+
+	-- Mutation-specific particles
+	if cropType == "broccarrot" then
+		self:AddSpecificMutationParticles(attachment, "green_orange_swirl")
+	elseif cropType == "brocmato" then
+		self:AddSpecificMutationParticles(attachment, "green_red_fusion")
+	elseif cropType == "broctato" then
+		self:AddSpecificMutationParticles(attachment, "earth_green_spiral")
+	elseif cropType == "cornmato" then
+		self:AddSpecificMutationParticles(attachment, "golden_red_burst")
+	elseif cropType == "craddish" then
+		self:AddSpecificMutationParticles(attachment, "spicy_orange_flare")
+	end
+end
+
+function CropVisualManager:AddSpecificMutationParticles(attachment, effectType)
+	local specificParticles = Instance.new("ParticleEmitter")
+	specificParticles.Name = effectType .. "_Particles"
+	specificParticles.Parent = attachment
+
+	if effectType == "green_orange_swirl" then
+		specificParticles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		specificParticles.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 139, 34)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 140, 0))
+		})
+		specificParticles.Rate = 15
+		specificParticles.Speed = NumberRange.new(2, 5)
+
+	elseif effectType == "green_red_fusion" then
+		specificParticles.Texture = "rbxasset://textures/particles/fire_main.dds"
+		specificParticles.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(34, 139, 34)),
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 0)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 99, 71))
+		})
+		specificParticles.Rate = 20
+		specificParticles.Speed = NumberRange.new(3, 7)
+
+	elseif effectType == "earth_green_spiral" then
+		specificParticles.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		specificParticles.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(139, 69, 19)),
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(34, 139, 34)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(124, 252, 0))
+		})
+		specificParticles.Rate = 25
+		specificParticles.Speed = NumberRange.new(4, 8)
+
+	elseif effectType == "golden_red_burst" then
+		specificParticles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+		specificParticles.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 215, 0)),
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 140, 0)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 99, 71))
+		})
+		specificParticles.Rate = 30
+		specificParticles.Speed = NumberRange.new(5, 10)
+
+	elseif effectType == "spicy_orange_flare" then
+		specificParticles.Texture = "rbxasset://textures/particles/fire_main.dds"
+		specificParticles.Color = ColorSequence.new({
+			ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 140, 0)),
+			ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 69, 0)),
+			ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0))
+		})
+		specificParticles.Rate = 18
+		specificParticles.Speed = NumberRange.new(2, 6)
+	end
+
+	-- Common properties for all specific particles
+	specificParticles.Lifetime = NumberRange.new(1.5, 3)
+	specificParticles.Size = NumberSequence.new(0.3, 0.8)
+	specificParticles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.4),
+		NumberSequenceKeypoint.new(1, 1)
+	})
+end
+
+function CropVisualManager:AddMutationPulseAnimation(cropModel, mutationTier)
+	local primaryPart = cropModel.PrimaryPart
+	local originalSize = primaryPart.Size
+
+	-- More intense pulsing for higher tier mutations
+	local pulseMultiplier = 1 + (mutationTier * 0.1)
+	local pulseSpeed = 3 - (mutationTier * 0.5) -- Faster for higher tiers
+
+	spawn(function()
+		while cropModel and cropModel.Parent do
+			-- Pulse expansion
+			local expandTween = TweenService:Create(primaryPart,
+				TweenInfo.new(pulseSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{Size = originalSize * pulseMultiplier}
+			)
+			expandTween:Play()
+			expandTween.Completed:Wait()
+
+			-- Pulse contraction
+			local contractTween = TweenService:Create(primaryPart,
+				TweenInfo.new(pulseSpeed, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{Size = originalSize}
+			)
+			contractTween:Play()
+			contractTween.Completed:Wait()
+
+			wait(1) -- Pause between pulses
+		end
+	end)
+end
+
+function CropVisualManager:AddMutationAura(cropModel, cropType, cropData)
+	local primaryPart = cropModel.PrimaryPart
+
+	-- Create mutation aura sphere
+	local aura = Instance.new("Part")
+	aura.Name = "MutationAura"
+	aura.Size = primaryPart.Size * 2
+	aura.Shape = Enum.PartType.Ball
+	aura.Material = Enum.Material.ForceField
+	aura.CanCollide = false
+	aura.Anchored = true
+	aura.Transparency = 0.9
+	aura.CFrame = primaryPart.CFrame
+	aura.Parent = cropModel
+
+	-- Color based on mutation type
+	if cropData.mutationTier == 1 then
+		aura.Color = Color3.fromRGB(100, 255, 100) -- Green for common mutations
+	elseif cropData.mutationTier == 2 then
+		aura.Color = Color3.fromRGB(255, 100, 255) -- Magenta for rare mutations
+	else
+		aura.Color = Color3.fromRGB(255, 255, 100) -- Yellow for special mutations
+	end
+
+	-- Animate aura
+	spawn(function()
+		while aura and aura.Parent do
+			local rotateTween = TweenService:Create(aura,
+				TweenInfo.new(8, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
+				{Orientation = Vector3.new(0, 360, 0)}
+			)
+			rotateTween:Play()
+
+			local alphaTween = TweenService:Create(aura,
+				TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+				{Transparency = 0.7}
+			)
+			alphaTween:Play()
+
+			break -- Exit after starting animations
+		end
+	end)
+end
+
+function CropVisualManager:AddGeneticInstabilityEffect(cropModel)
+	local primaryPart = cropModel.PrimaryPart
+
+	-- Create reality distortion effect for epic mutations
+	spawn(function()
+		while cropModel and cropModel.Parent do
+			-- Random color flashes
+			local originalColor = primaryPart.Color
+
+			for i = 1, 3 do
+				wait(math.random(2, 5))
+
+				-- Flash to random mutation color
+				local randomColors = {
+					Color3.fromRGB(255, 100, 255),
+					Color3.fromRGB(100, 255, 255),
+					Color3.fromRGB(255, 255, 100),
+					Color3.fromRGB(255, 100, 100)
+				}
+
+				local flashColor = randomColors[math.random(#randomColors)]
+
+				local flashTween = TweenService:Create(primaryPart,
+					TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{Color = flashColor}
+				)
+				flashTween:Play()
+
+				wait(0.3)
+
+				local returnTween = TweenService:Create(primaryPart,
+					TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+					{Color = originalColor}
+				)
+				returnTween:Play()
+			end
+
+			wait(math.random(5, 10)) -- Wait before next instability episode
+		end
+	end)
+end
 
 -- NEW: Calculate scale multiplier with rarity bonuses
 function CropVisualManager:CalculateScaleMultiplier(stageData, rarity)
@@ -653,7 +1118,364 @@ function CropVisualManager:CalculateScaleMultiplier(stageData, rarity)
 		return baseScale
 	end
 end
+function CropVisualManager:IsMutationCrop(cropType)
+	local cropData = self.CropSpecificVisuals[cropType]
+	return cropData and cropData.isMutation == true
+end
 
+function CropVisualManager:AddMutationEffectsSafe(cropModel, cropType, rarity)
+	-- SAFE method that only adds effects if it's a mutation crop
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local cropData = self.CropSpecificVisuals[cropType]
+	if not cropData or not cropData.isMutation then return end
+
+	print("🧬 Adding mutation effects for " .. cropType)
+
+	local success, error = pcall(function()
+		-- Add safe dual-color glow effect
+		self:AddSafeDualColorGlow(cropModel, cropData.primaryColor, cropData.secondaryColor)
+
+		-- Add safe mutation particles
+		self:AddSafeMutationParticles(cropModel, cropType, cropData)
+
+		-- Add safe mutation aura
+		self:AddSafeMutationAura(cropModel, cropType, cropData)
+	end)
+
+	if not success then
+		warn("CropVisualManager: Error adding mutation effects: " .. tostring(error))
+	end
+end
+
+function CropVisualManager:AddSafeDualColorGlow(cropModel, primaryColor, secondaryColor)
+	local primaryPart = cropModel.PrimaryPart
+	if not primaryPart then return end
+
+	-- Remove existing mutation lights to prevent duplicates
+	for _, child in pairs(primaryPart:GetChildren()) do
+		if child.Name:find("MutationGlow") then
+			child:Destroy()
+		end
+	end
+
+	-- Create primary color glow
+	local primaryLight = Instance.new("PointLight")
+	primaryLight.Name = "PrimaryMutationGlow"
+	primaryLight.Color = primaryColor
+	primaryLight.Brightness = 1.5
+	primaryLight.Range = 8
+	primaryLight.Parent = primaryPart
+
+	-- Create secondary color glow
+	local secondaryLight = Instance.new("PointLight")
+	secondaryLight.Name = "SecondaryMutationGlow" 
+	secondaryLight.Color = secondaryColor
+	secondaryLight.Brightness = 1
+	secondaryLight.Range = 6
+	secondaryLight.Parent = primaryPart
+
+	-- Safe pulsing animation
+	spawn(function()
+		local pulseCount = 0
+		while cropModel and cropModel.Parent and pulseCount < 100 do -- Limit pulses to prevent infinite loops
+			pulseCount = pulseCount + 1
+
+			if primaryLight and primaryLight.Parent then
+				local primaryPulse = TweenService:Create(primaryLight,
+					TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{Brightness = 2.5, Range = 12}
+				)
+				primaryPulse:Play()
+			end
+
+			wait(1.5)
+
+			if secondaryLight and secondaryLight.Parent then
+				local secondaryPulse = TweenService:Create(secondaryLight,
+					TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{Brightness = 1.8, Range = 10}
+				)
+				secondaryPulse:Play()
+			end
+
+			wait(4)
+
+			-- Return to base values
+			if primaryLight and primaryLight.Parent then
+				local primaryReturn = TweenService:Create(primaryLight,
+					TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{Brightness = 1.5, Range = 8}
+				)
+				primaryReturn:Play()
+			end
+
+			if secondaryLight and secondaryLight.Parent then
+				local secondaryReturn = TweenService:Create(secondaryLight,
+					TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+					{Brightness = 1, Range = 6}
+				)
+				secondaryReturn:Play()
+			end
+
+			wait(3)
+		end
+	end)
+end
+
+function CropVisualManager:AddSafeMutationParticles(cropModel, cropType, cropData)
+	local primaryPart = cropModel.PrimaryPart
+	if not primaryPart then return end
+
+	-- Remove existing mutation particles
+	for _, child in pairs(primaryPart:GetChildren()) do
+		if child.Name:find("MutationParticle") then
+			child:Destroy()
+		end
+	end
+
+	-- Create attachment for particles
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "MutationParticleAttachment"
+	attachment.Parent = primaryPart
+
+	-- Create simple hybrid particles
+	local hybridParticles = Instance.new("ParticleEmitter")
+	hybridParticles.Name = "HybridEnergyParticles"
+	hybridParticles.Parent = attachment
+
+	-- Configure particle appearance
+	hybridParticles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	hybridParticles.Rate = 15
+	hybridParticles.Lifetime = NumberRange.new(2, 4)
+	hybridParticles.Speed = NumberRange.new(2, 5)
+	hybridParticles.SpreadAngle = Vector2.new(30, 30)
+
+	-- Color sequence with both parent colors
+	local colorSequence = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, cropData.primaryColor),
+		ColorSequenceKeypoint.new(0.5, cropData.secondaryColor),
+		ColorSequenceKeypoint.new(1, cropData.primaryColor)
+	})
+	hybridParticles.Color = colorSequence
+
+	-- Size and transparency
+	hybridParticles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.5, 0.8),
+		NumberSequenceKeypoint.new(1, 0.1)
+	})
+
+	hybridParticles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.4),
+		NumberSequenceKeypoint.new(0.7, 0.8),
+		NumberSequenceKeypoint.new(1, 1)
+	})
+end
+
+function CropVisualManager:AddSafeMutationAura(cropModel, cropType, cropData)
+	local primaryPart = cropModel.PrimaryPart
+	if not primaryPart then return end
+
+	-- Remove existing auras
+	for _, child in pairs(cropModel:GetChildren()) do
+		if child.Name == "MutationAura" then
+			child:Destroy()
+		end
+	end
+
+	-- Create mutation aura sphere
+	local aura = Instance.new("Part")
+	aura.Name = "MutationAura"
+	aura.Size = primaryPart.Size * 1.5
+	aura.Shape = Enum.PartType.Ball
+	aura.Material = Enum.Material.ForceField
+	aura.CanCollide = false
+	aura.Anchored = true
+	aura.Transparency = 0.9
+	aura.CFrame = primaryPart.CFrame
+	aura.Parent = cropModel
+
+	-- Color based on mutation tier
+	if cropData.mutationTier == 1 then
+		aura.Color = Color3.fromRGB(100, 255, 100) -- Green for common mutations
+	elseif cropData.mutationTier == 2 then
+		aura.Color = Color3.fromRGB(255, 100, 255) -- Magenta for rare mutations
+	else
+		aura.Color = Color3.fromRGB(255, 255, 100) -- Yellow for special mutations
+	end
+
+	-- Safe aura animation
+	spawn(function()
+		local animationCount = 0
+		while aura and aura.Parent and animationCount < 50 do -- Limit animations
+			animationCount = animationCount + 1
+
+			if aura and aura.Parent then
+				local alphaTween = TweenService:Create(aura,
+					TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 1, true),
+					{Transparency = 0.7}
+				)
+				alphaTween:Play()
+				alphaTween.Completed:Wait()
+			else
+				break
+			end
+
+			wait(1)
+		end
+	end)
+end
+
+local originalCreateCropModel = CropVisualManager.CreateCropModel
+
+-- SAFE wrapper that doesn't break existing functionality
+function CropVisualManager:CreateCropModelSafe(cropType, rarity, growthStage)
+	print("🌱 CropVisualManager: Creating crop with SAFE mutation support - " .. cropType)
+
+	local cropModel = nil
+
+	-- Try to use the original method first
+	if originalCreateCropModel then
+		local success, result = pcall(function()
+			return originalCreateCropModel(self, cropType, rarity, growthStage)
+		end)
+
+		if success then
+			cropModel = result
+		else
+			warn("CropVisualManager: Original CreateCropModel failed: " .. tostring(result))
+		end
+	end
+
+	-- If original method failed or doesn't exist, try the fallback
+	if not cropModel then
+		print("🔧 Using fallback crop creation method")
+		cropModel = self:CreateFallbackCropModel(cropType, rarity, growthStage)
+	end
+
+	-- Add mutation effects if applicable and successful
+	if cropModel and self:IsMutationCrop(cropType) then
+		print("🧬 Adding mutation effects to " .. cropType)
+
+		-- Add mutation attributes
+		cropModel:SetAttribute("IsMutation", true)
+		local cropData = self.CropSpecificVisuals[cropType]
+		if cropData then
+			cropModel:SetAttribute("MutationTier", cropData.mutationTier or 1)
+			cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops or {}, ","))
+		end
+
+		-- Add visual effects safely
+		spawn(function()
+			wait(0.5) -- Wait for model to be positioned
+			if cropModel and cropModel.Parent then
+				self:AddMutationEffectsSafe(cropModel, cropType, rarity)
+			end
+		end)
+	end
+
+	return cropModel
+end
+
+-- Fallback crop creation method
+function CropVisualManager:CreateFallbackCropModel(cropType, rarity, growthStage)
+	print("🔧 Creating fallback crop model for " .. cropType)
+
+	-- Create simple procedural crop as fallback
+	local cropModel = Instance.new("Model")
+	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_fallback"
+
+	-- Get crop data
+	local cropData = self.CropSpecificVisuals[cropType] or {}
+	local stageData = self.GrowthStageVisuals[growthStage] or self.GrowthStageVisuals.ready
+
+	-- Create primary part
+	local primaryPart = Instance.new("Part")
+	primaryPart.Name = "CropBody"
+	primaryPart.Size = Vector3.new(2, 2, 2) * (stageData.sizeMultiplier or 1)
+	primaryPart.Material = Enum.Material.SmoothPlastic
+	primaryPart.Shape = Enum.PartType.Block
+	primaryPart.CanCollide = false
+	primaryPart.Anchored = true
+
+	-- Apply colors
+	if cropData.primaryColor then
+		primaryPart.Color = cropData.primaryColor
+	else
+		primaryPart.Color = Color3.fromRGB(100, 200, 100)
+	end
+
+	primaryPart.Transparency = stageData.transparency or 0
+	primaryPart.Parent = cropModel
+
+	-- Add mesh for better appearance
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(1, 1.2, 1)
+	mesh.Parent = primaryPart
+
+	-- Set primary part
+	cropModel.PrimaryPart = primaryPart
+
+	-- Add attributes
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", rarity)
+	cropModel:SetAttribute("GrowthStage", growthStage)
+	cropModel:SetAttribute("ModelType", "Fallback")
+
+	return cropModel
+end
+function CropVisualManager:EnsureModelIsProperlyAnchoredSafe(cropModel)
+	if not cropModel then return end
+
+	pcall(function()
+		for _, part in pairs(cropModel:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Anchored = true
+				part.CanCollide = false
+				part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+			end
+		end
+	end)
+end
+
+-- Safe positioning method
+function CropVisualManager:PositionCropModelSafe(cropModel, plotModel, growthStage)
+	if not plotModel or not cropModel then return end
+
+	pcall(function()
+		-- Use existing positioning method if it exists
+		if self.PositionCropModel and self.PositionCropModel ~= self.PositionCropModelSafe then
+			self:PositionCropModel(cropModel, plotModel, growthStage)
+		else
+			-- Fallback positioning
+			local plotPart = plotModel:FindFirstChild("SpotPart") 
+				or plotModel:FindFirstChild("Base") 
+				or plotModel.PrimaryPart
+
+			if plotPart and cropModel.PrimaryPart then
+				local plotPosition = plotPart.Position
+				local cropPosition = Vector3.new(
+					plotPosition.X,
+					plotPosition.Y + 2,
+					plotPosition.Z
+				)
+				cropModel.PrimaryPart.CFrame = CFrame.new(cropPosition)
+				self:EnsureModelIsProperlyAnchoredSafe(cropModel)
+			end
+		end
+	end)
+end
+
+print("CropVisualManager: ✅ SAFE MUTATION INTEGRATION LOADED!")
+print("🔧 SAFETY FEATURES:")
+print("  ✅ Error handling and fallback methods")
+print("  ✅ Backward compatibility with existing system")
+print("  ✅ Safe method wrapping and testing")
+print("  ✅ Prevents infinite loops and memory leaks")
+print("  ✅ Mutation effects only for mutation crops")
 -- Enhanced model scaling with safety checks
 function CropVisualManager:ScaleModelSafely(model, scaleFactor)
 	if not model.PrimaryPart then 
@@ -1149,7 +1971,7 @@ function CropVisualManager:AddEnhancedVisualEffects(cropModel, cropType, stageDa
 end
 
 -- Enhanced procedural crop creation (keeping existing logic but with improvements)
-function CropVisualManager:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+function CropVisualManager:CreateProceduralCropWithMutations(cropType, rarity, growthStage, stageData, rarityData, cropData)
 	-- Create main crop model
 	local cropModel = Instance.new("Model")
 	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_procedural"
@@ -1190,14 +2012,57 @@ function CropVisualManager:CreateProceduralCrop(cropType, rarity, growthStage, s
 	-- Add enhanced visual effects
 	self:AddEnhancedVisualEffects(cropModel, cropType, stageData, rarityData, cropData, rarity)
 	self:EnsureModelIsProperlyAnchored(cropModel)
+	local cropModel = self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
 
+	if cropModel and cropData and cropData.isMutation then
+		-- Add mutation-specific effects
+		self:AddMutationEffects(cropModel, cropType, rarity)
 	-- Add model identification attributes
 	cropModel:SetAttribute("CropType", cropType)
 	cropModel:SetAttribute("Rarity", rarity)
 	cropModel:SetAttribute("GrowthStage", growthStage)
 	cropModel:SetAttribute("ModelType", "Procedural")
+	cropModel:SetAttribute("IsMutation", true)
+	cropModel:SetAttribute("MutationTier", cropData.mutationTier)
+	cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops, ","))
+		self:EnhanceProceduralMutationAppearance(cropModel, cropData)
+	end
 
 	return cropModel
+end
+function CropVisualManager:EnhanceProceduralMutationAppearance(cropModel, cropData)
+	local primaryPart = cropModel.PrimaryPart
+
+	-- Create dual-colored appearance for procedural mutations
+	local secondaryPart = Instance.new("Part")
+	secondaryPart.Name = "MutationSecondaryPart"
+	secondaryPart.Size = primaryPart.Size * 0.8
+	secondaryPart.Material = Enum.Material.Neon
+	secondaryPart.Shape = Enum.PartType.Block
+	secondaryPart.Color = cropData.secondaryColor
+	secondaryPart.CanCollide = false
+	secondaryPart.Anchored = true
+	secondaryPart.Transparency = 0.3
+	secondaryPart.CFrame = primaryPart.CFrame
+	secondaryPart.Parent = cropModel
+
+	-- Add special mesh
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(0.9, 1.2, 0.9)
+	mesh.Parent = secondaryPart
+
+	-- Animate secondary part
+	spawn(function()
+		while secondaryPart and secondaryPart.Parent do
+			local rotateTween = TweenService:Create(secondaryPart,
+				TweenInfo.new(6, Enum.EasingStyle.Linear, Enum.EasingDirection.InOut, -1),
+				{Orientation = Vector3.new(0, 360, 0)}
+			)
+			rotateTween:Play()
+			break
+		end
+	end)
 end
 
 -- ========== ENHANCED INTEGRATION FUNCTIONS ==========

@@ -242,9 +242,100 @@ ItemConfig.Crops = {
 		id = "glorious_sunflower", name = "🌻 Glorious Sunflower", type = "crop", category = "crops", 
 		description = "🏆 LEGENDARY PREMIUM CROP 🏆", sellValue = 0, sellCurrency = "farmTokens", 
 		feedValue = 0, cropPoints = 0, icon = "🌻", rarity = "divine" 
+	},
+	broccarrot = {
+		name = "Broccarrot",
+		description = "A mysterious hybrid of broccoli and carrot with unique properties",
+		sellPrice = 150, -- Higher value than parent crops
+		rarity = "rare",
+		cropPoints = 25, -- High crop points for pig feeding
+		harvestTime = 0, -- No growing time (only obtained through mutation)
+		category = "mutation",
+		parentCrops = {"broccoli", "carrot"},
+		mutationTier = 1,
+		emoji = "🥦🥕",
+		specialProperties = {
+			"hybrid_vigor", -- 25% chance for double harvest
+			"nutrient_rich", -- Gives bonus nutrition when consumed
+			"genetic_stability" -- Can be used as ingredient for advanced mutations
+		}
+	},
+
+	brocmato = {
+		name = "Brocmato",
+		description = "An unusual fusion of broccoli and tomato with vibrant flavors",
+		sellPrice = 180,
+		rarity = "rare", 
+		cropPoints = 30,
+		harvestTime = 0,
+		category = "mutation",
+		parentCrops = {"broccoli", "tomato"},
+		mutationTier = 1,
+		emoji = "🥦🍅",
+		specialProperties = {
+			"flavor_burst", -- Enhanced taste profile
+			"antioxidant_boost", -- Extra health benefits
+			"color_changing" -- Changes appearance based on conditions
+		}
+	},
+
+	broctato = {
+		name = "Broctato",
+		description = "A rare blend of broccoli and potato with earthy complexity",
+		sellPrice = 250, -- Epic tier pricing
+		rarity = "epic",
+		cropPoints = 40,
+		harvestTime = 0,
+		category = "mutation",
+		parentCrops = {"broccoli", "potato"},
+		mutationTier = 2,
+		emoji = "🥦🥔",
+		specialProperties = {
+			"earth_energy", -- Improves soil quality of adjacent plots
+			"storage_mastery", -- Never spoils in inventory
+			"mutation_catalyst", -- Increases mutation chances when present
+			"epic_growth" -- Can trigger rare mutation chains
+		}
+	},
+
+	cornmato = {
+		name = "Cornmato",
+		description = "A golden hybrid of corn and tomato with explosive flavor",
+		sellPrice = 300, -- Epic tier pricing
+		rarity = "epic",
+		cropPoints = 45,
+		harvestTime = 0,
+		category = "mutation",
+		parentCrops = {"corn", "tomato"},
+		mutationTier = 2,
+		emoji = "🌽🍅",
+		specialProperties = {
+			"golden_essence", -- Increases coin rewards from other crops
+			"flavor_explosion", -- Creates temporary taste enhancement field
+			"solar_power", -- Grows faster in sunlight
+			"premium_genetics" -- Unlocks advanced farming techniques
+		}
+	},
+
+	craddish = {
+		name = "Craddish",
+		description = "A spicy cross between carrot and radish with fiery kick",
+		sellPrice = 120, -- Uncommon tier pricing
+		rarity = "uncommon",
+		cropPoints = 20,
+		harvestTime = 0,
+		category = "mutation",
+		parentCrops = {"carrot", "radish"},
+		mutationTier = 1,
+		emoji = "🥕🌶️",
+		specialProperties = {
+			"spicy_kick", -- Adds heat resistance to animals
+			"quick_growth", -- Accelerates nearby crop growth
+			"pest_deterrent", -- Natural pest resistance
+			"common_starter" -- Easiest mutation to achieve
+		}
 	}
 }
-
 -- ========== FIXED SHOP ITEMS - ALL ITEMS WILL SHOW ==========
 ItemConfig.ShopItems = {
 
@@ -470,7 +561,70 @@ ItemConfig.ShopItems = {
 			alwaysHighRarity = true
 		}
 	},
+	broccarrot = {
+		id = "broccarrot",
+		name = "Broccarrot",
+		description = "A rare mutation crop - cannot be purchased, only created through genetic fusion",
+		price = 999999, -- Extremely high price to discourage purchase
+		currency = "farmTokens",
+		category = "mutation",
+		purchasable = false, -- Cannot be bought
+		sellable = true,
+		sellPrice = 150,
+		rarity = "rare"
+	},
 
+	brocmato = {
+		id = "brocmato", 
+		name = "Brocmato",
+		description = "A rare mutation crop - cannot be purchased, only created through genetic fusion",
+		price = 999999,
+		currency = "farmTokens",
+		category = "mutation", 
+		purchasable = false,
+		sellable = true,
+		sellPrice = 180,
+		rarity = "rare"
+	},
+
+	broctato = {
+		id = "broctato",
+		name = "Broctato", 
+		description = "An epic mutation crop - cannot be purchased, only created through genetic fusion",
+		price = 999999,
+		currency = "farmTokens",
+		category = "mutation",
+		purchasable = false,
+		sellable = true,
+		sellPrice = 250,
+		rarity = "epic"
+	},
+
+	cornmato = {
+		id = "cornmato",
+		name = "Cornmato",
+		description = "An epic mutation crop - cannot be purchased, only created through genetic fusion", 
+		price = 999999,
+		currency = "farmTokens",
+		category = "mutation",
+		purchasable = false,
+		sellable = true,
+		sellPrice = 300,
+		rarity = "epic"
+	},
+
+	craddish = {
+		id = "craddish",
+		name = "Craddish",
+		description = "An uncommon mutation crop - cannot be purchased, only created through genetic fusion",
+		price = 999999,
+		currency = "farmTokens", 
+		category = "mutation",
+		purchasable = false,
+		sellable = true,
+		sellPrice = 120,
+		rarity = "uncommon"
+	},
 	-- ========== FARM CATEGORY (Core Infrastructure) ==========
 
 	farm_plot_starter = {
@@ -1319,7 +1473,214 @@ function ItemConfig.GetExpansionConfig(level)
 		description = "Full 10x10 farming grid (100 planting spots)"
 	}
 end
+function ItemConfig.GetMutationData(mutationType)
+	return ItemConfig.CropData[mutationType]
+end
 
+function ItemConfig.IsMutationCrop(cropType)
+	local cropData = ItemConfig.CropData[cropType]
+	return cropData and cropData.category == "mutation"
+end
+
+function ItemConfig.GetMutationTier(cropType)
+	local cropData = ItemConfig.CropData[cropType]
+	return cropData and cropData.mutationTier or 0
+end
+
+function ItemConfig.GetMutationParents(cropType)
+	local cropData = ItemConfig.CropData[cropType]
+	return cropData and cropData.parentCrops or {}
+end
+
+function ItemConfig.GetMutationValue(cropType)
+	local cropData = ItemConfig.CropData[cropType]
+	return cropData and cropData.sellPrice or 0
+end
+
+function ItemConfig.CanMutate(cropType1, cropType2)
+	-- Check if two crop types can create a mutation
+	for mutationType, mutationData in pairs(ItemConfig.CropData) do
+		if mutationData.category == "mutation" and mutationData.parentCrops then
+			local parents = mutationData.parentCrops
+			if (parents[1] == cropType1 and parents[2] == cropType2) or
+				(parents[1] == cropType2 and parents[2] == cropType1) then
+				return true, mutationType
+			end
+		end
+	end
+	return false, nil
+end
+
+function ItemConfig.GetMutationsByParent(parentCrop)
+	local mutations = {}
+	for mutationType, mutationData in pairs(ItemConfig.CropData) do
+		if mutationData.category == "mutation" and mutationData.parentCrops then
+			for _, parent in ipairs(mutationData.parentCrops) do
+				if parent == parentCrop then
+					table.insert(mutations, mutationType)
+					break
+				end
+			end
+		end
+	end
+	return mutations
+end
+
+function ItemConfig.GetMutationRarity(mutationType, baseRarity)
+	local mutationData = ItemConfig.CropData[mutationType]
+	if not mutationData then return baseRarity end
+
+	-- Mutations start with their defined rarity as minimum
+	local minRarity = mutationData.rarity
+
+	-- Can be enhanced by boosters or special conditions
+	if baseRarity == "legendary" then
+		return "legendary"
+	elseif baseRarity == "epic" and minRarity ~= "epic" then
+		return "epic"
+	elseif baseRarity == "rare" and minRarity == "uncommon" then
+		return "rare"
+	else
+		return minRarity
+	end
+end
+
+-- Enhanced color system for mutations
+function ItemConfig.GetMutationColor(mutationType)
+	local colors = {
+		broccarrot = Color3.fromRGB(150, 200, 100), -- Green-orange blend
+		brocmato = Color3.fromRGB(120, 180, 120), -- Green-red blend  
+		broctato = Color3.fromRGB(130, 150, 100), -- Green-brown blend
+		cornmato = Color3.fromRGB(255, 170, 100), -- Gold-red blend
+		craddish = Color3.fromRGB(255, 120, 80) -- Orange-red blend
+	}
+	return colors[mutationType] or Color3.fromRGB(100, 255, 100)
+end
+
+-- ========== MUTATION ACHIEVEMENT SYSTEM ==========
+
+-- Add mutation-related achievements:
+ItemConfig.MutationAchievements = {
+	first_mutation = {
+		name = "Genetic Pioneer",
+		description = "Create your first crop mutation",
+		reward = 1000, -- coins
+		icon = "🧬"
+	},
+
+	mutation_master = {
+		name = "Mutation Master", 
+		description = "Create all 5 types of mutations",
+		reward = 10000,
+		icon = "🏆"
+	},
+
+	epic_breeder = {
+		name = "Epic Breeder",
+		description = "Create an epic-tier mutation (Broctato or Cornmato)",
+		reward = 5000,
+		icon = "💜"
+	},
+
+	mutation_farm = {
+		name = "Mutation Farm",
+		description = "Have 10 mutation crops in your inventory at once",
+		reward = 2500,
+		icon = "🌱"
+	},
+
+	genetic_luck = {
+		name = "Genetic Luck",
+		description = "Successfully create a mutation on your first try",
+		reward = 500,
+		icon = "🍀"
+	}
+}
+
+function ItemConfig.CheckMutationAchievement(player, mutationType, totalMutations, isFirstTry)
+	-- This function would be called by GameCore when mutations are created
+	local achievements = {}
+
+	if totalMutations == 1 then
+		table.insert(achievements, "first_mutation")
+	end
+
+	if mutationType == "broctato" or mutationType == "cornmato" then
+		table.insert(achievements, "epic_breeder")
+	end
+
+	if isFirstTry then
+		table.insert(achievements, "genetic_luck")
+	end
+
+	-- Check for mutation master (would need to check if player has all 5 types)
+	-- Check for mutation farm (would need to count total mutations in inventory)
+
+	return achievements
+end
+
+-- ========== SPECIAL MUTATION PROPERTIES ==========
+
+-- Define special behaviors for mutation crops:
+ItemConfig.MutationEffects = {
+	broccarrot = {
+		harvest_bonus = 0.25, -- 25% chance for double harvest
+		nutrition_multiplier = 1.5,
+		special_abilities = {"hybrid_vigor"}
+	},
+
+	brocmato = {
+		flavor_enhancement = true,
+		color_shift = true,
+		antioxidant_boost = 2.0,
+		special_abilities = {"flavor_burst", "color_changing"}
+	},
+
+	broctato = {
+		soil_improvement = true,
+		storage_infinite = true,
+		mutation_catalyst = 0.15, -- Increases nearby mutation chances by 15%
+		special_abilities = {"earth_energy", "storage_mastery", "mutation_catalyst"}
+	},
+
+	cornmato = {
+		coin_bonus = 0.20, -- 20% bonus coins from other crops
+		growth_acceleration = 0.30, -- 30% faster growth nearby
+		premium_unlock = true,
+		special_abilities = {"golden_essence", "solar_power", "premium_genetics"}
+	},
+
+	craddish = {
+		pest_resistance = 0.90, -- 90% pest resistance
+		growth_boost_nearby = 0.20, -- 20% faster growth for adjacent crops
+		heat_resistance = true,
+		special_abilities = {"spicy_kick", "quick_growth", "pest_deterrent"}
+	}
+}
+
+function ItemConfig.GetMutationEffect(mutationType, effectType)
+	local effects = ItemConfig.MutationEffects[mutationType]
+	return effects and effects[effectType]
+end
+
+function ItemConfig.HasMutationAbility(mutationType, abilityName)
+	local effects = ItemConfig.MutationEffects[mutationType]
+	if not effects or not effects.special_abilities then return false end
+
+	for _, ability in ipairs(effects.special_abilities) do
+		if ability == abilityName then return true end
+	end
+	return false
+end
+
+print("ItemConfig: ✅ MUTATION SYSTEM INTEGRATION LOADED!")
+print("🧬 MUTATION FEATURES:")
+print("  📊 Complete crop data for all 5 mutations")
+print("  💰 Enhanced sell values and shop integration")
+print("  🏆 Achievement system for mutations")
+print("  ✨ Special properties and abilities")
+print("  🎨 Custom colors and visual data")
+print("  🔧 Helper functions for mutation detection")
 function ItemConfig.DebugPurchaseOrder(category)
 	print("=== PURCHASE ORDER DEBUG for " .. (category or "ALL") .. " ===")
 
