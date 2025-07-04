@@ -154,6 +154,7 @@ function GameCore:Initialize(shopSystem)
 	self:InitializeCropEventSystem()
 	self:InitializeMutationSystemSafe()
 	self:SetupMutationAdminCommands()
+	self:AddPlantingDebugCommands()
 	print("GameCore: ✅ FIXED core game system initialization complete!")
 	return true
 end
@@ -2038,30 +2039,32 @@ function GameCore:InitializeFarmingSystem()
 	self.Systems.Farming.RarityEffects = {}
 	print("GameCore: Enhanced farming system initialized")
 end
-function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
-	local success, error = pcall(function()
+function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRarity)
+	print("🎨 GameCore: CreateCropOnPlotWithDebug starting...")
+
+	local success, result = pcall(function()
 		local spotPart = plotModel:FindFirstChild("SpotPart")
 		if not spotPart then
-			warn("GameCore: No SpotPart found in plot model")
+			warn("❌ CROP CREATION FAIL: No SpotPart found in plot model")
 			return false
 		end
+		print("✅ SpotPart found")
 
-		-- Remove any existing crop
+		-- Remove any existing crop (safety cleanup)
 		local existingCrop = plotModel:FindFirstChild("CropModel")
 		if existingCrop then
+			print("🧹 Removing existing crop model")
 			existingCrop:Destroy()
 		end
 
 		local cropType = seedData.resultCropId
-		local growthStage = "planted" -- Start with planted stage
-
+		local growthStage = "planted"
 		local cropModel = nil
 
-		-- SAFE: Try to use CropVisualManager if available
-		if _G.CropVisualManager then
-			print("🎨 GameCore: Using CropVisualManager for " .. cropType .. " (" .. cropRarity .. ")")
+		-- TRY METHOD 1: CropVisualManager (if available and working)
+		if _G.CropVisualManager and not _G.DISABLE_CROPVISUALMANAGER then
+			print("🎨 Attempting CropVisualManager creation...")
 
-			-- Try the safe creation method first
 			local vmSuccess, vmResult = pcall(function()
 				if _G.CropVisualManager.CreateCropModelSafe then
 					return _G.CropVisualManager:CreateCropModelSafe(cropType, cropRarity, growthStage)
@@ -2076,8 +2079,9 @@ function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 				cropModel = vmResult
 				cropModel.Name = "CropModel"
 				cropModel.Parent = plotModel
+				print("✅ CropVisualManager creation successful")
 
-				-- Safe positioning
+				-- Position the crop
 				local posSuccess, posError = pcall(function()
 					if _G.CropVisualManager.PositionCropModelSafe then
 						_G.CropVisualManager:PositionCropModelSafe(cropModel, plotModel, growthStage)
@@ -2086,13 +2090,14 @@ function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 					else
 						-- Fallback positioning
 						if cropModel.PrimaryPart then
-							cropModel.PrimaryPart.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
+							cropModel.PrimaryPart.CFrame = spotPart.CFrame + Vector3.new(0, 2, 0)
+							cropModel.PrimaryPart.Anchored = true
 						end
 					end
 				end)
 
 				if not posSuccess then
-					warn("GameCore: Positioning failed: " .. tostring(posError))
+					warn("⚠️ CropVisualManager positioning failed: " .. tostring(posError))
 					-- Try simple positioning
 					if cropModel.PrimaryPart then
 						cropModel.PrimaryPart.CFrame = spotPart.CFrame + Vector3.new(0, 2, 0)
@@ -2100,21 +2105,25 @@ function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 					end
 				end
 			else
-				warn("GameCore: CropVisualManager creation failed: " .. tostring(vmResult))
+				warn("❌ CropVisualManager creation failed: " .. tostring(vmResult))
 				cropModel = nil
 			end
 		else
-			warn("GameCore: CropVisualManager not available")
+			if not _G.CropVisualManager then
+				print("ℹ️ CropVisualManager not available, using fallback")
+			else
+				print("ℹ️ CropVisualManager disabled, using fallback")
+			end
 		end
 
-		-- FALLBACK: Create simple crop if CropVisualManager failed
+		-- METHOD 2: Fallback crop creation (ALWAYS WORKS)
 		if not cropModel then
-			print("🔧 GameCore: Using fallback crop creation for " .. cropType)
-			cropModel = self:CreateSimpleCropModelFallback(plotModel, seedId, seedData, cropRarity)
+			print("🔧 Using fallback crop creation...")
+			cropModel = self:CreateFallbackCrop(plotModel, seedId, seedData, cropRarity)
 		end
 
 		if not cropModel then
-			warn("GameCore: Failed to create crop model")
+			warn("❌ All crop creation methods failed")
 			return false
 		end
 
@@ -2122,33 +2131,37 @@ function GameCore:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
 		self:SetupCropClickDetectionSafe(cropModel, plotModel)
 
 		-- Start growth timer
-		self:StartEnhancedCropGrowthTimerSafe(plotModel, seedData, cropType, cropRarity)
+		self:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
 
+		print("✅ Crop creation completed successfully")
 		return true
 	end)
 
-	if not success then
-		warn("GameCore: Failed to create crop on plot: " .. tostring(error))
+	if success then
+		print("✅ CreateCropOnPlotWithDebug: SUCCESS")
+		return result
+	else
+		warn("❌ CreateCropOnPlotWithDebug: FAILED - " .. tostring(result))
 		return false
 	end
-
-	return true
 end
 
 -- ========== SAFE FALLBACK METHODS ==========
+function GameCore:CreateFallbackCrop(plotModel, seedId, seedData, cropRarity)
+	print("🔧 Creating fallback crop...")
 
-function GameCore:CreateSimpleCropModelFallback(plotModel, seedId, seedData, cropRarity)
 	local spotPart = plotModel:FindFirstChild("SpotPart")
-	if not spotPart then return nil end
+	if not spotPart then 
+		warn("❌ No SpotPart for fallback crop")
+		return nil 
+	end
 
-	print("🔧 Creating simple fallback crop model")
-
-	-- Create simple crop model as fallback
+	-- Create simple but functional crop model
 	local cropModel = Instance.new("Model")
 	cropModel.Name = "CropModel"
 	cropModel.Parent = plotModel
 
-	-- Create basic crop part
+	-- Create crop part
 	local cropPart = Instance.new("Part")
 	cropPart.Name = "Crop"
 	cropPart.Size = Vector3.new(2, 1, 2)
@@ -2159,14 +2172,35 @@ function GameCore:CreateSimpleCropModelFallback(plotModel, seedId, seedData, cro
 	cropPart.CFrame = spotPart.CFrame + Vector3.new(0, 1, 0)
 	cropPart.Parent = cropModel
 
-	-- Apply rarity size scaling
-	local raritySize = self:GetRaritySizeFallback(cropRarity)
-	cropPart.Size = cropPart.Size * raritySize
-
-	-- Add basic rarity effects
-	self:AddBasicRarityEffectsFallback(cropPart, cropRarity)
+	-- Add basic mesh
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(1, 0.5, 1) -- Start small for "planted" stage
+	mesh.Parent = cropPart
 
 	cropModel.PrimaryPart = cropPart
+
+	-- Add basic rarity effects
+	if cropRarity ~= "common" then
+		local light = Instance.new("PointLight")
+		light.Parent = cropPart
+		if cropRarity == "uncommon" then
+			light.Color = Color3.fromRGB(0, 255, 0)
+			light.Brightness = 1
+		elseif cropRarity == "rare" then
+			light.Color = Color3.fromRGB(255, 215, 0)
+			light.Brightness = 1.5
+		elseif cropRarity == "epic" then
+			light.Color = Color3.fromRGB(128, 0, 128)
+			light.Brightness = 2
+		elseif cropRarity == "legendary" then
+			light.Color = Color3.fromRGB(255, 100, 100)
+			light.Brightness = 3
+		end
+		light.Range = 10
+	end
+
+	print("✅ Fallback crop created successfully")
 	return cropModel
 end
 
@@ -2179,15 +2213,59 @@ function GameCore:GetCropColorFallback(cropType, rarity)
 		tomato = Color3.fromRGB(255, 99, 71),
 		potato = Color3.fromRGB(160, 82, 45),
 		radish = Color3.fromRGB(255, 69, 0),
-		-- Mutation crops
-		broccarrot = Color3.fromRGB(150, 200, 100),
-		brocmato = Color3.fromRGB(120, 180, 120),
-		broctato = Color3.fromRGB(130, 150, 100),
-		cornmato = Color3.fromRGB(255, 170, 100),
-		craddish = Color3.fromRGB(255, 120, 80)
+		wheat = Color3.fromRGB(218, 165, 32),
+		cabbage = Color3.fromRGB(124, 252, 0)
 	}
 
-	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)
+	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
+		local success, error = pcall(function()
+			-- Remove existing click detectors
+			for _, obj in pairs(cropModel:GetDescendants()) do
+				if obj:IsA("ClickDetector") then
+					obj:Destroy()
+				end
+			end
+
+			-- Find the best part for click detection
+			local clickablePart = cropModel.PrimaryPart
+			if not clickablePart then
+				for _, part in pairs(cropModel:GetDescendants()) do
+					if part:IsA("BasePart") then
+						clickablePart = part
+						break
+					end
+				end
+			end
+
+			if not clickablePart then
+				warn("GameCore: No suitable part found for click detection")
+				return
+			end
+
+			-- Add click detector
+			local clickDetector = Instance.new("ClickDetector")
+			clickDetector.MaxActivationDistance = 15
+			clickDetector.Parent = clickablePart
+
+			clickDetector.MouseClick:Connect(function(clickingPlayer)
+				local plotOwner = self:GetPlotOwner(plotModel)
+				if clickingPlayer.Name == plotOwner then
+					local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+					if growthStage >= 4 then
+						self:HarvestCrop(clickingPlayer, plotModel)
+					else
+						local timeLeft = self:GetCropTimeRemaining(plotModel)
+						self:SendNotification(clickingPlayer, "Crop Growing", 
+							"Crop is still growing! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "info")
+					end
+				end
+			end)
+		end)
+
+		if not success then
+			warn("GameCore: Failed to setup crop click detection: " .. tostring(error))
+		end
+	end
 
 	-- Modify color based on rarity
 	if rarity == "legendary" then
@@ -2200,20 +2278,6 @@ function GameCore:GetCropColorFallback(cropType, rarity)
 		return baseColor:lerp(Color3.fromRGB(0, 255, 0), 0.1)
 	else
 		return baseColor
-	end
-end
-
-function GameCore:GetRaritySizeFallback(rarity)
-	if rarity == "legendary" then
-		return 1.5
-	elseif rarity == "epic" then
-		return 1.3
-	elseif rarity == "rare" then
-		return 1.2
-	elseif rarity == "uncommon" then
-		return 1.1
-	else
-		return 1.0
 	end
 end
 
@@ -2243,9 +2307,7 @@ function GameCore:AddBasicRarityEffectsFallback(cropPart, cropRarity)
 
 	light.Range = 10
 end
-
 function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
-	-- Safe method to setup click detection
 	local success, error = pcall(function()
 		-- Remove existing click detectors
 		for _, obj in pairs(cropModel:GetDescendants()) do
@@ -2257,7 +2319,6 @@ function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
 		-- Find the best part for click detection
 		local clickablePart = cropModel.PrimaryPart
 		if not clickablePart then
-			-- Find any suitable part
 			for _, part in pairs(cropModel:GetDescendants()) do
 				if part:IsA("BasePart") then
 					clickablePart = part
@@ -2267,7 +2328,7 @@ function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
 		end
 
 		if not clickablePart then
-			warn("GameCore: No suitable part found for click detection in crop model")
+			warn("GameCore: No suitable part found for click detection")
 			return
 		end
 
@@ -2296,72 +2357,58 @@ function GameCore:SetupCropClickDetectionSafe(cropModel, plotModel)
 	end
 end
 
-function GameCore:StartEnhancedCropGrowthTimerSafe(plotModel, seedData, cropType, cropRarity)
-	local success, error = pcall(function()
-		spawn(function()
-			local growTime = seedData.growTime
-			local stages = seedData.stages or {"planted", "sprouting", "growing", "ready"}
-			local stageTime = growTime / (#stages - 1)
+function GameCore:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
+	spawn(function()
+		local growTime = seedData.growTime or 300 -- Default 5 minutes
+		local stages = {"planted", "sprouting", "growing", "ready"}
+		local stageTime = growTime / (#stages - 1)
 
-			for stage = 0, #stages - 2 do
-				wait(stageTime)
+		for stage = 0, #stages - 2 do
+			wait(stageTime)
 
-				if plotModel and plotModel.Parent then
-					local currentStage = plotModel:GetAttribute("GrowthStage") or 0
-					if currentStage == stage then
-						local newStageIndex = stage + 1
-						local newStageName = stages[newStageIndex + 1] or "ready"
-
-						plotModel:SetAttribute("GrowthStage", newStageIndex)
-
-						-- SAFE: Try to update crop visual if CropVisualManager is available
-						if _G.CropVisualManager and _G.CropVisualManager.UpdateCropGrowthStage then
-							local updateSuccess, updateError = pcall(function()
-								_G.CropVisualManager:UpdateCropGrowthStage(plotModel, newStageName, cropType, cropRarity)
-							end)
-
-							if not updateSuccess then
-								warn("GameCore: Visual update failed: " .. tostring(updateError))
-							end
-						else
-							-- Fallback: Basic visual update
-							self:UpdateCropVisualBasicFallback(plotModel, newStageIndex, cropRarity)
-						end
-					end
-				else
-					break
-				end
-			end
-
-			-- Mark as fully grown
 			if plotModel and plotModel.Parent then
-				plotModel:SetAttribute("GrowthStage", #stages)
+				local currentStage = plotModel:GetAttribute("GrowthStage") or 0
+				if currentStage == stage then
+					local newStageIndex = stage + 1
+					plotModel:SetAttribute("GrowthStage", newStageIndex)
+
+					-- Update crop visual if possible
+					local cropModel = plotModel:FindFirstChild("CropModel")
+					if cropModel and cropModel.PrimaryPart then
+						self:UpdateCropVisualForStage(cropModel, newStageIndex, cropRarity)
+					end
+				end
+			else
+				break
 			end
-		end)
+		end
+
+		-- Mark as fully grown
+		if plotModel and plotModel.Parent then
+			plotModel:SetAttribute("GrowthStage", 4)
+			print("🌱 Crop fully grown: " .. cropType)
+		end
 	end)
-
-	if not success then
-		warn("GameCore: Failed to start crop growth timer: " .. tostring(error))
-	end
 end
-
-function GameCore:UpdateCropVisualBasicFallback(plotModel, stageIndex, cropRarity)
-	local cropModel = plotModel:FindFirstChild("CropModel")
+function GameCore:UpdateCropVisualForStage(cropModel, stageIndex, cropRarity)
 	if not cropModel or not cropModel.PrimaryPart then return end
 
+	local TweenService = game:GetService("TweenService")
 	local crop = cropModel.PrimaryPart
+	local mesh = crop:FindFirstChild("SpecialMesh")
 
 	-- Update size based on growth stage
-	local baseScale = 0.3 + stageIndex * 0.425
+	local baseScale = 0.5 + stageIndex * 0.375 -- Grows from 0.5 to 1.625
 	local rarityScale = self:GetRaritySizeFallback(cropRarity)
 	local finalScale = baseScale * rarityScale
 
-	-- Animate size change
-	local sizeTween = TweenService:Create(crop,
-		TweenInfo.new(1, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
-		{Size = Vector3.new(2, 1, 2) * finalScale}
-	)
-	sizeTween:Play()
+	if mesh then
+		local sizeTween = TweenService:Create(mesh,
+			TweenInfo.new(1, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+			{Scale = Vector3.new(finalScale, finalScale * 0.75, finalScale)}
+		)
+		sizeTween:Play()
+	end
 
 	-- Update color to show growth
 	local stageColors = {
@@ -2378,6 +2425,21 @@ function GameCore:UpdateCropVisualBasicFallback(plotModel, stageIndex, cropRarit
 	)
 	colorTween:Play()
 end
+
+function GameCore:GetRaritySizeFallback(rarity)
+	if rarity == "legendary" then
+		return 1.5
+	elseif rarity == "epic" then
+		return 1.3
+	elseif rarity == "rare" then
+		return 1.2
+	elseif rarity == "uncommon" then
+		return 1.1
+	else
+		return 1.0
+	end
+end
+
 -- ADD this method to get crop colors for fallback
 function GameCore:GetCropColor(cropType, rarity)
 	local baseColors = {
@@ -2497,121 +2559,170 @@ print("  ✅ Safe method calling with pcall protection")
 print("  ✅ Maintains existing functionality if mutations fail")
 print("  ✅ Detailed error logging for debugging")
 -- ENHANCED PlantSeed method with mutation detection
-function GameCore:PlantSeed(player, plotModel, seedId)
-	print("🌱 GameCore: ENHANCED plant seed with mutation detection - " .. player.Name .. " wants to plant " .. seedId)
 
-	-- ... (keep existing PlantSeed logic until the end) ...
+function GameCore:PlantSeed(player, plotModel, seedId)
+	print("🌱 GameCore: ENHANCED PlantSeed DEBUG - " .. player.Name .. " wants to plant " .. seedId)
+
+	-- Step 1: Validate inputs
+	if not player then
+		warn("❌ PLANTING FAIL: No player provided")
+		return false
+	end
+
+	if not plotModel then
+		warn("❌ PLANTING FAIL: No plotModel provided")
+		self:SendNotification(player, "Planting Error", "Invalid plot!", "error")
+		return false
+	end
+
+	if not seedId then
+		warn("❌ PLANTING FAIL: No seedId provided")
+		self:SendNotification(player, "Planting Error", "No seed specified!", "error")
+		return false
+	end
+
+	print("✅ Step 1: Input validation passed")
+
+	-- Step 2: Get player data
 	local playerData = self:GetPlayerData(player)
 	if not playerData then 
+		warn("❌ PLANTING FAIL: No player data found for " .. player.Name)
 		self:SendNotification(player, "Error", "Player data not found", "error")
 		return false
 	end
+	print("✅ Step 2: Player data retrieved")
 
-	-- Check if player has farming data
+	-- Step 3: Check farming data
 	if not playerData.farming or not playerData.farming.inventory then
+		warn("❌ PLANTING FAIL: No farming data for " .. player.Name)
 		self:SendNotification(player, "No Farming Data", "You need to set up farming first!", "error")
 		return false
 	end
+	print("✅ Step 3: Farming data exists")
 
-	-- Check if player has the seed
+	-- Step 4: Check seed inventory
 	local seedCount = playerData.farming.inventory[seedId] or 0
+	print("🌱 DEBUG: Player has " .. seedCount .. " of " .. seedId)
+
 	if seedCount <= 0 then
-		local seedInfo = ItemConfig.ShopItems[seedId]
+		local seedInfo = ItemConfig and ItemConfig.ShopItems and ItemConfig.ShopItems[seedId]
 		local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
+		warn("❌ PLANTING FAIL: No seeds - player has " .. seedCount .. " " .. seedId)
 		self:SendNotification(player, "No Seeds", "You don't have any " .. seedName .. "!", "error")
 		return false
 	end
+	print("✅ Step 4: Seed inventory check passed")
 
-	-- Validate the plot model
+	-- Step 5: Validate plot
 	if not plotModel or not plotModel.Parent then
+		warn("❌ PLANTING FAIL: Plot model invalid or destroyed")
 		self:SendNotification(player, "Invalid Plot", "Plot not found or invalid!", "error")
 		return false
 	end
+	print("✅ Step 5: Plot model validation passed")
 
-	-- Check if plot is empty and unlocked
+	-- Step 6: Check plot status
 	local isEmpty = self:IsPlotActuallyEmpty(plotModel)
 	local isUnlocked = plotModel:GetAttribute("IsUnlocked")
 
+	print("🌱 DEBUG: Plot status - isEmpty: " .. tostring(isEmpty) .. ", isUnlocked: " .. tostring(isUnlocked))
+
 	if isUnlocked ~= nil and not isUnlocked then
+		warn("❌ PLANTING FAIL: Plot is locked")
 		self:SendNotification(player, "Locked Plot", "This plot area is locked! Purchase farm expansion to unlock it.", "error")
 		return false
 	end
 
 	if not isEmpty then
+		warn("❌ PLANTING FAIL: Plot is not empty")
 		self:SendNotification(player, "Plot Occupied", "This plot already has a crop growing!", "error")
 		return false
 	end
+	print("✅ Step 6: Plot status check passed")
 
-	-- Check plot ownership
+	-- Step 7: Check plot ownership
 	local plotOwner = self:GetPlotOwner(plotModel)
+	print("🌱 DEBUG: Plot owner: " .. tostring(plotOwner) .. ", Player: " .. player.Name)
+
 	if plotOwner ~= player.Name then
+		warn("❌ PLANTING FAIL: Plot ownership mismatch")
 		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
 		return false
 	end
+	print("✅ Step 7: Plot ownership check passed")
 
-	-- Get seed data from ItemConfig
-	local seedData = ItemConfig.GetSeedData(seedId)
+	-- Step 8: Get seed data
+	local seedData = nil
+	if ItemConfig and ItemConfig.GetSeedData then
+		seedData = ItemConfig.GetSeedData(seedId)
+	end
+
 	if not seedData then
+		warn("❌ PLANTING FAIL: Seed data not found for " .. seedId)
 		self:SendNotification(player, "Invalid Seed", "Seed data not found for " .. seedId .. "!", "error")
 		return false
 	end
+	print("✅ Step 8: Seed data retrieved")
+	print("🌱 DEBUG: Seed data - resultCropId: " .. tostring(seedData.resultCropId) .. ", growTime: " .. tostring(seedData.growTime))
 
-	-- NEW: Check for potential mutations after planting
+	-- Step 9: Get crop type and rarity
 	local cropType = seedData.resultCropId
-	local potentialMutations = self:CheckAdjacentPlotsForMutations(player, plotModel, cropType)
-
-	-- Determine rarity (mutations get special rarity boost)
 	local playerBoosters = self:GetPlayerBoosters(playerData)
-	local cropRarity = ItemConfig.GetCropRarity(seedId, playerBoosters)
+	local cropRarity = "common" -- Default rarity
 
-	-- Plant the seed normally first
-	local success = self:CreateCropOnPlot(plotModel, seedId, seedData, cropRarity)
+	if ItemConfig and ItemConfig.GetCropRarity then
+		cropRarity = ItemConfig.GetCropRarity(seedId, playerBoosters)
+	end
+	print("✅ Step 9: Crop type and rarity determined - " .. cropType .. " (" .. cropRarity .. ")")
+
+	-- Step 10: Create crop on plot (WITH ENHANCED ERROR HANDLING)
+	print("🌱 DEBUG: Starting crop creation...")
+	local success = self:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRarity)
+
 	if not success then
-		self:SendNotification(player, "Planting Failed", "Could not plant seed on plot!", "error")
+		warn("❌ PLANTING FAIL: Crop creation failed")
+		self:SendNotification(player, "Planting Failed", "Could not create crop on plot!", "error")
 		return false
 	end
+	print("✅ Step 10: Crop creation successful")
 
-	-- Remove seed from inventory
+	-- Step 11: Remove seed from inventory
 	playerData.farming.inventory[seedId] = playerData.farming.inventory[seedId] - 1
+	print("✅ Step 11: Seed removed from inventory")
 
-	-- Update plot attributes
+	-- Step 12: Update plot attributes
 	plotModel:SetAttribute("IsEmpty", false)
 	plotModel:SetAttribute("PlantType", cropType)
 	plotModel:SetAttribute("SeedType", seedId)
 	plotModel:SetAttribute("GrowthStage", 0)
 	plotModel:SetAttribute("PlantedTime", os.time())
 	plotModel:SetAttribute("Rarity", cropRarity)
+	print("✅ Step 12: Plot attributes updated")
 
-	-- NEW: Schedule mutation check for when this crop matures
-	if #potentialMutations > 0 then
-		self:ScheduleMutationCheck(player, plotModel, potentialMutations)
-	end
-
-	-- Update stats and save
+	-- Step 13: Update stats and save
 	playerData.stats = playerData.stats or {}
 	playerData.stats.seedsPlanted = (playerData.stats.seedsPlanted or 0) + 1
 	self:SavePlayerData(player)
+	print("✅ Step 13: Stats updated and data saved")
 
+	-- Step 14: Send client update
 	if self.RemoteEvents.PlayerDataUpdated then
 		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+		print("✅ Step 14: Client data update sent")
 	end
 
-	local seedInfo = ItemConfig.ShopItems[seedId]
+	-- Step 15: Success notification
+	local seedInfo = ItemConfig and ItemConfig.ShopItems and ItemConfig.ShopItems[seedId]
 	local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
 
 	local notificationText = "Successfully planted " .. seedName .. "!\n🌟 Rarity: " .. cropRarity .. "\n⏰ Ready in " .. math.floor(seedData.growTime/60) .. " minutes."
 
-	-- Add mutation hint if potential mutations exist
-	if #potentialMutations > 0 then
-		notificationText = notificationText .. "\n✨ Mutation potential detected!"
-	end
-
 	self:SendNotification(player, "🌱 Seed Planted!", notificationText, "success")
+	print("✅ Step 15: Success notification sent")
 
-	print("🌱 GameCore: Successfully planted " .. seedId .. " (" .. cropRarity .. ") for " .. player.Name)
+	print("🎉 PLANTING SUCCESS: " .. seedId .. " (" .. cropRarity .. ") planted for " .. player.Name)
 	return true
 end
-
 -- Check adjacent plots for mutation possibilities
 function GameCore:CheckAdjacentPlotsForMutationsSafe(player, plotModel, newCropType)
 	local success, potentialMutations = pcall(function()
@@ -2675,7 +2786,7 @@ end
 -- Schedule mutation check for when crops mature
 function GameCore:ScheduleMutationCheck(player, plotModel, potentialMutations)
 	local userId = player.UserId
-	local plotId = plotModel:GetDebugId()
+	local plotId = tostring(plotModel)
 
 	-- Store mutation check data
 	if not self.MutationSystem.MutationAttempts[userId] then
@@ -2801,7 +2912,7 @@ function GameCore:HarvestCrop(player, plotModel)
 end
 function GameCore:ProcessPotentialMutations(player, plotModel)
 	local userId = player.UserId
-	local plotId = plotModel:GetDebugId()
+	local plotId = tostring(plotModel)
 
 	local mutationResult = {
 		mutated = false,
@@ -3352,6 +3463,7 @@ function GameCore:SetupMutationAdminCommands()
 	end)
 end
 function GameCore:FindPlotByName(player, plotName)
+	-- Search for the plot
 	local farm = self:GetPlayerSimpleFarm(player)
 	if not farm then return nil end
 
@@ -3360,7 +3472,6 @@ function GameCore:FindPlotByName(player, plotName)
 
 	return plantingSpots:FindFirstChild(plotName)
 end
-
 function GameCore:ForceCreateTestCrop(plotModel, cropType, growthStage)
 	if not plotModel then return false end
 
@@ -4909,6 +5020,75 @@ function GameCore:DebugCowSystem(player)
 	end
 
 	print("========================================")
+end
+function GameCore:AddPlantingDebugCommands()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
+
+				if command == "/testplanting" then
+					print("🧪 Testing planting system for " .. player.Name)
+
+					-- Give test seeds
+					local playerData = self:GetPlayerData(player)
+					if playerData then
+						playerData.farming = playerData.farming or {inventory = {}}
+						playerData.farming.inventory = playerData.farming.inventory or {}
+						playerData.farming.inventory.carrot_seeds = 10
+						playerData.farming.inventory.corn_seeds = 5
+						self:SavePlayerData(player)
+
+						print("✅ Gave test seeds to " .. player.Name)
+						self:SendNotification(player, "Test Seeds", "Added test seeds! Try planting on your farm.", "success")
+					end
+
+				elseif command == "/disablecropvm" then
+					_G.DISABLE_CROPVISUALMANAGER = true
+					print("🔧 Disabled CropVisualManager - using fallback only")
+					self:SendNotification(player, "Debug", "CropVisualManager disabled, using fallback crops.", "info")
+
+				elseif command == "/enablecropvm" then
+					_G.DISABLE_CROPVISUALMANAGER = false
+					print("🔧 Enabled CropVisualManager")
+					self:SendNotification(player, "Debug", "CropVisualManager enabled.", "info")
+
+				elseif command == "/forceplant" then
+					local seedType = args[2] or "carrot_seeds"
+					local plotName = args[3] or "PlantingSpot_1"
+
+					-- Find the plot
+					local plot = self:FindPlotByName(player, plotName)
+					if plot then
+						print("🔧 Force planting " .. seedType .. " on " .. plotName)
+						self:PlantSeed(player, plot, seedType)
+					else
+						print("❌ Could not find plot: " .. plotName)
+					end
+
+				elseif command == "/debugplot" then
+					local plotName = args[2] or "PlantingSpot_1"
+					local plot = self:FindPlotByName(player, plotName)
+
+					if plot then
+						print("=== PLOT DEBUG: " .. plotName .. " ===")
+						print("IsEmpty:", plot:GetAttribute("IsEmpty"))
+						print("PlantType:", plot:GetAttribute("PlantType"))
+						print("IsUnlocked:", plot:GetAttribute("IsUnlocked"))
+						print("Children:")
+						for _, child in pairs(plot:GetChildren()) do
+							print("  -", child.Name, "(" .. child.ClassName .. ")")
+						end
+						print("SpotPart exists:", plot:FindFirstChild("SpotPart") ~= nil)
+						print("===============================")
+					else
+						print("❌ Plot not found: " .. plotName)
+					end
+				end
+			end
+		end)
+	end)
 end
 
 -- Add this admin command to your existing admin commands:
@@ -7163,5 +7343,20 @@ print("  /giveallseeds - Give ALL seed types")
 print("  /testrarities - Visual rarity test")
 print("  /checkshopitems - Debug shop items")
 print("  (Plus all previous commands)")
-
+print("GameCore: ✅ PLANTING DEBUG FIX LOADED!")
+print("🔧 DEBUGGING FEATURES:")
+print("  🌱 Step-by-step planting validation")
+print("  🎨 CropVisualManager bypass option")
+print("  🔧 Fallback crop creation system")
+print("  📊 Enhanced error reporting")
+print("  🧪 Admin testing commands")
+print("")
+print("🔧 Admin Commands:")
+print("  /testplanting - Give test seeds")
+print("  /disablecropvm - Disable CropVisualManager")
+print("  /enablecropvm - Enable CropVisualManager")
+print("  /forceplant [seed] [plot] - Force plant on specific plot")
+print("  /debugplot [plot] - Debug specific plot status")
+print("")
+print("💡 TIP: If planting still fails, try /disablecropvm to use fallback crops")
 return GameCore

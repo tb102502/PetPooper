@@ -507,43 +507,7 @@ CropVisualManager.CropSpecificVisuals = {
 -- ========== ENHANCED MODEL CREATION ==========
 
 
-function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
-	print("🌱 CropVisualManager: Creating crop with mutation support - " .. cropType)
-	local originalCreateCropModel = CropVisualManager.CreateCropModel
-	-- Check if this is a mutation crop
-	local cropData = self.CropSpecificVisuals[cropType]
-	local isMutation = cropData and cropData.isMutation
 
-	if isMutation then
-		print("🧬 Creating MUTATION crop: " .. cropType)
-	end
-
-	-- Use the original method but with mutation enhancements
-	local cropModel = originalCreateCropModel(self, cropType, rarity, growthStage)
-
-	-- Add mutation effects if applicable
-	if cropModel and isMutation then
-		self:AddMutationEffects(cropModel, cropType, rarity)
-
-		-- Mark as mutation crop
-		cropModel:SetAttribute("IsMutation", true)
-		cropModel:SetAttribute("MutationTier", cropData.mutationTier or 1)
-		cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops or {}, ","))
-
-		print("🧬 Added mutation effects to " .. cropType)
-	end
-
-	return cropModel
-end
-
-print("CropVisualManager: ✅ MUTATION SUPPORT LOADED!")
-print("🧬 MUTATION VISUAL FEATURES:")
-print("  🎨 Dual-color glow effects")
-print("  ✨ Hybrid particle systems")
-print("  💫 Mutation pulse animations")
-print("  🌀 Special mutation auras")
-print("  ⚡ Genetic instability effects")
-print("  🎭 Enhanced procedural appearances")
 
 function CropVisualManager:HasPreMadeModelWithAliases(cropType)
 	-- Check direct match first
@@ -621,87 +585,6 @@ function CropVisualManager:EnsureModelIsProperlyAnchored(cropModel)
 	end
 
 	print("🔒 Model anchoring complete: " .. cropModel.Name)
-end
-
--- Enhanced pre-made model creation
-function CropVisualManager:CreatePreMadeModelCropWithMutations(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	local templateModel, actualModelName = self:GetPreMadeModelWithAliases(cropType)
-	if not templateModel then
-		warn("CropVisualManager: Pre-made model not found for " .. cropType .. ", falling back to procedural")
-		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	end
-
-	print("🎭 Creating STABLE pre-made model for " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
-
-	-- Clone the pre-made model
-	local success, cropModel = pcall(function()
-		return templateModel:Clone()
-	end)
-
-	if not success then
-		warn("CropVisualManager: Failed to clone model for " .. cropType .. ": " .. tostring(cropModel))
-		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	end
-
-	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_premade"
-
-	-- STEP 1: Immediately anchor all parts before any other operations
-	for _, part in pairs(cropModel:GetDescendants()) do
-		if part:IsA("BasePart") then
-			part.Anchored = true
-			part.CanCollide = false
-			part.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-			part.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-		end
-	end
-
-	-- STEP 2: Enhanced primary part detection
-	local primaryPart = self:FindBestPrimaryPart(cropModel)
-	if not primaryPart then
-		warn("CropVisualManager: Pre-made model for " .. cropType .. " has no suitable primary part, falling back to procedural")
-		cropModel:Destroy()
-		return self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-	end
-
-	cropModel.PrimaryPart = primaryPart
-
-	-- STEP 3: Ensure primary part is anchored
-	cropModel.PrimaryPart.Anchored = true
-	cropModel.PrimaryPart.CanCollide = false
-
-	-- STEP 4: Enhanced scaling with improved stability
-	local scaleMultiplier = self:CalculateScaleMultiplier(stageData, rarity)
-	local scaleSuccess = self:ScaleModelSafely(cropModel, scaleMultiplier)
-
-	if not scaleSuccess then
-		warn("CropVisualManager: Failed to scale model for " .. cropType)
-	end
-
-	-- STEP 5: Final anchoring pass
-	self:EnsureModelIsProperlyAnchored(cropModel)
-
-	-- STEP 6: Add enhanced visual effects (but no movement animations yet)
-	self:AddEnhancedVisualEffectsStable(cropModel, cropType, stageData, rarityData, cropData, rarity)
-	
-	local cropModel = self:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
-
-		if cropModel and cropData and cropData.isMutation then	
-			self:AddMutationEffects(cropModel, cropType, rarity)
-
-	-- STEP 7: Add model identification attributes
-			cropModel:SetAttribute("CropType", cropType)
-			cropModel:SetAttribute("Rarity", rarity)
-			cropModel:SetAttribute("GrowthStage", growthStage)
-			cropModel:SetAttribute("ModelType", "PreMade")
-			cropModel:SetAttribute("ModelSource", actualModelName)
-			cropModel:SetAttribute("IsStable", true)
-			cropModel:SetAttribute("IsMutation", true)
-			cropModel:SetAttribute("MutationTier", cropData.mutationTier)
-			cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops, ","))
-		end
-
-	print("✅ Created STABLE pre-made model crop: " .. cropType .. " (" .. rarity .. ")")
-	return cropModel
 end
 
 -- NEW: Enhanced visual effects that don't cause movement
@@ -1123,260 +1006,6 @@ function CropVisualManager:IsMutationCrop(cropType)
 	return cropData and cropData.isMutation == true
 end
 
-function CropVisualManager:AddMutationEffectsSafe(cropModel, cropType, rarity)
-	-- SAFE method that only adds effects if it's a mutation crop
-	if not cropModel or not cropModel.PrimaryPart then return end
-
-	local cropData = self.CropSpecificVisuals[cropType]
-	if not cropData or not cropData.isMutation then return end
-
-	print("🧬 Adding mutation effects for " .. cropType)
-
-	local success, error = pcall(function()
-		-- Add safe dual-color glow effect
-		self:AddSafeDualColorGlow(cropModel, cropData.primaryColor, cropData.secondaryColor)
-
-		-- Add safe mutation particles
-		self:AddSafeMutationParticles(cropModel, cropType, cropData)
-
-		-- Add safe mutation aura
-		self:AddSafeMutationAura(cropModel, cropType, cropData)
-	end)
-
-	if not success then
-		warn("CropVisualManager: Error adding mutation effects: " .. tostring(error))
-	end
-end
-
-function CropVisualManager:AddSafeDualColorGlow(cropModel, primaryColor, secondaryColor)
-	local primaryPart = cropModel.PrimaryPart
-	if not primaryPart then return end
-
-	-- Remove existing mutation lights to prevent duplicates
-	for _, child in pairs(primaryPart:GetChildren()) do
-		if child.Name:find("MutationGlow") then
-			child:Destroy()
-		end
-	end
-
-	-- Create primary color glow
-	local primaryLight = Instance.new("PointLight")
-	primaryLight.Name = "PrimaryMutationGlow"
-	primaryLight.Color = primaryColor
-	primaryLight.Brightness = 1.5
-	primaryLight.Range = 8
-	primaryLight.Parent = primaryPart
-
-	-- Create secondary color glow
-	local secondaryLight = Instance.new("PointLight")
-	secondaryLight.Name = "SecondaryMutationGlow" 
-	secondaryLight.Color = secondaryColor
-	secondaryLight.Brightness = 1
-	secondaryLight.Range = 6
-	secondaryLight.Parent = primaryPart
-
-	-- Safe pulsing animation
-	spawn(function()
-		local pulseCount = 0
-		while cropModel and cropModel.Parent and pulseCount < 100 do -- Limit pulses to prevent infinite loops
-			pulseCount = pulseCount + 1
-
-			if primaryLight and primaryLight.Parent then
-				local primaryPulse = TweenService:Create(primaryLight,
-					TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-					{Brightness = 2.5, Range = 12}
-				)
-				primaryPulse:Play()
-			end
-
-			wait(1.5)
-
-			if secondaryLight and secondaryLight.Parent then
-				local secondaryPulse = TweenService:Create(secondaryLight,
-					TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-					{Brightness = 1.8, Range = 10}
-				)
-				secondaryPulse:Play()
-			end
-
-			wait(4)
-
-			-- Return to base values
-			if primaryLight and primaryLight.Parent then
-				local primaryReturn = TweenService:Create(primaryLight,
-					TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{Brightness = 1.5, Range = 8}
-				)
-				primaryReturn:Play()
-			end
-
-			if secondaryLight and secondaryLight.Parent then
-				local secondaryReturn = TweenService:Create(secondaryLight,
-					TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-					{Brightness = 1, Range = 6}
-				)
-				secondaryReturn:Play()
-			end
-
-			wait(3)
-		end
-	end)
-end
-
-function CropVisualManager:AddSafeMutationParticles(cropModel, cropType, cropData)
-	local primaryPart = cropModel.PrimaryPart
-	if not primaryPart then return end
-
-	-- Remove existing mutation particles
-	for _, child in pairs(primaryPart:GetChildren()) do
-		if child.Name:find("MutationParticle") then
-			child:Destroy()
-		end
-	end
-
-	-- Create attachment for particles
-	local attachment = Instance.new("Attachment")
-	attachment.Name = "MutationParticleAttachment"
-	attachment.Parent = primaryPart
-
-	-- Create simple hybrid particles
-	local hybridParticles = Instance.new("ParticleEmitter")
-	hybridParticles.Name = "HybridEnergyParticles"
-	hybridParticles.Parent = attachment
-
-	-- Configure particle appearance
-	hybridParticles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
-	hybridParticles.Rate = 15
-	hybridParticles.Lifetime = NumberRange.new(2, 4)
-	hybridParticles.Speed = NumberRange.new(2, 5)
-	hybridParticles.SpreadAngle = Vector2.new(30, 30)
-
-	-- Color sequence with both parent colors
-	local colorSequence = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, cropData.primaryColor),
-		ColorSequenceKeypoint.new(0.5, cropData.secondaryColor),
-		ColorSequenceKeypoint.new(1, cropData.primaryColor)
-	})
-	hybridParticles.Color = colorSequence
-
-	-- Size and transparency
-	hybridParticles.Size = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.3),
-		NumberSequenceKeypoint.new(0.5, 0.8),
-		NumberSequenceKeypoint.new(1, 0.1)
-	})
-
-	hybridParticles.Transparency = NumberSequence.new({
-		NumberSequenceKeypoint.new(0, 0.4),
-		NumberSequenceKeypoint.new(0.7, 0.8),
-		NumberSequenceKeypoint.new(1, 1)
-	})
-end
-
-function CropVisualManager:AddSafeMutationAura(cropModel, cropType, cropData)
-	local primaryPart = cropModel.PrimaryPart
-	if not primaryPart then return end
-
-	-- Remove existing auras
-	for _, child in pairs(cropModel:GetChildren()) do
-		if child.Name == "MutationAura" then
-			child:Destroy()
-		end
-	end
-
-	-- Create mutation aura sphere
-	local aura = Instance.new("Part")
-	aura.Name = "MutationAura"
-	aura.Size = primaryPart.Size * 1.5
-	aura.Shape = Enum.PartType.Ball
-	aura.Material = Enum.Material.ForceField
-	aura.CanCollide = false
-	aura.Anchored = true
-	aura.Transparency = 0.9
-	aura.CFrame = primaryPart.CFrame
-	aura.Parent = cropModel
-
-	-- Color based on mutation tier
-	if cropData.mutationTier == 1 then
-		aura.Color = Color3.fromRGB(100, 255, 100) -- Green for common mutations
-	elseif cropData.mutationTier == 2 then
-		aura.Color = Color3.fromRGB(255, 100, 255) -- Magenta for rare mutations
-	else
-		aura.Color = Color3.fromRGB(255, 255, 100) -- Yellow for special mutations
-	end
-
-	-- Safe aura animation
-	spawn(function()
-		local animationCount = 0
-		while aura and aura.Parent and animationCount < 50 do -- Limit animations
-			animationCount = animationCount + 1
-
-			if aura and aura.Parent then
-				local alphaTween = TweenService:Create(aura,
-					TweenInfo.new(3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, 1, true),
-					{Transparency = 0.7}
-				)
-				alphaTween:Play()
-				alphaTween.Completed:Wait()
-			else
-				break
-			end
-
-			wait(1)
-		end
-	end)
-end
-
-local originalCreateCropModel = CropVisualManager.CreateCropModel
-
--- SAFE wrapper that doesn't break existing functionality
-function CropVisualManager:CreateCropModelSafe(cropType, rarity, growthStage)
-	print("🌱 CropVisualManager: Creating crop with SAFE mutation support - " .. cropType)
-
-	local cropModel = nil
-
-	-- Try to use the original method first
-	if originalCreateCropModel then
-		local success, result = pcall(function()
-			return originalCreateCropModel(self, cropType, rarity, growthStage)
-		end)
-
-		if success then
-			cropModel = result
-		else
-			warn("CropVisualManager: Original CreateCropModel failed: " .. tostring(result))
-		end
-	end
-
-	-- If original method failed or doesn't exist, try the fallback
-	if not cropModel then
-		print("🔧 Using fallback crop creation method")
-		cropModel = self:CreateFallbackCropModel(cropType, rarity, growthStage)
-	end
-
-	-- Add mutation effects if applicable and successful
-	if cropModel and self:IsMutationCrop(cropType) then
-		print("🧬 Adding mutation effects to " .. cropType)
-
-		-- Add mutation attributes
-		cropModel:SetAttribute("IsMutation", true)
-		local cropData = self.CropSpecificVisuals[cropType]
-		if cropData then
-			cropModel:SetAttribute("MutationTier", cropData.mutationTier or 1)
-			cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops or {}, ","))
-		end
-
-		-- Add visual effects safely
-		spawn(function()
-			wait(0.5) -- Wait for model to be positioned
-			if cropModel and cropModel.Parent then
-				self:AddMutationEffectsSafe(cropModel, cropType, rarity)
-			end
-		end)
-	end
-
-	return cropModel
-end
 
 -- Fallback crop creation method
 function CropVisualManager:CreateFallbackCropModel(cropType, rarity, growthStage)
@@ -1969,9 +1598,115 @@ function CropVisualManager:AddEnhancedVisualEffects(cropModel, cropType, stageDa
 	-- Add rarity coloring overlay for pre-made models
 	self:AddRarityColorOverlay(cropModel, rarity, rarityData)
 end
+function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
+	print("🌱 CropVisualManager: Creating crop model - " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
 
--- Enhanced procedural crop creation (keeping existing logic but with improvements)
-function CropVisualManager:CreateProceduralCropWithMutations(cropType, rarity, growthStage, stageData, rarityData, cropData)
+	local success, cropModel = pcall(function()
+		-- Get configuration data
+		local stageData = self.GrowthStageVisuals[growthStage] or self.GrowthStageVisuals.ready
+		local rarityData = self.RarityEffects[rarity] or self.RarityEffects.common
+		local cropData = self.CropSpecificVisuals[cropType] or {}
+
+		local finalCropModel = nil
+
+		-- Determine which creation method to use
+		local shouldUsePreMade = (stageData.usePreMadeModel or stageData.preferPreMadeModel) 
+			and self:HasPreMadeModelWithAliases(cropType)
+
+		if shouldUsePreMade then
+			print("🎭 Using pre-made model for " .. cropType)
+			finalCropModel = self:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+		else
+			print("🔧 Using procedural model for " .. cropType)
+			finalCropModel = self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+		end
+
+		if not finalCropModel then
+			warn("Failed to create crop model, trying fallback...")
+			finalCropModel = self:CreateFallbackCropModel(cropType, rarity, growthStage)
+		end
+
+		-- Add mutation effects if applicable
+		if finalCropModel and cropData.isMutation then
+			print("🧬 Adding mutation effects to " .. cropType)
+			self:AddMutationEffectsSafe(finalCropModel, cropType, rarity)
+
+			-- Add mutation attributes
+			finalCropModel:SetAttribute("IsMutation", true)
+			finalCropModel:SetAttribute("MutationTier", cropData.mutationTier or 1)
+			finalCropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops or {}, ","))
+		end
+
+		-- Add standard attributes
+		if finalCropModel then
+			finalCropModel:SetAttribute("CropType", cropType)
+			finalCropModel:SetAttribute("Rarity", rarity)
+			finalCropModel:SetAttribute("GrowthStage", growthStage)
+			finalCropModel:SetAttribute("CreatedTime", os.time())
+		end
+
+		return finalCropModel
+	end)
+
+	if success and cropModel then
+		print("✅ Successfully created crop model: " .. cropModel.Name)
+		return cropModel
+	else
+		warn("❌ Failed to create crop model: " .. tostring(cropModel))
+		return self:CreateFallbackCropModel(cropType, rarity, growthStage)
+	end
+end
+
+-- ========== SEPARATE CREATION METHODS (NO RECURSION) ==========
+
+function CropVisualManager:CreatePreMadeModelCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+	local templateModel, actualModelName = self:GetPreMadeModelWithAliases(cropType)
+	if not templateModel then
+		warn("CropVisualManager: Pre-made model not found for " .. cropType)
+		return nil
+	end
+
+	print("🎭 Creating pre-made model for " .. cropType)
+
+	local success, cropModel = pcall(function()
+		return templateModel:Clone()
+	end)
+
+	if not success then
+		warn("CropVisualManager: Failed to clone model: " .. tostring(cropModel))
+		return nil
+	end
+
+	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_premade"
+
+	-- Ensure model stability
+	self:EnsureModelIsProperlyAnchored(cropModel)
+
+	-- Set primary part
+	local primaryPart = self:FindBestPrimaryPart(cropModel)
+	if primaryPart then
+		cropModel.PrimaryPart = primaryPart
+	end
+
+	-- Scale based on stage and rarity
+	local scaleMultiplier = self:CalculateScaleMultiplier(stageData, rarity)
+	self:ScaleModelSafely(cropModel, scaleMultiplier)
+
+	-- Add visual effects
+	self:AddEnhancedVisualEffectsStable(cropModel, cropType, stageData, rarityData, cropData, rarity)
+
+	-- Final anchoring
+	self:EnsureModelIsProperlyAnchored(cropModel)
+
+	cropModel:SetAttribute("ModelType", "PreMade")
+	cropModel:SetAttribute("ModelSource", actualModelName)
+
+	return cropModel
+end
+
+function CropVisualManager:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+	print("🔧 Creating procedural crop for " .. cropType)
+
 	-- Create main crop model
 	local cropModel = Instance.new("Model")
 	cropModel.Name = cropType .. "_" .. rarity .. "_" .. growthStage .. "_procedural"
@@ -1979,7 +1714,7 @@ function CropVisualManager:CreateProceduralCropWithMutations(cropType, rarity, g
 	-- Primary Part (main crop body)
 	local primaryPart = Instance.new("Part")
 	primaryPart.Name = "CropBody"
-	primaryPart.Size = Vector3.new(2, 2, 2) * stageData.sizeMultiplier
+	primaryPart.Size = Vector3.new(2, 2, 2) * (stageData.sizeMultiplier or 1)
 	primaryPart.Material = Enum.Material.Neon
 	primaryPart.Shape = Enum.PartType.Block
 	primaryPart.TopSurface = Enum.SurfaceType.Smooth
@@ -1991,13 +1726,13 @@ function CropVisualManager:CreateProceduralCropWithMutations(cropType, rarity, g
 	if cropData.primaryColor then
 		primaryPart.Color = cropData.primaryColor
 	else
-		primaryPart.Color = stageData.color
+		primaryPart.Color = stageData.color or Color3.fromRGB(100, 200, 100)
 	end
 
-	primaryPart.Transparency = stageData.transparency
+	primaryPart.Transparency = stageData.transparency or 0
 	primaryPart.Parent = cropModel
 
-	-- Create mesh for more interesting shape
+	-- Create mesh for better appearance
 	local mesh = Instance.new("SpecialMesh")
 	mesh.MeshType = Enum.MeshType.Sphere
 	mesh.Scale = Vector3.new(1, 1.5, 1)
@@ -2009,27 +1744,193 @@ function CropVisualManager:CreateProceduralCropWithMutations(cropType, rarity, g
 	-- Set primary part
 	cropModel.PrimaryPart = primaryPart
 
-	-- Add enhanced visual effects
-	self:AddEnhancedVisualEffects(cropModel, cropType, stageData, rarityData, cropData, rarity)
-	self:EnsureModelIsProperlyAnchored(cropModel)
-	local cropModel = self:CreateProceduralCrop(cropType, rarity, growthStage, stageData, rarityData, cropData)
+	-- Add visual effects
+	self:AddEnhancedVisualEffectsStable(cropModel, cropType, stageData, rarityData, cropData, rarity)
 
-	if cropModel and cropData and cropData.isMutation then
-		-- Add mutation-specific effects
-		self:AddMutationEffects(cropModel, cropType, rarity)
-	-- Add model identification attributes
-	cropModel:SetAttribute("CropType", cropType)
-	cropModel:SetAttribute("Rarity", rarity)
-	cropModel:SetAttribute("GrowthStage", growthStage)
+	-- Ensure stability
+	self:EnsureModelIsProperlyAnchored(cropModel)
+
 	cropModel:SetAttribute("ModelType", "Procedural")
-	cropModel:SetAttribute("IsMutation", true)
-	cropModel:SetAttribute("MutationTier", cropData.mutationTier)
-	cropModel:SetAttribute("ParentCrops", table.concat(cropData.parentCrops, ","))
-		self:EnhanceProceduralMutationAppearance(cropModel, cropData)
-	end
 
 	return cropModel
 end
+function CropVisualManager:AddMutationEffectsSafe(cropModel, cropType, rarity)
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local cropData = self.CropSpecificVisuals[cropType]
+	if not cropData or not cropData.isMutation then return end
+
+	print("🧬 Adding safe mutation effects for " .. cropType)
+
+	local success, error = pcall(function()
+		-- Add dual-color glow effect
+		self:AddSafeDualColorGlow(cropModel, cropData.primaryColor, cropData.secondaryColor)
+
+		-- Add mutation particles
+		self:AddSafeMutationParticles(cropModel, cropType, cropData)
+
+		-- Add mutation aura
+		self:AddSafeMutationAura(cropModel, cropType, cropData)
+	end)
+
+	if not success then
+		warn("CropVisualManager: Error adding mutation effects: " .. tostring(error))
+	end
+end
+
+function CropVisualManager:AddSafeDualColorGlow(cropModel, primaryColor, secondaryColor)
+	local primaryPart = cropModel.PrimaryPart
+	if not primaryPart then return end
+
+	-- Remove existing mutation lights to prevent duplicates
+	for _, child in pairs(primaryPart:GetChildren()) do
+		if child.Name:find("MutationGlow") then
+			child:Destroy()
+		end
+	end
+
+	-- Create primary color glow
+	local primaryLight = Instance.new("PointLight")
+	primaryLight.Name = "PrimaryMutationGlow"
+	primaryLight.Color = primaryColor
+	primaryLight.Brightness = 1.5
+	primaryLight.Range = 8
+	primaryLight.Parent = primaryPart
+
+	-- Create secondary color glow
+	local secondaryLight = Instance.new("PointLight")
+	secondaryLight.Name = "SecondaryMutationGlow" 
+	secondaryLight.Color = secondaryColor
+	secondaryLight.Brightness = 1
+	secondaryLight.Range = 6
+	secondaryLight.Parent = primaryPart
+end
+
+function CropVisualManager:AddSafeMutationParticles(cropModel, cropType, cropData)
+	local primaryPart = cropModel.PrimaryPart
+	if not primaryPart then return end
+
+	-- Create attachment for particles
+	local attachment = Instance.new("Attachment")
+	attachment.Name = "MutationParticleAttachment"
+	attachment.Parent = primaryPart
+
+	-- Create simple hybrid particles
+	local hybridParticles = Instance.new("ParticleEmitter")
+	hybridParticles.Name = "HybridEnergyParticles"
+	hybridParticles.Parent = attachment
+
+	-- Configure particle appearance
+	hybridParticles.Texture = "rbxasset://textures/particles/sparkles_main.dds"
+	hybridParticles.Rate = 15
+	hybridParticles.Lifetime = NumberRange.new(2, 4)
+	hybridParticles.Speed = NumberRange.new(2, 5)
+	hybridParticles.SpreadAngle = Vector2.new(30, 30)
+
+	-- Color sequence with both parent colors
+	local colorSequence = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, cropData.primaryColor),
+		ColorSequenceKeypoint.new(0.5, cropData.secondaryColor),
+		ColorSequenceKeypoint.new(1, cropData.primaryColor)
+	})
+	hybridParticles.Color = colorSequence
+
+	hybridParticles.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(0.5, 0.8),
+		NumberSequenceKeypoint.new(1, 0.1)
+	})
+
+	hybridParticles.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.4),
+		NumberSequenceKeypoint.new(0.7, 0.8),
+		NumberSequenceKeypoint.new(1, 1)
+	})
+end
+
+function CropVisualManager:AddSafeMutationAura(cropModel, cropType, cropData)
+	local primaryPart = cropModel.PrimaryPart
+	if not primaryPart then return end
+
+	-- Create mutation aura sphere
+	local aura = Instance.new("Part")
+	aura.Name = "MutationAura"
+	aura.Size = primaryPart.Size * 1.5
+	aura.Shape = Enum.PartType.Ball
+	aura.Material = Enum.Material.ForceField
+	aura.CanCollide = false
+	aura.Anchored = true
+	aura.Transparency = 0.9
+	aura.CFrame = primaryPart.CFrame
+	aura.Parent = cropModel
+
+	-- Color based on mutation tier
+	if cropData.mutationTier == 1 then
+		aura.Color = Color3.fromRGB(100, 255, 100)
+	elseif cropData.mutationTier == 2 then
+		aura.Color = Color3.fromRGB(255, 100, 255)
+	else
+		aura.Color = Color3.fromRGB(255, 255, 100)
+	end
+end
+
+-- ========== TESTING COMMANDS ==========
+
+-- Safe test command for mutations
+_G.TestMutationSafe = function(cropType)
+	cropType = cropType or "broccarrot"
+
+	print("🧪 Testing mutation creation: " .. cropType)
+
+	local testCrop = CropVisualManager:CreateCropModel(cropType, "rare", "ready")
+	if testCrop then
+		testCrop.Parent = workspace
+		if testCrop.PrimaryPart then
+			testCrop.PrimaryPart.CFrame = CFrame.new(0, 5, 0)
+		end
+		print("✅ Mutation test successful: " .. testCrop.Name)
+	else
+		print("❌ Mutation test failed")
+	end
+end
+
+-- Debug crop creation without recursion
+_G.DebugCropCreation = function(cropType, rarity, stage)
+	cropType = cropType or "carrot"
+	rarity = rarity or "common"
+	stage = stage or "ready"
+
+	print("=== CROP CREATION DEBUG ===")
+	print("Creating: " .. cropType .. " (" .. rarity .. ", " .. stage .. ")")
+
+	local startTime = tick()
+	local testCrop = CropVisualManager:CreateCropModel(cropType, rarity, stage)
+	local endTime = tick()
+
+	print("Creation time: " .. (endTime - startTime) .. " seconds")
+
+	if testCrop then
+		print("✅ Success: " .. testCrop.Name)
+		testCrop.Parent = workspace
+		if testCrop.PrimaryPart then
+			testCrop.PrimaryPart.CFrame = CFrame.new(math.random(-10, 10), 5, math.random(-10, 10))
+		end
+	else
+		print("❌ Failed to create crop")
+	end
+	print("===========================")
+end
+
+print("🔧 ✅ RECURSION BUG FIX LOADED!")
+print("Key fixes:")
+print("  ✅ Removed infinite recursion in CreateCropModel")
+print("  ✅ Consolidated all crop creation into single function")
+print("  ✅ Fixed mutation system integration")
+print("  ✅ Added proper error handling")
+print("")
+print("🧪 Test commands:")
+print("  _G.TestMutationSafe('broccarrot')")
+print("  _G.DebugCropCreation('carrot', 'legendary', 'ready')")
 function CropVisualManager:EnhanceProceduralMutationAppearance(cropModel, cropData)
 	local primaryPart = cropModel.PrimaryPart
 
@@ -2814,7 +2715,7 @@ end
 function CropVisualManager:CheckPlotState(plotModel)
 	if not plotModel then return end
 
-	local plotId = plotModel:GetDebugId() -- Unique identifier
+	local plotId = tostring(plotModel) -- Unique identifier
 	local currentState = self:GetPlotCurrentState(plotModel)
 	local previousState = self.PlotStates[plotId]
 
