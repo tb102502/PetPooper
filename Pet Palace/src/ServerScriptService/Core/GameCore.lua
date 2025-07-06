@@ -2212,56 +2212,6 @@ function GameCore:GetPlayerSimpleFarm(player)
 	return farmArea:FindFirstChild(player.Name .. "_SimpleFarm")
 end
 
--- Simple plot click handler
-function GameCore:HandleSimplePlotClick(player, spotModel)
-	local isEmpty = spotModel:GetAttribute("IsEmpty")
-	local isUnlocked = spotModel:GetAttribute("IsUnlocked")
-
-	-- All spots should be unlocked in simple system
-	if not isUnlocked then
-		self:SendNotification(player, "Error", "This spot should be unlocked! Please report this bug.", "error")
-		return
-	end
-
-	if not isEmpty then
-		-- Check if crop is ready for harvest
-		local growthStage = spotModel:GetAttribute("GrowthStage") or 0
-		if growthStage >= 4 then
-			self:HarvestCrop(player, spotModel)
-		else
-			self:SendNotification(player, "Crop Growing", "This crop is still growing! Wait for it to be ready.", "info")
-		end
-		return
-	end
-
-	local plotOwner = self:GetSimplePlotOwner(spotModel)
-	if plotOwner ~= player.Name then
-		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
-		return
-	end
-
-	local playerData = self:GetPlayerData(player)
-	if not playerData or not playerData.farming or not playerData.farming.inventory then
-		self:SendNotification(player, "No Farming Data", "You need to set up farming first! Visit the shop.", "warning")
-		return
-	end
-
-	local hasSeeds = false
-	for itemId, qty in pairs(playerData.farming.inventory) do
-		if itemId:find("_seeds") and qty > 0 then
-			hasSeeds = true
-			break
-		end
-	end
-	if not hasSeeds then
-		self:SendNotification(player, "No Seeds", "You don't have any seeds! Buy some from the shop first.", "warning")
-		return
-	end
-
-	-- Send to client for seed selection
-	self.RemoteEvents.PlantSeed:FireClient(player, spotModel)
-end
-
 -- Get simple plot owner
 function GameCore:GetSimplePlotOwner(spotModel)
 	local parent = spotModel.Parent
@@ -2473,6 +2423,26 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 
 			if vmSuccess and cropModel then
 				print("✅ CropVisualManager creation successful")
+
+				-- Ensure click detection is setup (CropVisualManager should handle this, but double-check)
+				local cropModelInPlot = plotModel:FindFirstChild("CropModel")
+				if cropModelInPlot then
+					local hasClickDetector = false
+					for _, obj in pairs(cropModelInPlot:GetDescendants()) do
+						if obj:IsA("ClickDetector") and obj.Name == "CropClickDetector" then
+							hasClickDetector = true
+							break
+						end
+					end
+
+					if not hasClickDetector then
+						print("🖱️ Adding missing click detection to CropVisualManager crop")
+						self:SetupCropClickDetection(cropModelInPlot, plotModel)
+					else
+						print("✅ Click detection already present")
+					end
+				end
+
 				return true
 			else
 				warn("⚠️ CropVisualManager creation failed: " .. tostring(cropModel))
@@ -2486,8 +2456,9 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 		local fallbackCrop = self:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
 
 		if not fallbackCrop then
-			warn("❌ All crop creation methods failed")
-			return false
+			warn("❌ Enhanced fallback creation failed")
+			-- Try basic fallback as last resort
+			return self:CreateBasicFallbackCrop(plotModel, seedId, seedData, cropRarity)
 		end
 
 		print("✅ Crop creation completed successfully")
@@ -2503,10 +2474,77 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 		return self:CreateBasicFallbackCrop(plotModel, seedId, seedData, cropRarity)
 	end
 end
+-- ADD this method to your GameCore.lua (it's referenced but missing)
 
+function GameCore:GetAdjacentPlots(player, centerPlot)
+	print("🧬 Getting adjacent plots for " .. centerPlot.Name)
+
+	local adjacentPlots = {}
+
+	-- Get plot grid position
+	local plotRow = centerPlot:GetAttribute("GridRow")
+	local plotCol = centerPlot:GetAttribute("GridCol")
+
+	if not plotRow or not plotCol then
+		warn("GameCore: Plot missing grid coordinates for " .. centerPlot.Name)
+		return {}
+	end
+
+	print("🧬 Center plot at grid position: (" .. plotRow .. ", " .. plotCol .. ")")
+
+	-- Find player's farm
+	local farm = self:GetPlayerSimpleFarm(player)
+	if not farm then 
+		warn("GameCore: No farm found for " .. player.Name)
+		return {} 
+	end
+
+	local plantingSpots = farm:FindFirstChild("PlantingSpots")
+	if not plantingSpots then 
+		warn("GameCore: No PlantingSpots folder found")
+		return {} 
+	end
+
+	-- Check adjacent positions (up, down, left, right)
+	local adjacentPositions = {
+		{plotRow - 1, plotCol},     -- Up
+		{plotRow + 1, plotCol},     -- Down
+		{plotRow, plotCol - 1},     -- Left
+		{plotRow, plotCol + 1}      -- Right
+	}
+
+	print("🧬 Checking " .. #adjacentPositions .. " adjacent positions...")
+
+	for i, pos in ipairs(adjacentPositions) do
+		local targetRow, targetCol = pos[1], pos[2]
+		print("🧬 Looking for plot at (" .. targetRow .. ", " .. targetCol .. ")")
+
+		-- Find plot at this position
+		for _, spot in pairs(plantingSpots:GetChildren()) do
+			if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+				local spotRow = spot:GetAttribute("GridRow")
+				local spotCol = spot:GetAttribute("GridCol")
+
+				if spotRow == targetRow and spotCol == targetCol then
+					table.insert(adjacentPlots, spot)
+
+					local plantType = spot:GetAttribute("PlantType") or "empty"
+					local growthStage = spot:GetAttribute("GrowthStage") or 0
+					print("🧬 Found adjacent plot: " .. spot.Name .. " with " .. plantType .. " (stage " .. growthStage .. ")")
+					break
+				end
+			end
+		end
+	end
+
+	print("🧬 Found " .. #adjacentPlots .. " adjacent plots to " .. centerPlot.Name)
+	return adjacentPlots
+end
 -- UPDATED: Enhanced harvest method with module integration
+-- REPLACE your existing HarvestCrop method with this mutation-integrated version
+
 function GameCore:HarvestCrop(player, plotModel)
-	print("🌾 GameCore: ENHANCED harvest with module integration - " .. player.Name .. " for plot " .. plotModel.Name)
+	print("🌾 GameCore: ENHANCED harvest with mutation integration - " .. player.Name .. " for plot " .. plotModel.Name)
 
 	local playerData = self:GetPlayerData(player)
 	if not playerData then 
@@ -2534,12 +2572,26 @@ function GameCore:HarvestCrop(player, plotModel)
 			"Crop is not ready for harvest yet! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "warning")
 		return false
 	end
-
-	-- Get crop data
+	
 	local plantType = plotModel:GetAttribute("PlantType") or ""
 	local seedType = plotModel:GetAttribute("SeedType") or ""
 	local cropRarity = plotModel:GetAttribute("Rarity") or "common"
+	-- 🧬 STEP: CHECK FOR MUTATIONS BEFORE HARVESTING (NEW!)
+	print("🧬 Checking for mutations before harvest...")
+	local mutationResult = self:ProcessPotentialMutations(player, plotModel)
+	if mutationResult.mutated then
+		print("🧬 MUTATION DETECTED: " .. mutationResult.mutationType)
+		return self:HarvestMutatedCrop(player, plotModel, mutationResult)
+	end
+	print("🧬 No mutations detected, proceeding with normal harvest")
+	-- 🧬 HANDLE MUTATION HARVEST (if this is a mature mutation)
+	local isMutation = plotModel:GetAttribute("IsMutation")
+	local mutationType = plotModel:GetAttribute("MutationType")
 
+	if isMutation and mutationType and growthStage >= 4 then
+		print("🧬 Harvesting mature mutation: " .. mutationType)
+		return self:HarvestMatureMutation(player, plotModel, mutationType, cropRarity)
+	end
 	-- Notify CropVisualManager about harvest BEFORE clearing plot
 	if self:IsCropVisualManagerAvailable() then
 		CropVisualManager:OnCropHarvested(plotModel, plantType, cropRarity)
@@ -2602,8 +2654,8 @@ function GameCore:HarvestCrop(player, plotModel)
 	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
 	return true
 end
-
 -- IMPROVED: Enhanced fallback crop creation
+-- UPDATE your CreateEnhancedFallbackCrop method to include click detection
 function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
 	print("🔧 Creating enhanced fallback crop...")
 
@@ -2617,7 +2669,7 @@ function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRa
 
 	-- Create enhanced crop model
 	local cropModel = Instance.new("Model")
-	cropModel.Name = "CropModel" -- Consistent naming
+	cropModel.Name = "CropModel"
 	cropModel.Parent = plotModel
 
 	-- Create primary crop part with better appearance
@@ -2652,13 +2704,12 @@ function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRa
 	-- Add visual effects based on rarity
 	self:AddFallbackRarityEffects(cropModel, cropRarity)
 
-	-- Add click detection for harvesting
+	-- IMPORTANT: Add click detection for harvesting
 	self:SetupCropClickDetection(cropModel, plotModel)
 
-	print("✅ Enhanced fallback crop created successfully: " .. cropModel.Name)
+	print("✅ Enhanced fallback crop created successfully with click detection: " .. cropModel.Name)
 	return cropModel
 end
-
 -- NEW: Basic fallback for when everything else fails
 function GameCore:CreateBasicFallbackCrop(plotModel, seedId, seedData, cropRarity)
 	print("🔧 Creating BASIC fallback crop as last resort...")
@@ -2690,7 +2741,10 @@ function GameCore:CreateBasicFallbackCrop(plotModel, seedId, seedData, cropRarit
 	cropModel:SetAttribute("Rarity", cropRarity)
 	cropModel:SetAttribute("ModelType", "BasicFallback")
 
-	print("✅ Basic fallback crop created")
+	-- IMPORTANT: Add click detection even for basic fallback
+	self:SetupCropClickDetection(cropModel, plotModel)
+
+	print("✅ Basic fallback crop created with click detection")
 	return true
 end
 
@@ -2774,27 +2828,154 @@ end
 
 -- ADD: Setup click detection for crops
 function GameCore:SetupCropClickDetection(cropModel, plotModel)
-	local clickDetector = Instance.new("ClickDetector")
-	clickDetector.MaxActivationDistance = 15
-	clickDetector.Parent = cropModel.PrimaryPart
+	if not cropModel or not cropModel.PrimaryPart or not plotModel then
+		warn("GameCore: Invalid parameters for crop click detection")
+		return false
+	end
 
-	clickDetector.MouseClick:Connect(function(clickingPlayer)
-		local plotOwner = self:GetPlotOwner(plotModel)
-		if clickingPlayer.Name == plotOwner then
-			local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-			if growthStage >= 4 then
-				print("🌾 Player clicking to harvest crop")
-				self:HarvestCrop(clickingPlayer, plotModel)
-			else
-				local timeLeft = self:GetCropTimeRemaining(plotModel)
-				local minutesLeft = math.ceil(timeLeft/60)
-				self:SendNotification(clickingPlayer, "Crop Growing", 
-					"Crop is still growing! " .. minutesLeft .. " minutes remaining.", "info")
+	local cropType = plotModel:GetAttribute("PlantType") or "unknown"
+	local rarity = plotModel:GetAttribute("Rarity") or "common"
+
+	print("🖱️ GameCore: Setting up crop click detection for " .. cropType)
+
+	-- Remove existing click detectors
+	for _, obj in pairs(cropModel:GetDescendants()) do
+		if obj:IsA("ClickDetector") then
+			obj:Destroy()
+		end
+	end
+
+	-- Find clickable parts
+	local clickableParts = {cropModel.PrimaryPart}
+
+	-- Add additional large parts
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") and part ~= cropModel.PrimaryPart then
+			local volume = part.Size.X * part.Size.Y * part.Size.Z
+			if volume > 2 then -- Only add reasonably sized parts
+				table.insert(clickableParts, part)
 			end
 		end
-	end)
+	end
 
-	print("✅ Click detection setup for crop")
+	-- Add click detectors to all clickable parts
+	for _, part in pairs(clickableParts) do
+		local clickDetector = Instance.new("ClickDetector")
+		clickDetector.Name = "CropClickDetector"
+		clickDetector.MaxActivationDistance = 20
+		clickDetector.Parent = part
+
+		-- Store references
+		clickDetector:SetAttribute("PlotModelName", plotModel.Name)
+		clickDetector:SetAttribute("CropType", cropType)
+		clickDetector:SetAttribute("Rarity", rarity)
+
+		-- Connect click event
+		clickDetector.MouseClick:Connect(function(clickingPlayer)
+			self:HandleCropClick(clickingPlayer, cropModel, plotModel, cropType, rarity)
+		end)
+
+		print("🖱️ Added click detector to " .. part.Name)
+	end
+
+	print("✅ Crop click detection setup for " .. cropType .. " with " .. #clickableParts .. " parts")
+	return true
+end
+function GameCore:HandleCropClick(clickingPlayer, cropModel, plotModel, cropType, rarity)
+	print("🖱️ GameCore: Crop clicked by " .. clickingPlayer.Name .. " - " .. cropType)
+
+	-- Verify plot ownership
+	local plotOwner = self:GetPlotOwner(plotModel)
+	if plotOwner ~= clickingPlayer.Name then
+		self:SendNotification(clickingPlayer, "Not Your Crop", "You can only harvest your own crops!", "error")
+		return
+	end
+
+	-- Check growth stage
+	local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+	local isMutation = plotModel:GetAttribute("IsMutation") or false
+
+	if growthStage >= 4 then
+		print("🌾 Crop is ready for harvest")
+
+		-- Call appropriate harvest method
+		if isMutation then
+			local mutationType = plotModel:GetAttribute("MutationType")
+			self:HarvestMatureMutation(clickingPlayer, plotModel, mutationType, rarity)
+		else
+			self:HarvestCrop(clickingPlayer, plotModel)
+		end
+	else
+		-- Show crop status
+		self:ShowCropGrowthStatus(clickingPlayer, plotModel, cropType, growthStage, isMutation)
+	end
+end
+
+function GameCore:ShowCropGrowthStatus(player, plotModel, cropType, growthStage, isMutation)
+	local stageNames = {"planted", "sprouting", "growing", "flowering", "ready"}
+	local currentStageName = stageNames[growthStage + 1] or "unknown"
+
+	local plantedTime = plotModel:GetAttribute("PlantedTime") or os.time()
+	local timeElapsed = os.time() - plantedTime
+
+	-- Calculate remaining time
+	local totalGrowthTime
+	if isMutation then
+		local speedMultiplier = _G.MUTATION_GROWTH_SPEED or 1.0
+		totalGrowthTime = 240 / speedMultiplier -- 4 minutes for mutations
+	else
+		-- Try to get actual seed data for accurate timing
+		local seedType = plotModel:GetAttribute("SeedType") or ""
+		if ItemConfig and ItemConfig.GetSeedData then
+			local seedData = ItemConfig.GetSeedData(seedType)
+			totalGrowthTime = seedData and seedData.growTime or 300
+		else
+			totalGrowthTime = 300 -- Default 5 minutes
+		end
+	end
+
+	local timeRemaining = math.max(0, totalGrowthTime - timeElapsed)
+	local minutesRemaining = math.ceil(timeRemaining / 60)
+
+	-- Create status message
+	local cropDisplayName = cropType:gsub("^%l", string.upper):gsub("_", " ")
+	local statusEmoji = isMutation and "🧬" or "🌱"
+	local stageEmoji = {
+		planted = "🌱",
+		sprouting = "🌿", 
+		growing = "🍃",
+		flowering = "🌸",
+		ready = "✨"
+	}
+
+	local message
+	if growthStage >= 4 then
+		message = statusEmoji .. " " .. cropDisplayName .. " is ready to harvest! " .. (stageEmoji.ready or "✨")
+	else
+		local progressBar = self:CreateProgressBar(timeElapsed, totalGrowthTime)
+		message = statusEmoji .. " " .. cropDisplayName .. " is " .. currentStageName .. " " .. (stageEmoji[currentStageName] or "🌱") ..
+			"\n⏰ " .. minutesRemaining .. " minutes remaining\n" .. progressBar
+	end
+
+	self:SendNotification(player, "🌾 Crop Status", message, "info")
+end
+
+function GameCore:CreateProgressBar(elapsed, total)
+	local progress = math.min(elapsed / total, 1)
+	local barLength = 10
+	local filledLength = math.floor(progress * barLength)
+
+	local bar = "["
+	for i = 1, barLength do
+		if i <= filledLength then
+			bar = bar .. "█"
+		else
+			bar = bar .. "░"
+		end
+	end
+	bar = bar .. "] " .. math.floor(progress * 100) .. "%"
+
+	return bar
 end
 
 -- ADD: Get remaining growth time
@@ -2952,7 +3133,7 @@ function GameCore:InitializeMutationSystemSafe()
 			Combinations = {
 				broccarrot = {
 					parents = {"broccoli", "carrot"},
-					probability = 1.0, -- 15% chance
+					probability = 0.99, -- 15% chance
 					name = "Broccarrot",
 					description = "A mysterious hybrid of broccoli and carrot",
 					rarity = "rare",
@@ -3027,6 +3208,8 @@ print("  ✅ Detailed error logging for debugging")
 
 -- REPLACE your existing PlantSeed function with this corrected version
 
+-- REPLACE your existing PlantSeed function with this mutation-integrated version
+
 function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 	-- DEBUG: Track what's calling this function
 	local stackTrace = debug.traceback()
@@ -3038,7 +3221,6 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 	print("🌱 GameCore: PlantSeed - " .. player.Name .. " wants to plant " .. seedId)
 
 	-- PROTECTION: Prevent double-clicking/rapid planting
-	-- PROTECTION: Prevent double-clicking/rapid planting
 	local userId = player.UserId
 	local plotId = tostring(plotModel)
 
@@ -3046,32 +3228,19 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 		self.PlantingCooldowns = {}
 	end
 
-	local currentTime = tick() -- Use tick() for more precision
+	local currentTime = tick()
 	local cooldownKey = userId .. "_" .. plotId
 	local lastPlantTime = self.PlantingCooldowns[cooldownKey] or 0
 	local timeSinceLastAttempt = currentTime - lastPlantTime
 
-	if timeSinceLastAttempt < 0.5 then -- Reduce to 0.5 seconds
+	if timeSinceLastAttempt < 0.5 then
 		warn("🌱 PLANTING BLOCKED: Too soon after last attempt (" .. math.round(timeSinceLastAttempt * 1000) .. "ms ago)")
-
-		-- DEBUG: Track rapid attempts
-		if not self.RapidAttempts then
-			self.RapidAttempts = {}
-		end
-		self.RapidAttempts[cooldownKey] = (self.RapidAttempts[cooldownKey] or 0) + 1
-
-		print("🚨 RAPID ATTEMPT #" .. self.RapidAttempts[cooldownKey] .. " detected for " .. player.Name)
 		return false
 	end
 
-	-- Reset rapid attempt counter on successful timing
-	if self.RapidAttempts then
-		self.RapidAttempts[cooldownKey] = 0
-	end
-
-	-- Set cooldown
 	self.PlantingCooldowns[cooldownKey] = currentTime
-	print("✅ Planting attempt accepted (last attempt was " .. math.round(timeSinceLastAttempt * 1000) .. "ms ago)")
+
+	-- [Steps 1-12 remain the same as your original code...]
 
 	-- Step 1: Validate inputs
 	if not player then
@@ -3093,7 +3262,7 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 
 	print("✅ Step 1: Input validation passed")
 
-	-- Step 2: Get player data (FIXED - properly define playerData)
+	-- Step 2: Get player data
 	local playerData = self:GetPlayerData(player)
 	if not playerData then 
 		warn("❌ PLANTING FAIL: No player data found for " .. player.Name)
@@ -3151,7 +3320,6 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 
 	print("✅ Step 6: Plot status check passed")
 
-
 	-- Step 7: Check plot ownership
 	local plotOwner = self:GetPlotOwner(plotModel)
 	print("🌱 DEBUG: Plot owner: " .. tostring(plotOwner) .. ", Player: " .. player.Name)
@@ -3163,10 +3331,9 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 	end
 	print("✅ Step 7: Plot ownership check passed")
 
-	-- Step 8: Get seed data (FIXED - handle both parameter and lookup)
+	-- Step 8: Get seed data
 	local finalSeedData = seedData
 	if not finalSeedData then
-		-- If seedData wasn't passed as parameter, look it up
 		if ItemConfig and ItemConfig.GetSeedData then
 			finalSeedData = ItemConfig.GetSeedData(seedId)
 		end
@@ -3178,9 +3345,8 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 		return false
 	end
 	print("✅ Step 8: Seed data retrieved")
-	print("🌱 DEBUG: Seed data - resultCropId: " .. tostring(finalSeedData.resultCropId) .. ", growTime: " .. tostring(finalSeedData.growTime))
 
-	-- Step 9: Get crop type and rarity (FIXED - properly define these variables)
+	-- Step 9: Get crop type and rarity
 	local cropType = finalSeedData.resultCropId
 	if not cropType then
 		warn("❌ PLANTING FAIL: No resultCropId in seed data")
@@ -3188,16 +3354,15 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 		return false
 	end
 
-	-- Calculate rarity
 	local playerBoosters = self:GetPlayerBoosters(playerData)
-	local cropRarity = "common" -- Default rarity
+	local cropRarity = "common"
 
 	if ItemConfig and ItemConfig.GetCropRarity then
 		cropRarity = ItemConfig.GetCropRarity(seedId, playerBoosters)
 	end
 	print("✅ Step 9: Crop type and rarity determined - " .. cropType .. " (" .. cropRarity .. ")")
 
-	-- Step 10: Create crop on plot (WITH ENHANCED ERROR HANDLING)
+	-- Step 10: Create crop on plot
 	print("🌱 DEBUG: Starting crop creation...")
 	local success = self:CreateCropOnPlotWithDebug(plotModel, seedId, finalSeedData, cropRarity)
 
@@ -3225,11 +3390,20 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 	self:StartCropGrowthTimer(plotModel, finalSeedData, cropType, cropRarity)
 	print("✅ Step 13: Growth timer started")
 
-	-- Step 14: Update stats and save (FIXED - use optimized save)
+	-- 🧬 STEP 13.5: CHECK FOR IMMEDIATE MUTATIONS (NEW!)
+	print("🧬 Step 13.5: Checking for IMMEDIATE mutations...")
+	local mutationOccurred = self:CheckForImmediateMutation(player, plotModel, cropType)
+	if mutationOccurred then
+		print("🎉 IMMEDIATE MUTATION OCCURRED! Planting process redirected to mutation.")
+		-- Note: Don't return here - the mutation system handles everything
+		self:SendNotification(player, "🧬 MUTATION!", "An incredible mutation just occurred!", "success")
+	end
+	print("✅ Step 13.5: Immediate mutation check complete")
+
+	-- Step 14: Update stats and save
 	playerData.stats = playerData.stats or {}
 	playerData.stats.seedsPlanted = (playerData.stats.seedsPlanted or 0) + 1
 
-	-- Use optimized save system (not immediate save)
 	self:SavePlayerData(player)
 	print("✅ Step 14: Stats updated and data saved")
 
@@ -3251,8 +3425,819 @@ function GameCore:PlantSeed(player, plotModel, seedId, seedData)
 	print("🎉 PLANTING SUCCESS: " .. seedId .. " (" .. cropRarity .. ") planted for " .. player.Name)
 	return true
 end
+-- ADD these methods to your GameCore.lua for immediate mutations
 
--- ADD this helper method if you don't have it already
+-- ========== IMMEDIATE MUTATION SYSTEM ==========
+
+function GameCore:CheckForImmediateMutation(player, newPlotModel, newCropType)
+	print("🧬 GameCore: Checking for IMMEDIATE mutation with " .. newCropType)
+
+	if not self.MutationSystem or not self.MutationSystem.Combinations then
+		return false
+	end
+
+	local adjacentPlots = self:GetAdjacentPlots(player, newPlotModel)
+	print("🧬 Found " .. #adjacentPlots .. " adjacent plots to check")
+
+	for _, adjacentPlot in ipairs(adjacentPlots) do
+		local adjacentCropType = adjacentPlot:GetAttribute("PlantType")
+		local adjacentGrowthStage = adjacentPlot:GetAttribute("GrowthStage") or 0
+
+		-- Only check plots that have crops planted (any growth stage)
+		if adjacentCropType and adjacentCropType ~= "" then
+			print("🧬 Checking combination: " .. newCropType .. " + " .. adjacentCropType)
+
+			-- Check all mutation combinations
+			for mutationId, mutationData in pairs(self.MutationSystem.Combinations) do
+				local parents = mutationData.parents
+
+				-- Check if these two crops can mutate
+				if (parents[1] == newCropType and parents[2] == adjacentCropType) or 
+					(parents[2] == newCropType and parents[1] == adjacentCropType) then
+
+					print("🧬 Potential mutation found: " .. mutationId)
+					print("🧬 Rolling probability: " .. (mutationData.probability * 100) .. "%")
+
+					-- Roll for mutation chance
+					local randomChance = math.random()
+					if randomChance <= mutationData.probability then
+						print("🎉 MUTATION SUCCESS! Creating " .. mutationId)
+
+						-- Trigger immediate mutation
+						return self:CreateImmediateMutation(player, newPlotModel, adjacentPlot, mutationId, mutationData)
+					else
+						print("🧬 Mutation failed. Rolled " .. (randomChance * 100) .. "% needed " .. (mutationData.probability * 100) .. "%")
+					end
+				end
+			end
+		end
+	end
+
+	return false
+end
+
+-- REPLACE these methods in your GameCore.lua for slower mutation growth
+
+function GameCore:CreateImmediateMutation(player, plot1, plot2, mutationId, mutationData)
+	print("🧬 GameCore: Creating immediate mutation " .. mutationId)
+
+	-- Create spectacular combination effect
+	self:CreateMutationCombinationEffect(plot1, plot2, mutationData)
+
+	-- Clear both original plots
+	self:ClearPlotProperly(plot1)
+	self:ClearPlotProperly(plot2)
+
+	-- Choose the primary plot (usually the first one)
+	local primaryPlot = plot1
+	local secondaryPlot = plot2
+
+	-- Determine mutation rarity (mutations are typically rare or higher)
+	local mutationRarity = self:DetermineMutationRarity(mutationData)
+
+	-- Create the mutated crop visual - START AT PLANTED STAGE
+	local success = self:CreateMutatedCropVisual(primaryPlot, secondaryPlot, mutationId, mutationRarity, "planted")
+
+	if not success then
+		warn("🧬 Failed to create mutated crop visual")
+		return false
+	end
+
+	-- Update primary plot with mutation data - START AT PLANTED (stage 0)
+	primaryPlot:SetAttribute("IsEmpty", false)
+	primaryPlot:SetAttribute("PlantType", mutationId)
+	primaryPlot:SetAttribute("SeedType", mutationId .. "_mutation")
+	primaryPlot:SetAttribute("GrowthStage", 0)  -- Start at planted stage
+	primaryPlot:SetAttribute("PlantedTime", os.time())
+	primaryPlot:SetAttribute("Rarity", mutationRarity)
+	primaryPlot:SetAttribute("IsMutation", true)
+	primaryPlot:SetAttribute("MutationType", mutationId)
+
+	-- Ensure secondary plot is marked as empty (will be used for spacing)
+	secondaryPlot:SetAttribute("IsEmpty", true)
+	secondaryPlot:SetAttribute("PlantType", "")
+	secondaryPlot:SetAttribute("GrowthStage", 0)
+
+	-- Start SLOWER growth for mutation (but still slightly faster than normal)
+	self:StartMutationGrowthTimer(primaryPlot, mutationId, mutationRarity)
+
+	-- Award player immediately with mutation item
+	self:AwardMutationToPlayer(player, mutationId, mutationData)
+
+	-- Update stats
+	local playerData = self:GetPlayerData(player)
+	if playerData then
+		playerData.stats = playerData.stats or {}
+		playerData.stats.mutationsCreated = (playerData.stats.mutationsCreated or 0) + 1
+		self:SavePlayerData(player)
+	end
+
+	-- Send amazing notification
+	self:SendMutationNotification(player, mutationData)
+
+	-- Broadcast to other players
+	self:BroadcastMutationSuccess(player, mutationData)
+
+	print("🎉 GameCore: Successfully created immediate mutation " .. mutationId)
+	return true
+end
+
+function GameCore:CreateMutatedCropVisual(primaryPlot, secondaryPlot, mutationId, rarity, growthStage)
+	print("🎨 Creating mutated crop visual for " .. mutationId .. " at stage " .. growthStage)
+
+	if self:IsCropVisualManagerAvailable() then
+		-- Use CropVisualManager for mutated crop
+		local mutatedCrop = CropVisualManager:CreateMutatedCrop(mutationId, rarity, growthStage)
+
+		if mutatedCrop then
+			mutatedCrop.Name = "CropModel"
+			mutatedCrop.Parent = primaryPlot
+
+			-- Position between the two plots
+			CropVisualManager:PositionMutatedCrop(mutatedCrop, primaryPlot, secondaryPlot)
+
+			-- IMPORTANT: Setup click detection for mutation
+			if self:IsCropVisualManagerAvailable() then
+				-- CropVisualManager should handle this, but make sure
+				local hasClickDetector = false
+				for _, obj in pairs(mutatedCrop:GetDescendants()) do
+					if obj:IsA("ClickDetector") and obj.Name == "CropClickDetector" then
+						hasClickDetector = true
+						break
+					end
+				end
+
+				if not hasClickDetector then
+					print("🖱️ Adding click detection to CropVisualManager mutation")
+					CropVisualManager:SetupCropClickDetection(mutatedCrop, primaryPlot, mutationId, rarity)
+				end
+			else
+				-- Fallback click detection setup
+				self:SetupCropClickDetection(mutatedCrop, primaryPlot)
+			end
+
+			print("✅ Created mutated crop with CropVisualManager and click detection")
+			return true
+		end
+	end
+
+	-- Fallback: Create enhanced mutation crop
+	print("🔧 Using fallback for mutated crop creation")
+	return self:CreateFallbackMutatedCrop(primaryPlot, mutationId, rarity, growthStage)
+end
+
+function GameCore:CreateFallbackMutatedCrop(plotModel, mutationId, rarity, growthStage)
+	local spotPart = plotModel:FindFirstChild("SpotPart")
+	if not spotPart then return false end
+
+	-- Create mutation model appropriate for growth stage
+	local mutatedModel = Instance.new("Model")
+	mutatedModel.Name = "CropModel"
+	mutatedModel.Parent = plotModel
+
+	-- Create crop part sized for the growth stage
+	local stageScale = self:GetMutationStageScale(growthStage)
+	local baseSize = 2 * stageScale
+
+	local cropPart = Instance.new("Part")
+	cropPart.Name = "MutatedCropBody"
+	cropPart.Size = Vector3.new(baseSize, baseSize, baseSize)
+	cropPart.Material = growthStage == "planted" and Enum.Material.Grass or Enum.Material.Neon
+	cropPart.Color = self:GetMutationColor(mutationId)
+	cropPart.CanCollide = false
+	cropPart.Anchored = true
+	cropPart.Position = spotPart.Position + Vector3.new(0, 2 + stageScale, 0)
+	cropPart.Parent = mutatedModel
+
+	mutatedModel.PrimaryPart = cropPart
+
+	-- Add effects appropriate for growth stage
+	self:AddFallbackMutationEffectsForStage(mutatedModel, mutationId, rarity, growthStage)
+
+	-- Add attributes
+	mutatedModel:SetAttribute("CropType", mutationId)
+	mutatedModel:SetAttribute("Rarity", rarity)
+	mutatedModel:SetAttribute("IsMutation", true)
+	mutatedModel:SetAttribute("GrowthStage", growthStage)
+
+	-- IMPORTANT: Add click detection for mutation harvesting
+	self:SetupCropClickDetection(mutatedModel, plotModel)
+
+	print("✅ Fallback mutation crop created with click detection")
+	return true
+end
+
+
+function GameCore:GetMutationStageScale(growthStage)
+	-- Scale factors for mutation fallback
+	local scales = {
+		planted = 0.3,
+		sprouting = 0.5,
+		growing = 0.7,
+		flowering = 0.9,
+		ready = 1.2  -- Mutations are bigger when ready
+	}
+	return scales[growthStage] or 0.5
+end
+
+function GameCore:AddFallbackMutationEffectsForStage(mutatedModel, mutationId, rarity, growthStage)
+	local cropPart = mutatedModel.PrimaryPart
+	if not cropPart then return end
+
+	-- Stage-appropriate lighting
+	local light = Instance.new("PointLight")
+	light.Parent = cropPart
+	light.Color = self:GetMutationColor(mutationId)
+
+	if growthStage == "planted" then
+		light.Brightness = 0.5
+		light.Range = 5
+	elseif growthStage == "sprouting" then
+		light.Brightness = 1
+		light.Range = 8
+	elseif growthStage == "growing" then
+		light.Brightness = 1.5
+		light.Range = 12
+	elseif growthStage == "flowering" then
+		light.Brightness = 2
+		light.Range = 15
+		cropPart.Material = Enum.Material.Neon
+	elseif growthStage == "ready" then
+		light.Brightness = 3
+		light.Range = 20
+		cropPart.Material = Enum.Material.Neon
+
+		-- Add pulsing for ready stage
+		spawn(function()
+			while cropPart and cropPart.Parent do
+				local pulseTween = TweenService:Create(light,
+					TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+					{Brightness = 1}
+				)
+				pulseTween:Play()
+				wait(2)
+			end
+		end)
+	end
+end
+
+function GameCore:StartMutationGrowthTimer(plotModel, mutationId, rarity)
+	spawn(function()
+		-- SLOWER MUTATION GROWTH: 4 minutes total (vs 5 minutes for normal crops)
+		local growthTime = 240 -- 4 minutes instead of 2
+		local stages = {"planted", "sprouting", "growing", "flowering", "ready"}
+		local stageNumbers = {0, 1, 2, 3, 4}
+		local stageTime = growthTime / (#stages - 1) -- Divide by 4 stages of growth
+
+		print("🧬 Starting SLOWER mutation growth for " .. mutationId .. " (4 minutes total)")
+		print("🧬 Stage time: " .. stageTime .. " seconds per stage")
+
+		for stage = 2, #stages do -- Start from sprouting (index 2)
+			wait(stageTime)
+
+			if plotModel and plotModel.Parent then
+				local currentStage = plotModel:GetAttribute("GrowthStage") or 0
+				local expectedStage = stageNumbers[stage - 1]
+
+				if currentStage == expectedStage then -- Still in expected stage
+					local newStageIndex = stageNumbers[stage]
+					local newStageName = stages[stage]
+
+					plotModel:SetAttribute("GrowthStage", newStageIndex)
+
+					print("🧬 Mutation " .. mutationId .. " advanced to stage " .. newStageIndex .. " (" .. newStageName .. ")")
+
+					-- Update visual for new stage
+					self:UpdateMutationVisualForNewStage(plotModel, mutationId, rarity, newStageName, newStageIndex)
+
+					-- Fire event for CropVisualManager
+					if self.Events and self.Events.CropGrowthStageChanged then
+						self.Events.CropGrowthStageChanged:Fire(plotModel, mutationId, rarity, newStageName, newStageIndex)
+					end
+				else
+					print("🧬 Mutation growth timer stopped - stage mismatch (expected " .. expectedStage .. ", got " .. currentStage .. ")")
+					break
+				end
+			else
+				print("🧬 Mutation growth timer stopped - plot no longer exists")
+				break
+			end
+		end
+
+		-- Mark as fully grown
+		if plotModel and plotModel.Parent then
+			plotModel:SetAttribute("GrowthStage", 4)
+			self:UpdateMutationVisualForNewStage(plotModel, mutationId, rarity, "ready", 4)
+			print("🧬 Mutation " .. mutationId .. " fully grown and ready for harvest!")
+
+			-- Create final ready effect
+			self:CreateMutationReadyEffect(plotModel, mutationId)
+		end
+	end)
+end
+
+function GameCore:UpdateMutationVisualFallback(cropModel, mutationType, rarity, stageName, stageIndex)
+	if not cropModel or not cropModel.PrimaryPart then
+		warn("Invalid mutation model for visual update")
+		return false
+	end
+
+	print("🔧 Using fallback visual update for mutation " .. stageName)
+
+	-- Calculate new scale based on mutation growth stage
+	local rarityScale = self:GetRaritySizeMultiplier(rarity)
+	local stageScale = self:GetMutationStageScale(stageName)
+	local mutationBonus = 2.0 -- Mutations are bigger
+	local finalScale = rarityScale * stageScale * mutationBonus
+
+	-- Smooth transition to new size
+	local currentMesh = cropModel.PrimaryPart:FindFirstChild("SpecialMesh")
+	if currentMesh then
+		local targetScale = Vector3.new(finalScale, finalScale * 0.8, finalScale)
+
+		local tween = TweenService:Create(currentMesh,
+			TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Scale = targetScale}
+		)
+		tween:Play()
+	else
+		-- Scale the part directly if no mesh
+		local currentSize = cropModel.PrimaryPart.Size
+		local targetSize = Vector3.new(
+			2 * finalScale,
+			2 * finalScale,
+			2 * finalScale
+		)
+
+		local tween = TweenService:Create(cropModel.PrimaryPart,
+			TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Size = targetSize}
+		)
+		tween:Play()
+	end
+
+	-- Update mutation lighting and effects
+	self:UpdateMutationLightingForStage(cropModel, mutationType, rarity, stageName)
+
+	return true
+end
+
+function GameCore:UpdateMutationLightingForStage(cropModel, mutationType, rarity, stageName)
+	local cropPart = cropModel.PrimaryPart
+	if not cropPart then return end
+
+	-- Remove old stage effects
+	for _, obj in pairs(cropPart:GetChildren()) do
+		if obj:IsA("PointLight") then
+			obj:Destroy()
+		end
+	end
+
+	-- Add new stage-appropriate lighting
+	local light = Instance.new("PointLight")
+	light.Parent = cropPart
+	light.Color = self:GetMutationColor(mutationType)
+
+	if stageName == "planted" then
+		light.Brightness = 0.5
+		light.Range = 5
+		cropPart.Material = Enum.Material.Grass
+	elseif stageName == "sprouting" then
+		light.Brightness = 1
+		light.Range = 8
+		cropPart.Material = Enum.Material.Plastic
+	elseif stageName == "growing" then
+		light.Brightness = 1.5
+		light.Range = 12
+		cropPart.Material = Enum.Material.SmoothPlastic
+	elseif stageName == "flowering" then
+		light.Brightness = 2
+		light.Range = 15
+		cropPart.Material = Enum.Material.Neon
+	elseif stageName == "ready" then
+		light.Brightness = 3
+		light.Range = 20
+		cropPart.Material = Enum.Material.Neon
+	end
+end
+
+function GameCore:CreateMutationReadyEffect(plotModel, mutationId)
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local position = cropModel.PrimaryPart.Position
+
+	-- Create ready-to-harvest effect
+	for i = 1, 8 do
+		local readyParticle = Instance.new("Part")
+		readyParticle.Size = Vector3.new(0.4, 0.4, 0.4)
+		readyParticle.Shape = Enum.PartType.Ball
+		readyParticle.Material = Enum.Material.Neon
+		readyParticle.Color = Color3.fromRGB(255, 255, 0) -- Golden ready color
+		readyParticle.CanCollide = false
+		readyParticle.Anchored = true
+		readyParticle.Position = position + Vector3.new(
+			math.random(-3, 3),
+			math.random(2, 5),
+			math.random(-3, 3)
+		)
+		readyParticle.Parent = workspace
+
+		local tween = TweenService:Create(readyParticle,
+			TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = readyParticle.Position + Vector3.new(0, 8, 0),
+				Transparency = 1,
+				Size = Vector3.new(0.1, 0.1, 0.1)
+			}
+		)
+		tween:Play()
+		tween.Completed:Connect(function()
+			readyParticle:Destroy()
+		end)
+	end
+
+	print("✨ Created mutation ready effect for " .. mutationId)
+end
+
+function GameCore:HarvestMatureMutation(player, plotModel, mutationType, rarity)
+	print("🧬 GameCore: Harvesting mature mutation " .. mutationType .. " (" .. rarity .. ")")
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then 
+		self:SendNotification(player, "Error", "Player data not found", "error")
+		return false
+	end
+
+	-- Get mutation data
+	local mutationData = self.MutationSystem.Combinations[mutationType]
+	if not mutationData then
+		warn("🧬 Mutation data not found for " .. mutationType)
+		mutationData = {
+			name = mutationType:gsub("^%l", string.upper),
+			description = "A mysterious mutation",
+			emoji = "🧬"
+		}
+	end
+
+	-- Notify CropVisualManager about mutation harvest
+	if self:IsCropVisualManagerAvailable() then
+		CropVisualManager:OnCropHarvested(plotModel, mutationType, rarity)
+	end
+
+	-- Calculate enhanced yield for mutations
+	local baseYield = 2 -- Mutations give more than regular crops
+	local rarityMultiplier = ItemConfig.RaritySystem[rarity] and ItemConfig.RaritySystem[rarity].valueMultiplier or 1.5
+	local mutationBonus = 1.5 -- Additional bonus for being a mutation
+	local finalYield = math.floor(baseYield * rarityMultiplier * mutationBonus)
+
+	-- Add mutations to inventory
+	if not playerData.farming then
+		playerData.farming = {inventory = {}}
+	end
+	if not playerData.farming.inventory then
+		playerData.farming.inventory = {}
+	end
+
+	local currentAmount = playerData.farming.inventory[mutationType] or 0
+	playerData.farming.inventory[mutationType] = currentAmount + finalYield
+
+	-- Create spectacular mutation harvest effect
+	self:CreateSpectacularMutationHarvestEffect(plotModel, mutationType, rarity)
+
+	-- Clear plot AFTER effects
+	spawn(function()
+		wait(3) -- Give more time for mutation harvest effects
+		self:ClearPlotProperly(plotModel)
+	end)
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.cropsHarvested = (playerData.stats.cropsHarvested or 0) + finalYield
+	playerData.stats.mutationCropsHarvested = (playerData.stats.mutationCropsHarvested or 0) + finalYield
+	playerData.stats.rareCropsHarvested = (playerData.stats.rareCropsHarvested or 0) + 1
+
+	-- Track mutation harvest
+	local userId = player.UserId
+	if not self.MutationSystem.SuccessfulMutations[userId] then
+		self.MutationSystem.SuccessfulMutations[userId] = {}
+	end
+	table.insert(self.MutationSystem.SuccessfulMutations[userId], {
+		mutationType = mutationType,
+		timestamp = os.time(),
+		yield = finalYield,
+		harvested = true,
+		rarity = rarity
+	})
+
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	-- Send amazing harvest notification
+	local rarityEmoji = rarity == "legendary" and "👑" or 
+		rarity == "epic" and "💜" or 
+		rarity == "rare" and "✨" or 
+		rarity == "uncommon" and "💚" or "⚪"
+
+	self:SendNotification(player, "🧬 MUTATION HARVESTED!", 
+		"🎉 Harvested " .. finalYield .. "x " .. rarityEmoji .. " " .. rarity .. " " .. mutationData.name .. "!\n" ..
+			mutationData.emoji .. " " .. mutationData.description .. "\n" ..
+			"💎 Bonus yield from mutation power!", "success")
+
+	-- Broadcast mutation harvest to other players
+	for _, otherPlayer in pairs(Players:GetPlayers()) do
+		if otherPlayer ~= player then
+			self:SendNotification(otherPlayer, "🧬 Player Achievement!", 
+				player.Name .. " harvested a " .. mutationData.name .. " mutation! " .. mutationData.emoji, "info")
+		end
+	end
+
+	print("🧬 GameCore: Successfully harvested " .. finalYield .. "x " .. mutationType .. " (" .. rarity .. ") for " .. player.Name)
+	return true
+end
+
+function GameCore:CreateSpectacularMutationHarvestEffect(plotModel, mutationType, rarity)
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local position = cropModel.PrimaryPart.Position
+	local mutationColor = self:GetMutationColor(mutationType)
+
+	print("🎆 Creating spectacular mutation harvest effect for " .. mutationType)
+
+	-- Create enhanced explosion effect
+	local explosion = Instance.new("Explosion")
+	explosion.Position = position + Vector3.new(0, 3, 0)
+	explosion.BlastRadius = 25
+	explosion.BlastPressure = 0
+	explosion.Parent = workspace
+
+	-- Create swirling mutation energy
+	for i = 1, 15 do
+		spawn(function()
+			wait(i * 0.1)
+
+			local energyOrb = Instance.new("Part")
+			energyOrb.Name = "MutationHarvestEnergy"
+			energyOrb.Size = Vector3.new(0.8, 0.8, 0.8)
+			energyOrb.Shape = Enum.PartType.Ball
+			energyOrb.Material = Enum.Material.Neon
+			energyOrb.Color = mutationColor
+			energyOrb.CanCollide = false
+			energyOrb.Anchored = true
+
+			-- Start in a spiral around the mutation
+			local angle = (i / 15) * math.pi * 4 -- 2 full rotations
+			local radius = 3 + math.sin(angle) * 1
+			local startPos = position + Vector3.new(
+				math.cos(angle) * radius,
+				math.sin(i * 0.5) * 2,
+				math.sin(angle) * radius
+			)
+			energyOrb.Position = startPos
+			energyOrb.Parent = workspace
+
+			-- Animate to spiral upward
+			local endPos = position + Vector3.new(0, 20, 0)
+			local tween = TweenService:Create(energyOrb,
+				TweenInfo.new(4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Position = endPos,
+					Transparency = 1,
+					Size = Vector3.new(0.2, 0.2, 0.2)
+				}
+			)
+			tween:Play()
+			tween.Completed:Connect(function()
+				energyOrb:Destroy()
+			end)
+		end)
+	end
+
+	-- Create rarity-specific bonus effects
+	if rarity == "epic" or rarity == "legendary" then
+		-- Add extra lightning effects for high rarity
+		for i = 1, 8 do
+			spawn(function()
+				wait(i * 0.2)
+
+				local lightning = Instance.new("Part")
+				lightning.Name = "RarityLightning"
+				lightning.Size = Vector3.new(0.3, 20, 0.3)
+				lightning.Material = Enum.Material.Neon
+				lightning.Color = rarity == "legendary" and Color3.fromRGB(255, 215, 0) or Color3.fromRGB(128, 0, 128)
+				lightning.CanCollide = false
+				lightning.Anchored = true
+				lightning.Position = position + Vector3.new(
+					math.random(-8, 8),
+					10,
+					math.random(-8, 8)
+				)
+				lightning.Parent = workspace
+
+				local tween = TweenService:Create(lightning,
+					TweenInfo.new(1, Enum.EasingStyle.Quad),
+					{Transparency = 1}
+				)
+				tween:Play()
+				tween.Completed:Connect(function()
+					lightning:Destroy()
+				end)
+			end)
+		end
+	end
+
+	-- Play mutation harvest sound
+	local sound = Instance.new("Sound")
+	sound.SoundId = "rbxassetid://131961136" -- Replace with your preferred sound
+	sound.Volume = 0.7
+	--sound.Pitch = 0.8 -- Lower pitch for mutations
+	sound.Parent = cropModel.PrimaryPart
+	sound:Play()
+	sound.Ended:Connect(function()
+		sound:Destroy()
+	end)
+end
+function GameCore:SendMutationNotification(player, mutationData)
+	self:SendNotification(player, "🧬 INCREDIBLE MUTATION!", 
+		mutationData.emoji .. " " .. mutationData.name .. " CREATED!\n" ..
+			mutationData.description .. "\n" ..
+			"🎁 Awarded 1x " .. mutationData.name .. " immediately!\n" ..
+			"⏱️ Growing slower to show all stages!\n" ..
+			"🌱 Watch it grow through all 5 stages!", "success")
+end
+
+function GameCore:GetMutationColor(mutationId)
+	local colors = {
+		broccarrot = Color3.fromRGB(100, 200, 50),
+		brocmato = Color3.fromRGB(150, 100, 50),
+		broctato = Color3.fromRGB(120, 80, 100),
+		cornmato = Color3.fromRGB(200, 150, 50),
+		craddish = Color3.fromRGB(200, 100, 50)
+	}
+	return colors[mutationId] or Color3.fromRGB(150, 150, 150)
+end
+
+function GameCore:AddFallbackMutationEffects(mutatedModel, mutationId, rarity)
+	local cropPart = mutatedModel.PrimaryPart
+	if not cropPart then return end
+
+	-- Add bright glow
+	local light = Instance.new("PointLight")
+	light.Parent = cropPart
+	light.Color = self:GetMutationColor(mutationId)
+	light.Brightness = 3
+	light.Range = 20
+
+	-- Add pulsing effect
+	spawn(function()
+		while cropPart and cropPart.Parent do
+			local pulseTween = TweenService:Create(light,
+				TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+				{Brightness = 1}
+			)
+			pulseTween:Play()
+			wait(2)
+		end
+	end)
+end
+
+function GameCore:DetermineMutationRarity(mutationData)
+	-- Mutations are inherently rare
+	local baseRarity = mutationData.rarity or "rare"
+
+	-- Small chance for higher rarity
+	local rarityRoll = math.random()
+	if rarityRoll <= 0.05 then -- 5% chance
+		return "legendary"
+	elseif rarityRoll <= 0.15 then -- 10% chance
+		return "epic"
+	else
+		return baseRarity
+	end
+end
+
+
+function GameCore:AwardMutationToPlayer(player, mutationId, mutationData)
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return end
+
+	-- Add mutation to inventory immediately
+	playerData.farming = playerData.farming or {inventory = {}}
+	playerData.farming.inventory = playerData.farming.inventory or {}
+
+	local currentAmount = playerData.farming.inventory[mutationId] or 0
+	local mutationYield = 1 -- Always give 1 mutation item immediately
+
+	playerData.farming.inventory[mutationId] = currentAmount + mutationYield
+
+	-- Track successful mutation
+	local userId = player.UserId
+	if not self.MutationSystem.SuccessfulMutations[userId] then
+		self.MutationSystem.SuccessfulMutations[userId] = {}
+	end
+	table.insert(self.MutationSystem.SuccessfulMutations[userId], {
+		mutationType = mutationId,
+		timestamp = os.time(),
+		yield = mutationYield,
+		immediate = true
+	})
+
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	print("🧬 Awarded " .. mutationYield .. "x " .. mutationId .. " to " .. player.Name .. " immediately")
+end
+
+function GameCore:CreateMutationCombinationEffect(plot1, plot2, mutationData)
+	-- Get positions of both plots
+	local spot1 = plot1:FindFirstChild("SpotPart")
+	local spot2 = plot2:FindFirstChild("SpotPart")
+
+	if not spot1 or not spot2 then return end
+
+	local pos1 = spot1.Position
+	local pos2 = spot2.Position
+	local centerPos = (pos1 + pos2) / 2
+
+	-- Create spectacular combination effect
+	spawn(function()
+		-- Lightning effect between the two crops
+		for i = 1, 5 do
+			local lightning = Instance.new("Part")
+			lightning.Name = "MutationLightning"
+			lightning.Size = Vector3.new(0.2, 0.2, (pos1 - pos2).Magnitude)
+			lightning.Material = Enum.Material.Neon
+			lightning.Color = Color3.fromRGB(255, 255, 100)
+			lightning.CanCollide = false
+			lightning.Anchored = true
+			lightning.CFrame = CFrame.lookAt(centerPos, pos2)
+			lightning.Parent = workspace
+
+			-- Flash effect
+			local flashTween = TweenService:Create(lightning,
+				TweenInfo.new(0.5, Enum.EasingStyle.Quad),
+				{Transparency = 1}
+			)
+			flashTween:Play()
+			flashTween.Completed:Connect(function()
+				lightning:Destroy()
+			end)
+
+			wait(0.1)
+		end
+
+		-- Explosion effect at center
+		local explosion = Instance.new("Explosion")
+		explosion.Position = centerPos + Vector3.new(0, 5, 0)
+		explosion.BlastRadius = 20
+		explosion.BlastPressure = 0
+		explosion.Parent = workspace
+
+		-- Mutation particles
+		for i = 1, 20 do
+			local particle = Instance.new("Part")
+			particle.Size = Vector3.new(0.5, 0.5, 0.5)
+			particle.Shape = Enum.PartType.Ball
+			particle.Material = Enum.Material.Neon
+			particle.Color = Color3.fromRGB(
+				math.random(100, 255),
+				math.random(100, 255),
+				math.random(100, 255)
+			)
+			particle.CanCollide = false
+			particle.Anchored = true
+			particle.Position = centerPos + Vector3.new(
+				math.random(-5, 5),
+				math.random(0, 10),
+				math.random(-5, 5)
+			)
+			particle.Parent = workspace
+
+			local tween = TweenService:Create(particle,
+				TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Position = particle.Position + Vector3.new(0, 15, 0),
+					Transparency = 1,
+					Size = Vector3.new(0.1, 0.1, 0.1)
+				}
+			)
+			tween:Play()
+			tween.Completed:Connect(function()
+				particle:Destroy()
+			end)
+		end
+	end)
+
+	print("🎆 Created spectacular mutation combination effect")
+end
+
 function GameCore:GetPlayerBoosters(playerData)
 	local boosters = {}
 
@@ -3316,7 +4301,7 @@ function GameCore:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity
 	end)
 end
 -- ADD this helper method for visual updates
-function GameCore:UpdateCropVisualForNewStage(plotModel, cropType, cropRarity, stageName, stageIndex)
+function GameCore:UpdateCropVisualForNewStage(plotModel, cropType, rarity, stageName, stageIndex)
 	print("🎨 Updating crop visual: " .. cropType .. " to stage " .. stageName)
 
 	local cropModel = plotModel:FindFirstChild("CropModel")
@@ -3328,11 +4313,13 @@ function GameCore:UpdateCropVisualForNewStage(plotModel, cropType, cropRarity, s
 	-- Method 1: Try CropVisualManager update if available
 	if self:IsCropVisualManagerAvailable() then
 		local success = pcall(function()
-			return CropVisualManager:UpdateCropStage(cropModel, plotModel, cropType, cropRarity, stageName, stageIndex)
+			return CropVisualManager:UpdateCropStage(cropModel, plotModel, cropType, rarity, stageName, stageIndex)
 		end)
 
 		if success then
 			print("✅ CropVisualManager updated crop stage")
+			-- Re-setup click detection after visual update
+			self:SetupCropClickDetection(cropModel, plotModel)
 			return true
 		else
 			print("⚠️ CropVisualManager update failed, using fallback")
@@ -3340,7 +4327,100 @@ function GameCore:UpdateCropVisualForNewStage(plotModel, cropType, cropRarity, s
 	end
 
 	-- Method 2: Enhanced fallback visual update
-	return self:UpdateCropVisualFallback(cropModel, cropType, cropRarity, stageName, stageIndex)
+	local success = self:UpdateCropVisualFallback(cropModel, cropType, rarity, stageName, stageIndex)
+
+	-- Re-setup click detection after fallback update
+	if success then
+		self:SetupCropClickDetection(cropModel, plotModel)
+	end
+
+	return success
+end
+
+function GameCore:UpdateMutationVisualForNewStage(plotModel, mutationType, rarity, stageName, stageIndex)
+	print("🎨 Updating mutation visual: " .. mutationType .. " to stage " .. stageName)
+
+	local cropModel = plotModel:FindFirstChild("CropModel")
+	if not cropModel then
+		warn("No CropModel found to update for mutation")
+		return false
+	end
+
+	-- Method 1: Try CropVisualManager update if available
+	if self:IsCropVisualManagerAvailable() then
+		local success = pcall(function()
+			return CropVisualManager:UpdateMutationStage(cropModel, plotModel, mutationType, rarity, stageName, stageIndex)
+		end)
+
+		if success then
+			print("✅ CropVisualManager updated mutation stage")
+			-- Re-setup click detection after visual update
+			self:SetupCropClickDetection(cropModel, plotModel)
+			return true
+		else
+			print("⚠️ CropVisualManager mutation update failed, using fallback")
+		end
+	end
+
+	-- Method 2: Enhanced fallback visual update for mutations
+	local success = self:UpdateMutationVisualFallback(cropModel, mutationType, rarity, stageName, stageIndex)
+
+	-- Re-setup click detection after fallback update
+	if success then
+		self:SetupCropClickDetection(cropModel, plotModel)
+	end
+
+	return success
+end
+
+-- ========== DISABLE PLOT CLICKING ==========
+
+function GameCore:HandleSimplePlotClick(player, spotModel)
+	-- Check if plot is empty - if so, handle planting
+	local isEmpty = spotModel:GetAttribute("IsEmpty")
+	local isUnlocked = spotModel:GetAttribute("IsUnlocked")
+
+	if not isUnlocked then
+		self:SendNotification(player, "Locked Plot", "This plot area is locked! Purchase farm expansion to unlock it.", "error")
+		return
+	end
+
+	if not isEmpty then
+		-- Plot has a crop - tell player to click the crop instead
+		self:SendNotification(player, "Click the Crop", "Click on the crop itself to harvest it, not the plot!", "info")
+		return
+	end
+
+	-- Plot is empty - handle seed planting
+	local plotOwner = self:GetSimplePlotOwner(spotModel)
+	if plotOwner ~= player.Name then
+		self:SendNotification(player, "Not Your Plot", "You can only plant on your own farm plots!", "error")
+		return
+	end
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData or not playerData.farming or not playerData.farming.inventory then
+		self:SendNotification(player, "No Farming Data", "You need to set up farming first! Visit the shop.", "warning")
+		return
+	end
+
+	local hasSeeds = false
+	for itemId, qty in pairs(playerData.farming.inventory) do
+		if itemId:find("_seeds") and qty > 0 then
+			hasSeeds = true
+			break
+		end
+	end
+
+	if not hasSeeds then
+		self:SendNotification(player, "No Seeds", "You don't have any seeds! Buy some from the shop first.", "warning")
+		return
+	end
+
+	-- Send to client for seed selection (this should trigger PlantSeed)
+	if self.RemoteEvents.PlantSeed then
+		self.RemoteEvents.PlantSeed:FireClient(player, spotModel)
+	end
 end
 
 function GameCore:UpdateCropVisualFallback(cropModel, cropType, cropRarity, stageName, stageIndex)
@@ -3943,7 +5023,811 @@ function GameCore:SetupMutationAdminCommands()
 						end
 						print("=====================================")
 					end
+					-- ADD this debug command to test mutations (add to your admin commands section)
 
+					if command == "/testmutationsetup" then
+						print("🧬 Setting up mutation test scenario...")
+
+						-- Give the player the required seeds
+						local playerData = self:GetPlayerData(player)
+						if playerData then
+							playerData.farming = playerData.farming or {inventory = {}}
+							playerData.farming.inventory = playerData.farming.inventory or {}
+
+							-- Give broccoli and carrot seeds for broccarrot mutation
+							playerData.farming.inventory.broccoli_seeds = 10
+							playerData.farming.inventory.carrot_seeds = 10
+
+							self:SavePlayerData(player)
+
+							if self.RemoteEvents.PlayerDataUpdated then
+								self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+							end
+
+							print("✅ Gave mutation test seeds")
+
+							-- Find two adjacent plots
+							local farm = self:GetPlayerSimpleFarm(player)
+							if farm then
+								local plantingSpots = farm:FindFirstChild("PlantingSpots")
+								if plantingSpots then
+									local plot1 = plantingSpots:FindFirstChild("PlantingSpot_1")
+									local plot2 = plantingSpots:FindFirstChild("PlantingSpot_2")
+
+									if plot1 and plot2 then
+										-- Clear both plots
+										self:ClearPlotProperly(plot1)
+										self:ClearPlotProperly(plot2)
+										wait(0.5)
+
+										-- Plant broccoli on plot 1
+										local success1 = self:PlantSeed(player, plot1, "broccoli_seeds")
+										if success1 then
+											print("✅ Planted broccoli on PlantingSpot_1")
+
+											-- Force it to be ready for harvest
+											plot1:SetAttribute("GrowthStage", 4)
+											self:UpdateCropVisualForNewStage(plot1, "broccoli", "common", "ready", 4)
+										end
+
+										wait(1)
+
+										-- Plant carrot on plot 2
+										local success2 = self:PlantSeed(player, plot2, "carrot_seeds")
+										if success2 then
+											print("✅ Planted carrot on PlantingSpot_2")
+
+											-- Force it to be ready for harvest
+											plot2:SetAttribute("GrowthStage", 4)
+											self:UpdateCropVisualForNewStage(plot2, "carrot", "common", "ready", 4)
+
+											print("🧬 MUTATION TEST READY!")
+											print("🧬 You now have adjacent broccoli and carrot crops")
+											print("🧬 Harvest either one to trigger mutation check")
+											print("🧬 Broccarrot probability: " .. (self.MutationSystem.Combinations.broccarrot.probability * 100) .. "%")
+
+											self:SendNotification(player, "🧬 Mutation Test Ready!", 
+												"Adjacent broccoli and carrot planted! Harvest either one to test mutations.", "success")
+										end
+									end
+								end
+							end
+						end
+						if command == "/testimmediatemutation" then
+							print("🧬 Testing immediate mutation system...")
+
+							-- Set broccarrot to 100% chance
+							if self.MutationSystem.Combinations.broccarrot then
+								self.MutationSystem.Combinations.broccarrot.probability = 1.0
+								print("🧬 Set broccarrot mutation to 100% chance")
+							end
+
+							-- Give seeds
+							local playerData = self:GetPlayerData(player)
+							if playerData then
+								playerData.farming = playerData.farming or {inventory = {}}
+								playerData.farming.inventory = playerData.farming.inventory or {}
+								playerData.farming.inventory.broccoli_seeds = 10
+								playerData.farming.inventory.carrot_seeds = 10
+
+								self:SavePlayerData(player)
+
+								if self.RemoteEvents.PlayerDataUpdated then
+									self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+								end
+							end
+
+							-- Clear adjacent plots
+							local farm = self:GetPlayerSimpleFarm(player)
+							if farm then
+								local plantingSpots = farm:FindFirstChild("PlantingSpots")
+								if plantingSpots then
+									local plot1 = plantingSpots:FindFirstChild("PlantingSpot_1")
+									local plot2 = plantingSpots:FindFirstChild("PlantingSpot_2")
+
+									if plot1 and plot2 then
+										self:ClearPlotProperly(plot1)
+										self:ClearPlotProperly(plot2)
+										wait(0.5)
+
+										self:SendNotification(player, "🧬 Mutation Test Ready!", 
+											"Plant broccoli, then carrot on adjacent plots. Mutation will happen immediately!", "success")
+
+										print("✅ Test setup complete - plant broccoli then carrot on adjacent plots")
+									end
+								end
+							end
+							-- ADD these debug commands to test crop clicking system
+
+							if command == "/testcropclicking" then
+								print("🖱️ Testing crop clicking system...")
+
+								-- Give player seeds and create test crops
+								local playerData = self:GetPlayerData(player)
+								if playerData then
+									playerData.farming = playerData.farming or {inventory = {}}
+									playerData.farming.inventory = playerData.farming.inventory or {}
+									playerData.farming.inventory.carrot_seeds = 5
+									self:SavePlayerData(player)
+								end
+
+								-- Find first available plot and plant a crop
+								local farm = self:GetPlayerSimpleFarm(player)
+								if farm then
+									local plantingSpots = farm:FindFirstChild("PlantingSpots")
+									if plantingSpots then
+										local plot = plantingSpots:FindFirstChild("PlantingSpot_1")
+										if plot then
+											-- Clear and plant
+											self:ClearPlotProperly(plot)
+											wait(0.5)
+
+											local success = self:PlantSeed(player, plot, "carrot_seeds")
+											if success then
+												-- Force crop to ready stage
+												plot:SetAttribute("GrowthStage", 4)
+
+												local cropModel = plot:FindFirstChild("CropModel")
+												if cropModel then
+													self:UpdateCropVisualForNewStage(plot, "carrot", "common", "ready", 4)
+
+													print("✅ Test crop planted and ready")
+													self:SendNotification(player, "🖱️ Click Test Ready!", 
+														"Crop planted on PlantingSpot_1! Click the CROP (not the plot) to harvest.", "success")
+												end
+											else
+												print("❌ Failed to plant test crop")
+											end
+										end
+									end
+								end
+
+							elseif command == "/debugclickdetectors" then
+								local plotName = args[2] or "PlantingSpot_1"
+
+								print("=== CLICK DETECTOR DEBUG FOR " .. plotName .. " ===")
+
+								local plot = self:FindPlotByName(player, plotName)
+								if plot then
+									local cropModel = plot:FindFirstChild("CropModel")
+
+									if cropModel then
+										print("✅ CropModel found: " .. cropModel.Name)
+
+										local clickDetectorCount = 0
+										print("Click detectors in crop:")
+
+										for _, obj in pairs(cropModel:GetDescendants()) do
+											if obj:IsA("ClickDetector") then
+												clickDetectorCount = clickDetectorCount + 1
+												print("  " .. clickDetectorCount .. ": " .. obj.Name .. " in " .. obj.Parent.Name)
+												print("    Max Distance: " .. obj.MaxActivationDistance)
+												print("    Plot Ref: " .. tostring(obj:GetAttribute("PlotModelName")))
+												print("    Crop Type: " .. tostring(obj:GetAttribute("CropType")))
+											end
+										end
+
+										if clickDetectorCount == 0 then
+											print("❌ NO CLICK DETECTORS FOUND!")
+											print("🔧 Adding click detection now...")
+											self:SetupCropClickDetection(cropModel, plot)
+										else
+											print("✅ Found " .. clickDetectorCount .. " click detector(s)")
+										end
+
+										-- Check plot click detectors (should not be used for harvesting)
+										local plotClickCount = 0
+										for _, obj in pairs(plot:GetDescendants()) do
+											if obj:IsA("ClickDetector") and obj.Parent.Name == "SpotPart" then
+												plotClickCount = plotClickCount + 1
+											end
+										end
+
+										print("Plot-level click detectors: " .. plotClickCount .. " (for planting only)")
+
+									else
+										print("❌ No CropModel found in plot")
+
+										local isEmpty = plot:GetAttribute("IsEmpty")
+										local plantType = plot:GetAttribute("PlantType")
+										local growthStage = plot:GetAttribute("GrowthStage")
+
+										print("Plot status:")
+										print("  IsEmpty: " .. tostring(isEmpty))
+										print("  PlantType: " .. tostring(plantType))
+										print("  GrowthStage: " .. tostring(growthStage))
+									end
+								else
+									print("❌ Plot not found: " .. plotName)
+								end
+								print("===============================================")
+
+							elseif command == "/fixclickdetectors" then
+								local plotName = args[2] or "PlantingSpot_1"
+
+								print("🔧 Fixing click detectors for " .. plotName)
+
+								local plot = self:FindPlotByName(player, plotName)
+								if plot then
+									local cropModel = plot:FindFirstChild("CropModel")
+
+									if cropModel then
+										-- Remove all existing click detectors
+										for _, obj in pairs(cropModel:GetDescendants()) do
+											if obj:IsA("ClickDetector") then
+												obj:Destroy()
+											end
+										end
+
+										-- Add new click detection
+										self:SetupCropClickDetection(cropModel, plot)
+
+										print("✅ Click detectors fixed for " .. plotName)
+										self:SendNotification(player, "🔧 Fixed!", "Click detectors repaired for " .. plotName, "success")
+									else
+										print("❌ No crop to fix on " .. plotName)
+									end
+								else
+									print("❌ Plot not found: " .. plotName)
+								end
+
+							elseif command == "/listallclickdetectors" then
+								print("=== ALL CLICK DETECTORS ON FARM ===")
+
+								local farm = self:GetPlayerSimpleFarm(player)
+								if farm then
+									local totalCropClickers = 0
+									local totalPlotClickers = 0
+
+									local plantingSpots = farm:FindFirstChild("PlantingSpots")
+									if plantingSpots then
+										for _, spot in pairs(plantingSpots:GetChildren()) do
+											if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+												local cropModel = spot:FindFirstChild("CropModel")
+												local isEmpty = spot:GetAttribute("IsEmpty")
+
+												-- Count crop click detectors
+												if cropModel then
+													local cropClickers = 0
+													for _, obj in pairs(cropModel:GetDescendants()) do
+														if obj:IsA("ClickDetector") then
+															cropClickers = cropClickers + 1
+															totalCropClickers = totalCropClickers + 1
+														end
+													end
+
+													local plantType = spot:GetAttribute("PlantType") or "unknown"
+													local status = isEmpty and "empty" or plantType
+													print("  " .. spot.Name .. ": " .. status .. " (" .. cropClickers .. " crop clickers)")
+												end
+
+												-- Count plot click detectors
+												local plotClickers = 0
+												for _, obj in pairs(spot:GetDescendants()) do
+													if obj:IsA("ClickDetector") and obj.Parent.Name == "SpotPart" then
+														plotClickers = plotClickers + 1
+														totalPlotClickers = totalPlotClickers + 1
+													end
+												end
+											end
+										end
+									end
+
+									print("Summary:")
+									print("  Total crop click detectors: " .. totalCropClickers)
+									print("  Total plot click detectors: " .. totalPlotClickers)
+								else
+									print("❌ No farm found")
+								end
+								print("=====================================")
+
+							elseif command == "/simulatecrropharvest" then
+								local plotName = args[2] or "PlantingSpot_1"
+
+								print("🧪 Simulating crop harvest for " .. plotName)
+
+								local plot = self:FindPlotByName(player, plotName)
+								if plot then
+									local cropModel = plot:FindFirstChild("CropModel")
+
+									if cropModel then
+										local cropType = plot:GetAttribute("PlantType") or "unknown"
+										local rarity = plot:GetAttribute("Rarity") or "common"
+										local isMutation = plot:GetAttribute("IsMutation") or false
+
+										print("📋 Crop details:")
+										print("  Type: " .. cropType)
+										print("  Rarity: " .. rarity)
+										print("  Is Mutation: " .. tostring(isMutation))
+
+										-- Force to ready stage
+										plot:SetAttribute("GrowthStage", 4)
+
+										-- Simulate the click
+										print("🖱️ Simulating crop click...")
+										self:HandleCropClick(player, cropModel, plot, cropType, rarity)
+
+									else
+										print("❌ No crop found on " .. plotName)
+									end
+								else
+									print("❌ Plot not found: " .. plotName)
+								end
+
+							elseif command == "/testcropstatus" then
+								local plotName = args[2] or "PlantingSpot_1"
+
+								print("📊 Testing crop status display for " .. plotName)
+
+								local plot = self:FindPlotByName(player, plotName)
+								if plot then
+									local cropModel = plot:FindFirstChild("CropModel")
+
+									if cropModel then
+										local cropType = plot:GetAttribute("PlantType") or "unknown"
+										local growthStage = plot:GetAttribute("GrowthStage") or 0
+										local isMutation = plot:GetAttribute("IsMutation") or false
+
+										print("🌱 Testing status display...")
+										self:ShowCropGrowthStatus(player, plot, cropType, growthStage, isMutation)
+
+									else
+										print("❌ No crop found on " .. plotName)
+									end
+								else
+									print("❌ Plot not found: " .. plotName)
+								end
+
+							elseif command == "/cleancropclickers" then
+								print("🧹 Cleaning up all crop click detectors...")
+
+								local farm = self:GetPlayerSimpleFarm(player)
+								if farm then
+									local removedCount = 0
+
+									local plantingSpots = farm:FindFirstChild("PlantingSpots")
+									if plantingSpots then
+										for _, spot in pairs(plantingSpots:GetChildren()) do
+											if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+												local cropModel = spot:FindFirstChild("CropModel")
+
+												if cropModel then
+													-- Remove all click detectors
+													for _, obj in pairs(cropModel:GetDescendants()) do
+														if obj:IsA("ClickDetector") then
+															obj:Destroy()
+															removedCount = removedCount + 1
+														end
+													end
+
+													-- Add back proper click detection
+													self:SetupCropClickDetection(cropModel, spot)
+												end
+											end
+										end
+									end
+
+									print("✅ Cleaned and rebuilt " .. removedCount .. " click detectors")
+									self:SendNotification(player, "🧹 Click Cleanup", "Rebuilt " .. removedCount .. " crop click detectors", "success")
+								else
+									print("❌ No farm found")
+								end
+							end
+						elseif command == "/quickmutationtest" then
+							print("🧬 Quick mutation test - auto planting...")
+
+							-- Set mutation to 100%
+							if self.MutationSystem.Combinations.broccarrot then
+								self.MutationSystem.Combinations.broccarrot.probability = 1.0
+							end
+
+							-- Give seeds
+							local playerData = self:GetPlayerData(player)
+							if playerData then
+								playerData.farming = playerData.farming or {inventory = {}}
+								playerData.farming.inventory = playerData.farming.inventory or {}
+								playerData.farming.inventory.broccoli_seeds = 10
+								playerData.farming.inventory.carrot_seeds = 10
+								self:SavePlayerData(player)
+							end
+
+							-- Auto plant adjacent crops
+							local farm = self:GetPlayerSimpleFarm(player)
+							if farm then
+								local plantingSpots = farm:FindFirstChild("PlantingSpots")
+								if plantingSpots then
+									local plot1 = plantingSpots:FindFirstChild("PlantingSpot_1")
+									local plot2 = plantingSpots:FindFirstChild("PlantingSpot_2")
+
+									if plot1 and plot2 then
+										-- Clear plots
+										self:ClearPlotProperly(plot1)
+										self:ClearPlotProperly(plot2)
+										wait(0.5)
+
+										-- Plant first crop
+										print("🌱 Auto-planting broccoli...")
+										local success1 = self:PlantSeed(player, plot1, "broccoli_seeds")
+
+										if success1 then
+											wait(1)
+
+											-- Plant second crop (should trigger mutation)
+											print("🌱 Auto-planting carrot (should trigger mutation)...")
+											local success2 = self:PlantSeed(player, plot2, "carrot_seeds")
+
+											if success2 then
+												print("🎉 Quick test complete!")
+											else
+												print("❌ Failed to plant carrot")
+											end
+										else
+											print("❌ Failed to plant broccoli")
+										end
+									end
+								end
+							end
+
+						elseif command == "/listmutationmodels" then
+							print("=== MUTATION MODELS CHECK ===")
+
+							local cropModels = ReplicatedStorage:FindFirstChild("CropModels")
+							if cropModels then
+								local mutations = {"broccarrot", "brocmato", "broctato", "cornmato", "craddish"}
+
+								for _, mutationType in ipairs(mutations) do
+									local model = cropModels:FindFirstChild(mutationType)
+									if model then
+										print("✅ " .. mutationType .. ": MODEL FOUND")
+									else
+										print("❌ " .. mutationType .. ": model missing")
+									end
+								end
+
+								print("Total models in CropModels: " .. #cropModels:GetChildren())
+							else
+								print("❌ CropModels folder not found in ReplicatedStorage")
+							end
+							print("=============================")
+
+						elseif command == "/createmutationmodel" then
+							local mutationType = args[2] or "broccarrot"
+
+							print("🧬 Creating test model for " .. mutationType)
+
+							if CropVisualManager then
+								local testMutation = CropVisualManager:CreateMutatedCrop(mutationType, "rare", "ready")
+								if testMutation then
+									testMutation.Parent = workspace
+									testMutation.PrimaryPart.CFrame = player.Character.HumanoidRootPart.CFrame + Vector3.new(5, 0, 0)
+
+									print("✅ Created test mutation model: " .. testMutation.Name)
+
+									-- Clean up after 15 seconds
+									spawn(function()
+										wait(15)
+										if testMutation and testMutation.Parent then
+											testMutation:Destroy()
+											print("🗑️ Cleaned up test mutation model")
+										end
+									end)
+								else
+									print("❌ Failed to create mutation model")
+								end
+							else
+								print("❌ CropVisualManager not available")
+							end
+
+						elseif command == "/resetmutationchances" then
+							print("🔧 Resetting mutation chances to default...")
+
+							if self.MutationSystem and self.MutationSystem.Combinations then
+								-- Reset to original probabilities
+								self.MutationSystem.Combinations.broccarrot.probability = 0.15
+								self.MutationSystem.Combinations.brocmato.probability = 0.12
+								self.MutationSystem.Combinations.broctato.probability = 0.10
+								self.MutationSystem.Combinations.cornmato.probability = 0.08
+								self.MutationSystem.Combinations.craddish.probability = 0.20
+
+								print("✅ Reset all mutation probabilities to default")
+
+								for mutationId, data in pairs(self.MutationSystem.Combinations) do
+									print("  " .. mutationId .. ": " .. (data.probability * 100) .. "%")
+								end
+							end
+
+						elseif command == "/mutationstatus" then
+							local userId = player.UserId
+
+							print("=== MUTATION STATUS FOR " .. player.Name .. " ===")
+
+							-- Show successful mutations
+							if self.MutationSystem.SuccessfulMutations[userId] then
+								local mutations = self.MutationSystem.SuccessfulMutations[userId]
+								print("Successful mutations: " .. #mutations)
+
+								for i, mutation in ipairs(mutations) do
+									local timeAgo = os.time() - mutation.timestamp
+									local immediateText = mutation.immediate and " (IMMEDIATE)" or ""
+									print("  " .. i .. ": " .. mutation.mutationType .. " - " .. timeAgo .. "s ago" .. immediateText)
+								end
+							else
+								print("No successful mutations")
+							end
+
+							-- Show current inventory
+							local playerData = self:GetPlayerData(player)
+							if playerData and playerData.farming and playerData.farming.inventory then
+								print("Mutation items in inventory:")
+								local mutations = {"broccarrot", "brocmato", "broctato", "cornmato", "craddish"}
+								for _, mutationType in ipairs(mutations) do
+									local count = playerData.farming.inventory[mutationType] or 0
+									if count > 0 then
+										print("  " .. mutationType .. ": " .. count)
+									end
+								end
+							end
+
+							print("=====================================")
+						end
+					elseif command == "/forcemutation" then
+						local mutationType = args[2] or "broccarrot"
+
+						print("🧬 Force triggering " .. mutationType .. " mutation...")
+
+						-- Set probability to 100% temporarily
+						if self.MutationSystem.Combinations[mutationType] then
+							local originalProb = self.MutationSystem.Combinations[mutationType].probability
+							self.MutationSystem.Combinations[mutationType].probability = 1.0
+
+							print("🧬 Set " .. mutationType .. " probability to 100%")
+							print("🧬 Now harvest one of your crops to trigger mutation")
+
+							-- Reset probability after 30 seconds
+							spawn(function()
+								wait(30)
+								self.MutationSystem.Combinations[mutationType].probability = originalProb
+								print("🧬 Reset " .. mutationType .. " probability to " .. (originalProb * 100) .. "%")
+							end)
+
+							self:SendNotification(player, "🧬 Force Mutation", 
+								"Set " .. mutationType .. " to 100% chance for 30 seconds!", "success")
+						else
+							print("❌ Mutation type not found: " .. mutationType)
+						end
+						-- ADD these debug commands to test mutation stages
+
+						if command == "/acceleratemutation" then
+							local plotName = args[2] or "PlantingSpot_1"
+
+							local plot = self:FindPlotByName(player, plotName)
+							if plot then
+								local isMutation = plot:GetAttribute("IsMutation")
+								local mutationType = plot:GetAttribute("MutationType")
+								local currentStage = plot:GetAttribute("GrowthStage") or 0
+
+								if isMutation and mutationType then
+									if currentStage < 4 then
+										local newStage = currentStage + 1
+										local stageNames = {"planted", "sprouting", "growing", "flowering", "ready"}
+										local stageName = stageNames[newStage + 1] or "ready"
+										local rarity = plot:GetAttribute("Rarity") or "rare"
+
+										plot:SetAttribute("GrowthStage", newStage)
+
+										self:UpdateMutationVisualForNewStage(plot, mutationType, rarity, stageName, newStage)
+
+										print("🚀 Accelerated mutation " .. mutationType .. " to stage " .. newStage .. " (" .. stageName .. ")")
+										self:SendNotification(player, "🧬 Mutation Accelerated", 
+											mutationType .. " advanced to " .. stageName .. "!", "success")
+									else
+										print("❌ Mutation already fully grown")
+										self:SendNotification(player, "Already Ready", 
+											mutationType .. " is already ready for harvest!", "info")
+									end
+								else
+									print("❌ Plot doesn't contain a mutation")
+									self:SendNotification(player, "Not a Mutation", 
+										"This plot doesn't contain a mutation crop!", "warning")
+								end
+							else
+								print("❌ Plot not found: " .. plotName)
+							end
+
+						elseif command == "/testmutationstages" then
+							local mutationType = args[2] or "broccarrot"
+
+							print("🧪 Testing all mutation stages for " .. mutationType)
+
+							if CropVisualManager then
+								local stages = {"planted", "sprouting", "growing", "flowering", "ready"}
+
+								for i, stage in ipairs(stages) do
+									local testMutation = CropVisualManager:CreateMutatedCrop(mutationType, "rare", stage)
+									if testMutation then
+										testMutation.Parent = workspace
+										testMutation.Name = mutationType .. "_" .. stage .. "_test"
+
+										-- Position them in a line
+										if testMutation.PrimaryPart then
+											local playerPos = player.Character.HumanoidRootPart.Position
+											testMutation.PrimaryPart.CFrame = CFrame.new(
+												playerPos + Vector3.new(i * 8, 0, 10)
+											)
+										end
+
+										print("✅ Created " .. stage .. " stage of " .. mutationType)
+									else
+										print("❌ Failed to create " .. stage .. " stage")
+									end
+								end
+
+								self:SendNotification(player, "🧬 Stage Test", 
+									"Created all 5 stages of " .. mutationType .. " in front of you!", "success")
+
+								-- Clean up after 30 seconds
+								spawn(function()
+									wait(30)
+									for _, obj in pairs(workspace:GetChildren()) do
+										if obj.Name:find(mutationType .. "_") and obj.Name:find("_test") then
+											obj:Destroy()
+										end
+									end
+									print("🗑️ Cleaned up mutation stage test models")
+								end)
+							else
+								print("❌ CropVisualManager not available")
+							end
+
+						elseif command == "/setmutationgrowthspeed" then
+							local speedMultiplier = tonumber(args[2]) or 1.0
+
+							if speedMultiplier < 0.1 or speedMultiplier > 10 then
+								print("❌ Speed multiplier must be between 0.1 and 10")
+								return
+							end
+
+							-- Store the speed multiplier globally
+							_G.MUTATION_GROWTH_SPEED = speedMultiplier
+
+							print("🧬 Set mutation growth speed to " .. speedMultiplier .. "x")
+							print("🧬 Normal mutations will now take " .. (240 / speedMultiplier) .. " seconds")
+
+							self:SendNotification(player, "Growth Speed Set", 
+								"Mutations will now grow " .. speedMultiplier .. "x speed!", "info")
+
+						elseif command == "/listactivemutations" then
+							print("=== ACTIVE MUTATIONS ===")
+
+							local mutationCount = 0
+							for _, area in pairs(workspace:GetDescendants()) do
+								if area:IsA("Model") and area.Name:find("PlantingSpot") then
+									local isMutation = area:GetAttribute("IsMutation")
+									local mutationType = area:GetAttribute("MutationType")
+									local growthStage = area:GetAttribute("GrowthStage") or 0
+									local rarity = area:GetAttribute("Rarity") or "unknown"
+
+									if isMutation and mutationType then
+										mutationCount = mutationCount + 1
+										local stageNames = {"planted", "sprouting", "growing", "flowering", "ready"}
+										local stageName = stageNames[growthStage + 1] or "unknown"
+
+										print("  " .. mutationCount .. ": " .. mutationType .. " (" .. rarity .. ") - " .. stageName .. " (stage " .. growthStage .. ")")
+									end
+								end
+							end
+
+							if mutationCount == 0 then
+								print("No active mutations found")
+							else
+								print("Total active mutations: " .. mutationCount)
+							end
+							print("========================")
+
+						elseif command == "/forcemutationharvest" then
+							local plotName = args[2] or "PlantingSpot_1"
+
+							local plot = self:FindPlotByName(player, plotName)
+							if plot then
+								local isMutation = plot:GetAttribute("IsMutation")
+								local mutationType = plot:GetAttribute("MutationType")
+
+								if isMutation and mutationType then
+									-- Force it to ready stage
+									plot:SetAttribute("GrowthStage", 4)
+
+									print("🔧 Force readying mutation " .. mutationType .. " for harvest")
+
+									-- Update visual to ready
+									local rarity = plot:GetAttribute("Rarity") or "rare"
+									self:UpdateMutationVisualForNewStage(plot, mutationType, rarity, "ready", 4)
+
+									-- Create ready effect
+									self:CreateMutationReadyEffect(plot, mutationType)
+
+									self:SendNotification(player, "🧬 Mutation Ready", 
+										mutationType .. " is now ready for harvest!", "success")
+								else
+									print("❌ Plot doesn't contain a mutation")
+								end
+							else
+								print("❌ Plot not found: " .. plotName)
+							end
+
+						elseif command == "/mutationgrowthinfo" then
+							print("=== MUTATION GROWTH INFO ===")
+
+							local baseGrowthTime = 240 -- 4 minutes
+							local speedMultiplier = _G.MUTATION_GROWTH_SPEED or 1.0
+							local actualGrowthTime = baseGrowthTime / speedMultiplier
+							local stageTime = actualGrowthTime / 4
+
+							print("Base growth time: " .. baseGrowthTime .. " seconds (4 minutes)")
+							print("Speed multiplier: " .. speedMultiplier .. "x")
+							print("Actual growth time: " .. actualGrowthTime .. " seconds (" .. math.floor(actualGrowthTime/60) .. " minutes)")
+							print("Time per stage: " .. stageTime .. " seconds")
+							print("")
+							print("Stages:")
+							print("  0. Planted (immediate)")
+							print("  1. Sprouting (+" .. stageTime .. "s)")
+							print("  2. Growing (+" .. stageTime .. "s)")
+							print("  3. Flowering (+" .. stageTime .. "s)")
+							print("  4. Ready (+" .. stageTime .. "s)")
+							print("============================")
+
+						elseif command == "/comparegrowthspeeds" then
+							print("=== GROWTH SPEED COMPARISON ===")
+
+							local normalCropTime = 300 -- 5 minutes
+							local mutationTime = 240 / (_G.MUTATION_GROWTH_SPEED or 1.0) -- 4 minutes adjusted
+
+							print("Normal crops: " .. normalCropTime .. " seconds (" .. (normalCropTime/60) .. " minutes)")
+							print("Mutations: " .. mutationTime .. " seconds (" .. math.floor(mutationTime/60) .. " minutes)")
+
+							if mutationTime < normalCropTime then
+								local speedBonus = ((normalCropTime - mutationTime) / normalCropTime) * 100
+								print("Mutations grow " .. math.floor(speedBonus) .. "% faster than normal crops")
+							else
+								local speedPenalty = ((mutationTime - normalCropTime) / normalCropTime) * 100
+								print("Mutations grow " .. math.floor(speedPenalty) .. "% slower than normal crops")
+							end
+							print("===============================")
+						end
+					elseif command == "/debugmutationflow" then
+						print("=== MUTATION SYSTEM DEBUG ===")
+
+						-- Check if mutation system is initialized
+						if not self.MutationSystem then
+							print("❌ MutationSystem not initialized!")
+							return
+						end
+
+						print("✅ MutationSystem exists")
+						print("Combinations loaded: " .. self:CountTable(self.MutationSystem.Combinations))
+
+						for mutationId, data in pairs(self.MutationSystem.Combinations) do
+							print("  " .. mutationId .. ": " .. table.concat(data.parents, " + ") .. " (" .. (data.probability * 100) .. "%)")
+						end
+
+						-- Check current mutation attempts
+						local userId = player.UserId
+						if self.MutationSystem.MutationAttempts[userId] then
+							local attemptCount = self:CountTable(self.MutationSystem.MutationAttempts[userId])
+							print("Active mutation attempts for " .. player.Name .. ": " .. attemptCount)
+						else
+							print("No active mutation attempts for " .. player.Name)
+						end
+
+						-- Check successful mutations
+						if self.MutationSystem.SuccessfulMutations[userId] then
+							local successCount = #self.MutationSystem.SuccessfulMutations[userId]
+							print("Successful mutations for " .. player.Name .. ": " .. successCount)
+						else
+							print("No successful mutations for " .. player.Name)
+						end
+
+						print("===========================")
+					end
 				elseif command == "/debugmutations" then
 					print("=== MUTATION SYSTEM DEBUG ===")
 
@@ -4804,6 +6688,8 @@ function GameCore:IsPlotActuallyEmpty(plotModel)
 end
 
 -- ENHANCED: Method to properly clear a plot (use this when harvesting)
+-- REPLACE your existing ClearPlotProperly function with this fixed version
+
 function GameCore:ClearPlotProperly(plotModel)
 	print("🧹 GameCore: FORCE clearing plot: " .. plotModel.Name)
 
@@ -4823,9 +6709,9 @@ function GameCore:ClearPlotProperly(plotModel)
 	end
 
 	for _, child in pairs(childrenToRemove) do
-		child:Destroy()
 		removedCount = removedCount + 1
-		print("🧹 Removed CropModel: " .. child:GetDebugId())
+		print("🧹 Removed CropModel: " .. child.Name .. " (instance " .. removedCount .. ")")
+		child:Destroy()
 	end
 
 	-- Method 2: Clear ALL crop-related attributes
