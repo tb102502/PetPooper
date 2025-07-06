@@ -73,10 +73,12 @@ function CropVisualManager:CreateCropModel(cropType, rarity, growthStage)
 	print("🌱 CropVisualManager: Creating " .. cropType .. " (" .. rarity .. ", " .. growthStage .. ")")
 
 	local success, cropModel = pcall(function()
-		-- Try pre-made model first
-		if self:HasPreMadeModel(cropType) and growthStage == "ready" then
+		-- FIXED: Try pre-made model for ALL growth stages, not just "ready"
+		if self:HasPreMadeModel(cropType) then
+			print("🎨 Using pre-made model for " .. cropType)
 			return self:CreatePreMadeCrop(cropType, rarity, growthStage)
 		else
+			print("🔧 No pre-made model found, using procedural for " .. cropType)
 			return self:CreateProceduralCrop(cropType, rarity, growthStage)
 		end
 	end)
@@ -100,12 +102,21 @@ function CropVisualManager:CreatePreMadeCrop(cropType, rarity, growthStage)
 	-- Ensure model is properly anchored
 	self:AnchorModel(cropModel)
 
-	-- Scale based on rarity
-	local scaleMultiplier = self:GetRarityScale(rarity)
-	self:ScaleModel(cropModel, scaleMultiplier)
+	-- ENHANCED: Scale based on both rarity AND growth stage
+	local rarityScale = self:GetRarityScale(rarity)
+	local growthScale = self:GetGrowthScale(growthStage)
+	local finalScale = rarityScale * growthScale
 
-	-- Add rarity effects
-	self:AddRarityEffects(cropModel, rarity)
+	self:ScaleModel(cropModel, finalScale)
+	print("🎯 Scaled model: rarity=" .. rarityScale .. ", growth=" .. growthScale .. ", final=" .. finalScale)
+
+	-- Add rarity effects (but make them subtle for early growth stages)
+	if growthStage == "ready" or growthStage == "flowering" then
+		self:AddRarityEffects(cropModel, rarity)
+	elseif rarity ~= "common" and growthStage ~= "planted" then
+		-- Add subtle effects for rare crops even in early stages
+		self:AddSubtleRarityEffects(cropModel, rarity)
+	end
 
 	-- Add attributes
 	cropModel:SetAttribute("CropType", cropType)
@@ -113,7 +124,46 @@ function CropVisualManager:CreatePreMadeCrop(cropType, rarity, growthStage)
 	cropModel:SetAttribute("GrowthStage", growthStage)
 	cropModel:SetAttribute("ModelType", "PreMade")
 
+	print("✅ Created pre-made crop: " .. cropModel.Name)
 	return cropModel
+end
+
+function CropVisualManager:GetGrowthScale(growthStage)
+	local scales = {
+		planted = 0.3,     -- Small sprout
+		sprouting = 0.5,   -- Growing
+		growing = 0.7,     -- Getting bigger
+		flowering = 0.9,   -- Almost full size
+		ready = 1.0        -- Full size
+	}
+	return scales[growthStage] or 0.5
+end
+
+-- Add subtle rarity effects for early growth stages
+function CropVisualManager:AddSubtleRarityEffects(cropModel, rarity)
+	if not cropModel.PrimaryPart or rarity == "common" then return end
+
+	-- Add very subtle glow for rare crops even when small
+	local light = Instance.new("PointLight")
+	light.Parent = cropModel.PrimaryPart
+
+	if rarity == "uncommon" then
+		light.Color = Color3.fromRGB(0, 255, 0)
+		light.Brightness = 0.3  -- Much dimmer for early stages
+		light.Range = 4
+	elseif rarity == "rare" then
+		light.Color = Color3.fromRGB(255, 215, 0)
+		light.Brightness = 0.5
+		light.Range = 5
+	elseif rarity == "epic" then
+		light.Color = Color3.fromRGB(128, 0, 128)
+		light.Brightness = 0.7
+		light.Range = 6
+	elseif rarity == "legendary" then
+		light.Color = Color3.fromRGB(255, 100, 100)
+		light.Brightness = 1.0
+		light.Range = 8
+	end
 end
 
 function CropVisualManager:CreateProceduralCrop(cropType, rarity, growthStage)
@@ -233,7 +283,90 @@ function CropVisualManager:HandleCropPlanted(plotModel, cropType, rarity)
 		return false
 	end
 end
+-- Add this new function to CropVisualManager.lua
+function CropVisualManager:UpdateCropStage(cropModel, plotModel, cropType, rarity, stageName, stageIndex)
+	print("🎨 CropVisualManager: Updating " .. cropType .. " to stage " .. stageName)
 
+	if not cropModel or not cropModel.PrimaryPart then
+		warn("Invalid crop model for stage update")
+		return false
+	end
+
+	-- Update model attributes
+	cropModel:SetAttribute("GrowthStage", stageName)
+
+	-- Method 1: If using pre-made model, create new model for this stage
+	local modelType = cropModel:GetAttribute("ModelType")
+	if modelType == "PreMade" and self:HasPreMadeModel(cropType) then
+		return self:ReplaceWithNewStageModel(cropModel, plotModel, cropType, rarity, stageName)
+	end
+
+	-- Method 2: Scale existing model
+	return self:ScaleExistingModel(cropModel, rarity, stageName)
+end
+
+function CropVisualManager:ReplaceWithNewStageModel(oldCropModel, plotModel, cropType, rarity, stageName)
+	print("🔄 Replacing model for new stage: " .. stageName)
+
+	-- Store position
+	local oldPosition = oldCropModel.PrimaryPart.CFrame
+
+	-- Create new model for this stage
+	local newCropModel = self:CreateCropModel(cropType, rarity, stageName)
+	if not newCropModel then
+		return false
+	end
+
+	-- Position new model
+	newCropModel.Name = "CropModel"
+	newCropModel.Parent = plotModel
+
+	if newCropModel.PrimaryPart then
+		newCropModel.PrimaryPart.CFrame = oldPosition
+	end
+
+	-- Remove old model
+	oldCropModel:Destroy()
+
+	print("✅ Successfully replaced crop model for stage " .. stageName)
+	return true
+end
+
+function CropVisualManager:ScaleExistingModel(cropModel, rarity, stageName)
+	print("📏 Scaling existing model for stage: " .. stageName)
+
+	-- Calculate new scale
+	local rarityScale = self:GetRarityScale(rarity)
+	local growthScale = self:GetGrowthScale(stageName)
+	local targetScale = rarityScale * growthScale
+
+	-- Get current scale to calculate relative change
+	local currentScale = 1.0 -- Assume starting from base scale
+	if cropModel:GetAttribute("CurrentScale") then
+		currentScale = cropModel:GetAttribute("CurrentScale")
+	end
+
+	local scaleChange = targetScale / currentScale
+
+	-- Apply scaling with smooth transition
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local targetSize = part.Size * scaleChange
+
+			local tween = TweenService:Create(part,
+				TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{Size = targetSize}
+			)
+			tween:Play()
+		end
+	end
+
+	-- Store new scale
+	cropModel:SetAttribute("CurrentScale", targetScale)
+
+	print("📏 Scaled crop by factor of " .. scaleChange)
+	return true
+end
 function CropVisualManager:OnCropHarvested(plotModel, cropType, rarity)
 	print("🌾 CropVisualManager: OnCropHarvested - " .. tostring(cropType))
 
