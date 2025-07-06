@@ -1622,7 +1622,7 @@ end
 -- ========== SPECIAL MUTATION PROPERTIES ==========
 
 -- Define special behaviors for mutation crops:
-ItemConfig.MutationEffects = {
+--[[ItemConfig.MutationEffects = {
 	broccarrot = {
 		harvest_bonus = 0.25, -- 25% chance for double harvest
 		nutrition_multiplier = 1.5,
@@ -1657,6 +1657,7 @@ ItemConfig.MutationEffects = {
 		special_abilities = {"spicy_kick", "quick_growth", "pest_deterrent"}
 	}
 }
+]]
 
 function ItemConfig.GetMutationEffect(mutationType, effectType)
 	local effects = ItemConfig.MutationEffects[mutationType]

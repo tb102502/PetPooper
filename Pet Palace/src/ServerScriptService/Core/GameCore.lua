@@ -12,7 +12,7 @@
 ]]
 
 local GameCore = {}
-
+local CropVisualManager = nil
 -- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -81,38 +81,54 @@ GameCore.Models = {
 
 -- Reference to ShopSystem (will be injected)
 GameCore.ShopSystem = nil
+function GameCore:LoadCropVisualManager()
+	print("GameCore: Loading CropVisualManager as module...")
 
-local function WaitForCropVisualManager()
-	local attempts = 0
-	while not _G.CropVisualManager and attempts < 30 do
-		wait(0.5)
-		attempts = attempts + 1
+	local success, result = pcall(function()
+		-- Try to require the CropVisualManager module
+		return require(game.ServerScriptService:WaitForChild("CropVisualManager", 10))
+	end)
+
+	if success and result then
+		CropVisualManager = result
+
+		-- Initialize the module
+		local initSuccess = CropVisualManager:Initialize()
+
+		if initSuccess then
+			print("GameCore: ✅ CropVisualManager loaded and initialized successfully")
+
+			-- Test basic functionality
+			local status = CropVisualManager:GetStatus()
+			print("GameCore: CropVisualManager status: " .. status.modelsLoaded .. " models loaded")
+
+			return true
+		else
+			warn("GameCore: ❌ CropVisualManager initialization failed")
+			CropVisualManager = nil
+			return false
+		end
+	else
+		warn("GameCore: ❌ Failed to load CropVisualManager module: " .. tostring(result))
+		CropVisualManager = nil
+		return false
 	end
-
-	if not _G.CropVisualManager then
-		warn("GameCore: CropVisualManager not found after 15 seconds - crop visuals may not work properly")
-		return nil
-	end
-
-	print("GameCore: CropVisualManager integration established")
-	return _G.CropVisualManager
 end
 
 -- ========== INITIALIZATION ==========
 
 -- FIXED GameCore Initialize Method - Add this to your GameCore.lua
 function GameCore:Initialize(shopSystem)
-		print("GameCore: Starting FIXED core game system initialization...")
+	print("GameCore: Starting ENHANCED core game system initialization...")
 
-		-- STEP 0: Wait for CropVisualManager to load properly
-		self:WaitForCropVisualManager()
+	-- STEP 0: Load CropVisualManager module
+	self:LoadCropVisualManager()
 
-		-- Store ShopSystem reference
-		if shopSystem then
-			self.ShopSystem = shopSystem
-			print("GameCore: ShopSystem reference established")
-		end
-	print("GameCore: Starting FIXED core game system initialization...")
+	-- Store ShopSystem reference
+	if shopSystem then
+		self.ShopSystem = shopSystem
+		print("GameCore: ShopSystem reference established")
+	end
 
 	-- Initialize player data storage
 	self.PlayerData = {}
@@ -140,16 +156,17 @@ function GameCore:Initialize(shopSystem)
 	self:InitializeFarmingSystem()
 	self:InitializePestAndChickenSystems()
 
-	-- FIXED: Initialize enhanced cow system
+	-- Initialize enhanced cow system
 	self:InitializeEnhancedCowSystem()
 
-	-- FIXED: Initialize protection system
+	-- Initialize protection system
 	self:InitializeProtectionSystem()
 
 	-- Start update loops
 	self:StartUpdateLoops()
 	self:InitializeChairSystemIntegration()
 	self:AddChairMilkingAdminCommands()
+
 	-- Setup admin commands
 	self:SetupAdminCommands()
 	self:InitializeClickerMilkingSystem()
@@ -159,7 +176,11 @@ function GameCore:Initialize(shopSystem)
 	self:SetupMutationAdminCommands()
 	self:AddPlantingDebugCommands()
 	self:AddCropDebugCommands()
-	print("GameCore: ✅ FIXED core game system initialization complete!")
+	self:AddCropCreationDebugCommands()
+	self:AddDataStoreDebugCommands()
+	self:AddModuleDebugCommands()
+
+	print("GameCore: ✅ ENHANCED core game system initialization complete!")
 	return true
 end
 function GameCore:WaitForCropVisualManager()
@@ -1195,15 +1216,255 @@ function GameCore:HandleCowMilkCollection(player, cowId)
 end
 
 -- ========== CLEANUP ON PLAYER LEAVE ==========
+-- Enhanced save system properties
+GameCore.SAVE_COOLDOWN = 30 -- Minimum 30 seconds between saves
+GameCore.BATCH_SAVE_DELAY = 5 -- Wait 5 seconds before actually saving (allows batching)
+GameCore.DataStoreCooldowns = {}
+GameCore.PendingSaves = {}
+GameCore.DirtyPlayers = {} -- Track which players need saving
+
+-- IMPROVED: Save player data with proper batching and cooldowns
+function GameCore:SavePlayerData(player, forceImmediate)
+	if not player or not player.Parent then return end
+
+	local userId = player.UserId
+	local currentTime = os.time()
+
+	-- Check if player data exists
+	local playerData = self.PlayerData[userId]
+	if not playerData then 
+		warn("GameCore: No player data to save for " .. player.Name)
+		return 
+	end
+
+	-- Handle immediate saves (for critical situations like player leaving)
+	if forceImmediate then
+		return self:PerformImmediateSave(player, playerData)
+	end
+
+	-- Check cooldown (prevents spam saving)
+	local lastSave = self.DataStoreCooldowns[userId] or 0
+	if currentTime - lastSave < self.SAVE_COOLDOWN then
+		-- Mark player as dirty for later saving
+		self:MarkPlayerForDelayedSave(userId)
+		return
+	end
+
+	-- Use batched save system
+	self:ScheduleBatchedSave(userId)
+end
+
+-- NEW: Mark player for delayed saving
+function GameCore:MarkPlayerForDelayedSave(userId)
+	self.DirtyPlayers[userId] = os.time()
+
+	-- Schedule a delayed save if not already scheduled
+	if not self.PendingSaves[userId] then
+		self.PendingSaves[userId] = true
+
+		spawn(function()
+			wait(self.BATCH_SAVE_DELAY)
+
+			-- Check if player still needs saving
+			if self.DirtyPlayers[userId] and Players:GetPlayerByUserId(userId) then
+				self:PerformBatchedSave(userId)
+			end
+
+			self.PendingSaves[userId] = nil
+		end)
+	end
+end
+
+-- NEW: Schedule batched save
+function GameCore:ScheduleBatchedSave(userId)
+	self.DirtyPlayers[userId] = os.time()
+
+	if not self.PendingSaves[userId] then
+		self.PendingSaves[userId] = true
+
+		spawn(function()
+			wait(self.BATCH_SAVE_DELAY)
+			self:PerformBatchedSave(userId)
+			self.PendingSaves[userId] = nil
+		end)
+	end
+end
+
+-- NEW: Perform batched save with error handling
+function GameCore:PerformBatchedSave(userId)
+	local player = Players:GetPlayerByUserId(userId)
+	if not player or not player.Parent then 
+		self.DirtyPlayers[userId] = nil
+		return 
+	end
+
+	local currentTime = os.time()
+	local lastSave = self.DataStoreCooldowns[userId] or 0
+
+	-- Double-check cooldown
+	if currentTime - lastSave < self.SAVE_COOLDOWN then
+		print("GameCore: Skipping save for " .. player.Name .. " - still in cooldown")
+		return
+	end
+
+	local playerData = self.PlayerData[userId]
+	if not playerData then 
+		self.DirtyPlayers[userId] = nil
+		return 
+	end
+
+	-- Perform the actual save
+	local success = self:PerformActualSave(player, playerData, "batched")
+
+	if success then
+		self.DataStoreCooldowns[userId] = currentTime
+		self.DirtyPlayers[userId] = nil
+		print("GameCore: Batched save successful for " .. player.Name)
+	else
+		-- Keep player marked as dirty for retry
+		print("GameCore: Batched save failed for " .. player.Name .. " - will retry later")
+	end
+end
+
+-- NEW: Perform immediate save (for critical situations)
+function GameCore:PerformImmediateSave(player, playerData)
+	print("GameCore: Performing immediate save for " .. player.Name)
+
+	local success = self:PerformActualSave(player, playerData, "immediate")
+
+	if success then
+		local userId = player.UserId
+		self.DataStoreCooldowns[userId] = os.time()
+		self.DirtyPlayers[userId] = nil
+		print("GameCore: Immediate save successful for " .. player.Name)
+	else
+		warn("GameCore: Immediate save failed for " .. player.Name)
+	end
+
+	return success
+end
+
+-- IMPROVED: Actual save operation with better error handling
+function GameCore:PerformActualSave(player, playerData, saveType)
+	local userId = player.UserId
+
+	if not self.PlayerDataStore then
+		warn("GameCore: DataStore not available - cannot save data for " .. player.Name)
+		return false
+	end
+
+	-- Create safe data structure (your existing sanitization code)
+	local safeData = self:CreateSafeDataForSaving(playerData)
+
+	-- Add save metadata
+	safeData.lastSave = os.time()
+	safeData.saveType = saveType or "unknown"
+	safeData.saveVersion = "1.0"
+
+	-- Perform the save with retry logic
+	local maxRetries = 2
+	local retryDelay = 1
+
+	for attempt = 1, maxRetries do
+		local success, errorMsg = pcall(function()
+			return self.PlayerDataStore:SetAsync("Player_" .. userId, safeData)
+		end)
+
+		if success then
+			return true
+		else
+			warn("GameCore: Save attempt " .. attempt .. " failed for " .. player.Name .. ": " .. tostring(errorMsg))
+
+			if attempt < maxRetries then
+				wait(retryDelay)
+				retryDelay = retryDelay * 2 -- Exponential backoff
+			end
+		end
+	end
+
+	return false
+end
+
+-- NEW: Create safe data structure for saving
+function GameCore:CreateSafeDataForSaving(playerData)
+	-- Use your existing sanitization method or create a simplified version
+	if self.SanitizeDataForSaving then
+		return self:SanitizeDataForSaving(playerData)
+	end
+
+	-- Simplified safe data structure
+	return {
+		coins = tonumber(playerData.coins) or 0,
+		farmTokens = tonumber(playerData.farmTokens) or 0,
+		farming = {
+			plots = tonumber(playerData.farming and playerData.farming.plots) or 0,
+			inventory = self:SanitizeInventory(playerData.farming and playerData.farming.inventory or {})
+		},
+		livestock = {
+			inventory = self:SanitizeInventory(playerData.livestock and playerData.livestock.inventory or {}),
+			cows = self:SanitizeCowData(playerData.livestock and playerData.livestock.cows or {})
+		},
+		stats = self:SanitizeStats(playerData.stats or {}),
+		purchaseHistory = self:SanitizePurchaseHistory(playerData.purchaseHistory or {}),
+		lastSave = os.time()
+	}
+end
+
+-- Helper methods for data sanitization
+function GameCore:SanitizeInventory(inventory)
+	local clean = {}
+	for item, amount in pairs(inventory) do
+		if type(item) == "string" and type(amount) == "number" and amount >= 0 then
+			clean[item] = math.floor(amount)
+		end
+	end
+	return clean
+end
+
+function GameCore:SanitizeStats(stats)
+	local clean = {}
+	for stat, value in pairs(stats) do
+		if type(stat) == "string" and type(value) == "number" and value >= 0 then
+			clean[stat] = math.floor(value)
+		end
+	end
+	return clean
+end
+
+function GameCore:SanitizePurchaseHistory(history)
+	local clean = {}
+	for item, purchased in pairs(history) do
+		if type(item) == "string" and type(purchased) == "boolean" then
+			clean[item] = purchased
+		end
+	end
+	return clean
+end
 
 -- ADD this to your existing player removal handler:
 Players.PlayerRemoving:Connect(function(player)
-	-- Clean up milking session when player leaves
-	local userId = player.UserId
-	if GameCore.Systems.ClickerMilking and GameCore.Systems.ClickerMilking.ActiveSessions[userId] then
-		GameCore:CleanupMilkingSession(userId)
+	-- Force immediate save when player leaves
+	if GameCore.PlayerData[player.UserId] then
+		print("GameCore: Player " .. player.Name .. " leaving - forcing immediate save")
+		GameCore:SavePlayerData(player, true) -- Force immediate save
 	end
+
+	-- Clean up tracking data
+	local userId = player.UserId
+	GameCore.DirtyPlayers[userId] = nil
+	GameCore.PendingSaves[userId] = nil
+	GameCore.Systems.Livestock.CowCooldowns[userId] = nil
+	GameCore.Systems.Livestock.PigStates[userId] = nil
 end)
+
+print("GameCore: ✅ OPTIMIZED DATASTORE SYSTEM LOADED!")
+print("🔧 OPTIMIZATIONS:")
+print("  ⏱️ Batched saves with delays to prevent queue overflow")
+print("  🔄 Proper cooldown system (30 seconds minimum)")
+print("  📊 Dirty player tracking to avoid unnecessary saves")
+print("  🚨 Immediate saves only for critical situations (player leaving)")
+print("  🔁 Retry logic with exponential backoff")
+print("  🧹 Automatic cleanup of old data")
 
 -- ========== ADMIN COMMANDS FOR TESTING ==========
 
@@ -2139,7 +2400,7 @@ function GameCore:InitializeFarmingSystem()
 	print("GameCore: Enhanced farming system initialized")
 end
 function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRarity)
-	print("🎨 GameCore: FIXED CreateCropOnPlotWithDebug starting...")
+	print("🎨 GameCore: ENHANCED CreateCropOnPlotWithDebug starting...")
 	print("🌱 Plot: " .. plotModel.Name .. " | Seed: " .. seedId .. " | Rarity: " .. cropRarity)
 
 	local success, result = pcall(function()
@@ -2160,43 +2421,30 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 
 		local cropType = seedData.resultCropId
 		local growthStage = "planted"
-		local cropModel = nil
 
-		-- METHOD 1: Try CropVisualManager with better error handling
-		if _G.CropVisualManager and not _G.DISABLE_CROPVISUALMANAGER then
+		-- METHOD 1: Try CropVisualManager module (IMPROVED)
+		if self:IsCropVisualManagerAvailable() then
 			print("🎨 Attempting CropVisualManager creation...")
 
-			local vmSuccess, vmResult = pcall(function()
-				-- Use the direct integration method
-				return _G.CropVisualManager:HandleCropPlanted(plotModel, cropType, cropRarity)
+			local vmSuccess, cropModel = pcall(function()
+				return CropVisualManager:HandleCropPlanted(plotModel, cropType, cropRarity)
 			end)
 
-			if vmSuccess and vmResult then
+			if vmSuccess and cropModel then
 				print("✅ CropVisualManager creation successful")
-				-- Check if crop was actually created
-				local createdCrop = plotModel:FindFirstChild("CropModel")
-				if createdCrop then
-					print("✅ Crop visual confirmed in plot")
-					return true
-				else
-					warn("⚠️ CropVisualManager succeeded but no crop found in plot")
-				end
+				return true
 			else
-				warn("❌ CropVisualManager creation failed: " .. tostring(vmResult))
+				warn("⚠️ CropVisualManager creation failed: " .. tostring(cropModel))
 			end
 		else
-			if not _G.CropVisualManager then
-				print("ℹ️ CropVisualManager not available, using fallback")
-			else
-				print("ℹ️ CropVisualManager disabled, using fallback")
-			end
+			print("ℹ️ CropVisualManager not available, using fallback")
 		end
 
 		-- METHOD 2: Enhanced fallback crop creation
 		print("🔧 Using enhanced fallback crop creation...")
-		cropModel = self:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
+		local fallbackCrop = self:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
 
-		if not cropModel then
+		if not fallbackCrop then
 			warn("❌ All crop creation methods failed")
 			return false
 		end
@@ -2210,10 +2458,115 @@ function GameCore:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRar
 		return result
 	else
 		warn("❌ CreateCropOnPlotWithDebug: FAILED - " .. tostring(result))
-		return false
+		-- Try basic fallback
+		return self:CreateBasicFallbackCrop(plotModel, seedId, seedData, cropRarity)
 	end
 end
--- ========== SAFE FALLBACK METHODS ==========
+
+-- UPDATED: Enhanced harvest method with module integration
+function GameCore:HarvestCrop(player, plotModel)
+	print("🌾 GameCore: ENHANCED harvest with module integration - " .. player.Name .. " for plot " .. plotModel.Name)
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then 
+		self:SendNotification(player, "Error", "Player data not found", "error")
+		return false
+	end
+
+	local plotOwner = self:GetPlotOwner(plotModel)
+	if plotOwner ~= player.Name then
+		self:SendNotification(player, "Not Your Plot", "You can only harvest your own crops!", "error")
+		return false
+	end
+
+	-- Check if crop is ready
+	local isActuallyEmpty = self:IsPlotActuallyEmpty(plotModel)
+	if isActuallyEmpty then
+		self:SendNotification(player, "Nothing to Harvest", "This plot doesn't have any crops to harvest!", "warning")
+		return false
+	end
+
+	local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+	if growthStage < 4 then
+		local timeLeft = self:GetCropTimeRemaining(plotModel)
+		self:SendNotification(player, "Not Ready", 
+			"Crop is not ready for harvest yet! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "warning")
+		return false
+	end
+
+	-- Get crop data
+	local plantType = plotModel:GetAttribute("PlantType") or ""
+	local seedType = plotModel:GetAttribute("SeedType") or ""
+	local cropRarity = plotModel:GetAttribute("Rarity") or "common"
+
+	-- Notify CropVisualManager about harvest BEFORE clearing plot
+	if self:IsCropVisualManagerAvailable() then
+		CropVisualManager:OnCropHarvested(plotModel, plantType, cropRarity)
+	end
+
+	-- Continue with normal harvest logic...
+	local cropData = ItemConfig.GetCropData(plantType)
+	local seedData = ItemConfig.GetSeedData(seedType)
+
+	if not cropData or not seedData then
+		self:SendNotification(player, "Invalid Crop", "Crop data not found for " .. plantType, "error")
+		return false
+	end
+
+	-- Calculate yield with rarity bonus
+	local baseYield = seedData.yieldAmount or 1
+	local rarityMultiplier = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].valueMultiplier or 1.0
+	local finalYield = math.floor(baseYield * rarityMultiplier)
+
+	-- Add crops to inventory
+	if not playerData.farming then
+		playerData.farming = {inventory = {}}
+	end
+	if not playerData.farming.inventory then
+		playerData.farming.inventory = {}
+	end
+
+	local currentAmount = playerData.farming.inventory[plantType] or 0
+	playerData.farming.inventory[plantType] = currentAmount + finalYield
+
+	-- Clear plot AFTER visual effects have time to play
+	spawn(function()
+		wait(1.5) -- Give time for harvest effects
+		self:ClearPlotProperly(plotModel)
+	end)
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.cropsHarvested = (playerData.stats.cropsHarvested or 0) + finalYield
+	if cropRarity ~= "common" then
+		playerData.stats.rareCropsHarvested = (playerData.stats.rareCropsHarvested or 0) + 1
+	end
+
+	-- Use optimized save
+	self:SavePlayerData(player)
+
+	if self.RemoteEvents.PlayerDataUpdated then
+		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+	end
+
+	local rarityName = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].name or cropRarity
+	local rarityEmoji = cropRarity == "legendary" and "👑" or 
+		cropRarity == "epic" and "💜" or 
+		cropRarity == "rare" and "✨" or 
+		cropRarity == "uncommon" and "💚" or "⚪"
+
+	self:SendNotification(player, "🌾 Crop Harvested!", 
+		"Harvested " .. finalYield .. "x " .. rarityEmoji .. " " .. rarityName .. " " .. cropData.name .. "!", "success")
+
+	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
+	return true
+end
+-- IMPROVED: Check if CropVisualManager is available and working
+function GameCore:IsCropVisualManagerAvailable()
+	return CropVisualManager ~= nil and CropVisualManager:IsAvailable()
+end
+
+-- IMPROVED: Enhanced fallback crop creation
 function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRarity)
 	print("🔧 Creating enhanced fallback crop...")
 
@@ -2238,8 +2591,10 @@ function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRa
 	cropPart.Color = self:GetCropColorForType(cropType, cropRarity)
 	cropPart.Anchored = true
 	cropPart.CanCollide = false
-	cropPart.Position = spotPart.Position + Vector3.new(0, 2, 0)
 	cropPart.Parent = cropModel
+
+	-- Position on the plot
+	cropPart.Position = spotPart.Position + Vector3.new(0, 2, 0)
 
 	-- Add mesh for better shape
 	local mesh = Instance.new("SpecialMesh")
@@ -2257,8 +2612,8 @@ function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRa
 	cropModel:SetAttribute("ModelType", "EnhancedFallback")
 	cropModel:SetAttribute("CreatedBy", "GameCore")
 
-	-- Add enhanced visual effects based on rarity
-	self:AddEnhancedFallbackEffects(cropModel, cropRarity)
+	-- Add visual effects based on rarity
+	self:AddFallbackRarityEffects(cropModel, cropRarity)
 
 	-- Add click detection for harvesting
 	self:SetupCropClickDetection(cropModel, plotModel)
@@ -2266,6 +2621,157 @@ function GameCore:CreateEnhancedFallbackCrop(plotModel, seedId, seedData, cropRa
 	print("✅ Enhanced fallback crop created successfully: " .. cropModel.Name)
 	return cropModel
 end
+
+-- NEW: Basic fallback for when everything else fails
+function GameCore:CreateBasicFallbackCrop(plotModel, seedId, seedData, cropRarity)
+	print("🔧 Creating BASIC fallback crop as last resort...")
+
+	local spotPart = plotModel:FindFirstChild("SpotPart")
+	if not spotPart then return false end
+
+	local cropType = seedData.resultCropId
+
+	-- Create the simplest possible crop
+	local cropModel = Instance.new("Model")
+	cropModel.Name = "CropModel"
+	cropModel.Parent = plotModel
+
+	local cropPart = Instance.new("Part")
+	cropPart.Name = "BasicCrop"
+	cropPart.Size = Vector3.new(1, 1, 1)
+	cropPart.Material = Enum.Material.Grass
+	cropPart.Color = Color3.fromRGB(100, 200, 100)
+	cropPart.Anchored = true
+	cropPart.CanCollide = false
+	cropPart.Position = spotPart.Position + Vector3.new(0, 1, 0)
+	cropPart.Parent = cropModel
+
+	cropModel.PrimaryPart = cropPart
+
+	-- Add basic attributes
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", cropRarity)
+	cropModel:SetAttribute("ModelType", "BasicFallback")
+
+	print("✅ Basic fallback crop created")
+	return true
+end
+
+-- IMPROVED: Position crop on plot
+function GameCore:PositionCropOnPlot(cropModel, plotModel)
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	local spotPart = plotModel:FindFirstChild("SpotPart")
+	if not spotPart then return end
+
+	-- Position the crop above the plot
+	cropModel.PrimaryPart.CFrame = CFrame.new(spotPart.Position + Vector3.new(0, 2, 0))
+	cropModel.PrimaryPart.Anchored = true
+	cropModel.PrimaryPart.CanCollide = false
+
+	print("✅ Positioned crop on plot")
+end
+
+-- ADD: Rarity effects for fallback crops
+function GameCore:AddFallbackRarityEffects(cropModel, rarity)
+	local cropPart = cropModel.PrimaryPart
+	if not cropPart then return end
+
+	-- Add glow effect based on rarity
+	if rarity ~= "common" then
+		local pointLight = Instance.new("PointLight")
+		pointLight.Parent = cropPart
+
+		if rarity == "uncommon" then
+			pointLight.Color = Color3.fromRGB(0, 255, 0)
+			pointLight.Brightness = 1
+			pointLight.Range = 8
+		elseif rarity == "rare" then
+			pointLight.Color = Color3.fromRGB(255, 215, 0)
+			pointLight.Brightness = 1.5
+			pointLight.Range = 10
+			cropPart.Material = Enum.Material.Neon
+		elseif rarity == "epic" then
+			pointLight.Color = Color3.fromRGB(128, 0, 128)
+			pointLight.Brightness = 2
+			pointLight.Range = 12
+			cropPart.Material = Enum.Material.Neon
+		elseif rarity == "legendary" then
+			pointLight.Color = Color3.fromRGB(255, 100, 100)
+			pointLight.Brightness = 3
+			pointLight.Range = 15
+			cropPart.Material = Enum.Material.Neon
+		end
+	end
+end
+
+-- ADD: Get crop colors for different types
+function GameCore:GetCropColorForType(cropType, rarity)
+	local baseColors = {
+		carrot = Color3.fromRGB(255, 140, 0),
+		corn = Color3.fromRGB(255, 215, 0),
+		strawberry = Color3.fromRGB(220, 20, 60),
+		wheat = Color3.fromRGB(218, 165, 32),
+		potato = Color3.fromRGB(160, 82, 45),
+		cabbage = Color3.fromRGB(124, 252, 0),
+		radish = Color3.fromRGB(255, 69, 0),
+		broccoli = Color3.fromRGB(34, 139, 34),
+		tomato = Color3.fromRGB(255, 99, 71),
+	}
+
+	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)
+
+	-- Modify color based on rarity
+	if rarity == "legendary" then
+		return baseColor:lerp(Color3.fromRGB(255, 100, 100), 0.3)
+	elseif rarity == "epic" then
+		return baseColor:lerp(Color3.fromRGB(128, 0, 128), 0.2)
+	elseif rarity == "rare" then
+		return baseColor:lerp(Color3.fromRGB(255, 215, 0), 0.15)
+	elseif rarity == "uncommon" then
+		return baseColor:lerp(Color3.fromRGB(0, 255, 0), 0.1)
+	else
+		return baseColor
+	end
+end
+
+-- ADD: Setup click detection for crops
+function GameCore:SetupCropClickDetection(cropModel, plotModel)
+	local clickDetector = Instance.new("ClickDetector")
+	clickDetector.MaxActivationDistance = 15
+	clickDetector.Parent = cropModel.PrimaryPart
+
+	clickDetector.MouseClick:Connect(function(clickingPlayer)
+		local plotOwner = self:GetPlotOwner(plotModel)
+		if clickingPlayer.Name == plotOwner then
+			local growthStage = plotModel:GetAttribute("GrowthStage") or 0
+			if growthStage >= 4 then
+				print("🌾 Player clicking to harvest crop")
+				self:HarvestCrop(clickingPlayer, plotModel)
+			else
+				local timeLeft = self:GetCropTimeRemaining(plotModel)
+				local minutesLeft = math.ceil(timeLeft/60)
+				self:SendNotification(clickingPlayer, "Crop Growing", 
+					"Crop is still growing! " .. minutesLeft .. " minutes remaining.", "info")
+			end
+		end
+	end)
+
+	print("✅ Click detection setup for crop")
+end
+
+-- ADD: Get remaining growth time
+function GameCore:GetCropTimeRemaining(plotModel)
+	local plantedTime = plotModel:GetAttribute("PlantedTime") or 0
+	local currentTime = os.time()
+	local growTime = 300 -- Default 5 minutes, adjust based on your seed data
+
+	local elapsed = currentTime - plantedTime
+	local remaining = math.max(0, growTime - elapsed)
+
+	return remaining
+end
+-- ========== SAFE FALLBACK METHODS ==========
 function GameCore:AddEnhancedFallbackEffects(cropModel, rarity)
 	local cropPart = cropModel.PrimaryPart
 	if not cropPart then return end
@@ -2321,43 +2827,6 @@ function GameCore:AddEnhancedFallbackEffects(cropModel, rarity)
 	end
 end
 
-
-function GameCore:GetCropColorForType(cropType, rarity)
-	local baseColors = {
-		carrot = Color3.fromRGB(255, 140, 0),
-		corn = Color3.fromRGB(255, 215, 0),
-		strawberry = Color3.fromRGB(220, 20, 60),
-		wheat = Color3.fromRGB(218, 165, 32),
-		potato = Color3.fromRGB(160, 82, 45),
-		cabbage = Color3.fromRGB(124, 252, 0),
-		radish = Color3.fromRGB(255, 69, 0),
-		broccoli = Color3.fromRGB(34, 139, 34),
-		tomato = Color3.fromRGB(255, 99, 71),
-		-- Mutation crops
-		broccarrot = Color3.fromRGB(162, 197, 108), -- Blend of broccoli and carrot
-		brocmato = Color3.fromRGB(145, 119, 52),    -- Blend of broccoli and tomato
-		broctato = Color3.fromRGB(97, 110, 89),     -- Blend of broccoli and potato
-		cornmato = Color3.fromRGB(255, 157, 135),   -- Blend of corn and tomato
-		craddish = Color3.fromRGB(255, 104, 34)     -- Blend of carrot and radish
-	}
-
-	local baseColor = baseColors[cropType] or Color3.fromRGB(100, 200, 100)
-
-	-- Modify color based on rarity
-	if rarity == "legendary" then
-		return baseColor:lerp(Color3.fromRGB(255, 100, 100), 0.3)
-	elseif rarity == "epic" then
-		return baseColor:lerp(Color3.fromRGB(128, 0, 128), 0.2)
-	elseif rarity == "rare" then
-		return baseColor:lerp(Color3.fromRGB(255, 215, 0), 0.15)
-	elseif rarity == "uncommon" then
-		return baseColor:lerp(Color3.fromRGB(0, 255, 0), 0.1)
-	else
-		return baseColor
-	end
-end
-
-
 function GameCore:AddBasicRarityEffectsFallback(cropPart, cropRarity)
 	if cropRarity == "common" then return end
 
@@ -2383,97 +2852,6 @@ function GameCore:AddBasicRarityEffectsFallback(cropPart, cropRarity)
 	end
 
 	light.Range = 10
-end
-function GameCore:SetupCropClickDetection(cropModel, plotModel)
-	local clickDetector = Instance.new("ClickDetector")
-	clickDetector.MaxActivationDistance = 15
-	clickDetector.Parent = cropModel.PrimaryPart
-
-	clickDetector.MouseClick:Connect(function(clickingPlayer)
-		local plotOwner = self:GetPlotOwner(plotModel)
-		if clickingPlayer.Name == plotOwner then
-			local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-			if growthStage >= 4 then
-				print("🌾 Player clicking to harvest crop")
-				self:HarvestCrop(clickingPlayer, plotModel)
-			else
-				local timeLeft = self:GetCropTimeRemaining(plotModel)
-				local minutesLeft = math.ceil(timeLeft/60)
-				self:SendNotification(clickingPlayer, "Crop Growing", 
-					"Crop is still growing! " .. minutesLeft .. " minutes remaining.", "info")
-			end
-		end
-	end)
-
-	print("✅ Click detection setup for crop")
-end
-function GameCore:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
-	spawn(function()
-		local growTime = seedData.growTime or 300 -- Default 5 minutes
-		local stages = {"planted", "sprouting", "growing", "ready"}
-		local stageTime = growTime / (#stages - 1)
-
-		for stage = 0, #stages - 2 do
-			wait(stageTime)
-
-			if plotModel and plotModel.Parent then
-				local currentStage = plotModel:GetAttribute("GrowthStage") or 0
-				if currentStage == stage then
-					local newStageIndex = stage + 1
-					plotModel:SetAttribute("GrowthStage", newStageIndex)
-
-					-- Update crop visual if possible
-					local cropModel = plotModel:FindFirstChild("CropModel")
-					if cropModel and cropModel.PrimaryPart then
-						self:UpdateCropVisualForStage(cropModel, newStageIndex, cropRarity)
-					end
-				end
-			else
-				break
-			end
-		end
-
-		-- Mark as fully grown
-		if plotModel and plotModel.Parent then
-			plotModel:SetAttribute("GrowthStage", 4)
-			print("🌱 Crop fully grown: " .. cropType)
-		end
-	end)
-end
-function GameCore:UpdateCropVisualForStage(cropModel, stageIndex, cropRarity)
-	if not cropModel or not cropModel.PrimaryPart then return end
-
-	local TweenService = game:GetService("TweenService")
-	local crop = cropModel.PrimaryPart
-	local mesh = crop:FindFirstChild("SpecialMesh")
-
-	-- Update size based on growth stage
-	local baseScale = 0.5 + stageIndex * 0.375 -- Grows from 0.5 to 1.625
-	local rarityScale = self:GetRaritySizeFallback(cropRarity)
-	local finalScale = baseScale * rarityScale
-
-	if mesh then
-		local sizeTween = TweenService:Create(mesh,
-			TweenInfo.new(1, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
-			{Scale = Vector3.new(finalScale, finalScale * 0.75, finalScale)}
-		)
-		sizeTween:Play()
-	end
-
-	-- Update color to show growth
-	local stageColors = {
-		Color3.fromRGB(139, 69, 19),  -- Brown (planted)
-		Color3.fromRGB(34, 139, 34),  -- Green (sprouting)
-		Color3.fromRGB(50, 205, 50),  -- Lime (growing)
-		Color3.fromRGB(255, 215, 0)   -- Gold (ready)
-	}
-
-	local targetColor = stageColors[stageIndex + 1] or stageColors[4]
-	local colorTween = TweenService:Create(crop,
-		TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{Color = targetColor}
-	)
-	colorTween:Play()
 end
 
 function GameCore:GetRaritySizeFallback(rarity)
@@ -2610,8 +2988,10 @@ print("  ✅ Maintains existing functionality if mutations fail")
 print("  ✅ Detailed error logging for debugging")
 -- ENHANCED PlantSeed method with mutation detection
 
-function GameCore:PlantSeed(player, plotModel, seedId)
-	print("🌱 GameCore: ENHANCED PlantSeed DEBUG - " .. player.Name .. " wants to plant " .. seedId)
+-- REPLACE your existing PlantSeed function with this corrected version
+
+function GameCore:PlantSeed(player, plotModel, seedId, seedData)
+	print("🌱 GameCore: FIXED PlantSeed DEBUG - " .. player.Name .. " wants to plant " .. seedId)
 
 	-- Step 1: Validate inputs
 	if not player then
@@ -2633,7 +3013,7 @@ function GameCore:PlantSeed(player, plotModel, seedId)
 
 	print("✅ Step 1: Input validation passed")
 
-	-- Step 2: Get player data
+	-- Step 2: Get player data (FIXED - properly define playerData)
 	local playerData = self:GetPlayerData(player)
 	if not playerData then 
 		warn("❌ PLANTING FAIL: No player data found for " .. player.Name)
@@ -2701,22 +3081,32 @@ function GameCore:PlantSeed(player, plotModel, seedId)
 	end
 	print("✅ Step 7: Plot ownership check passed")
 
-	-- Step 8: Get seed data
-	local seedData = nil
-	if ItemConfig and ItemConfig.GetSeedData then
-		seedData = ItemConfig.GetSeedData(seedId)
+	-- Step 8: Get seed data (FIXED - handle both parameter and lookup)
+	local finalSeedData = seedData
+	if not finalSeedData then
+		-- If seedData wasn't passed as parameter, look it up
+		if ItemConfig and ItemConfig.GetSeedData then
+			finalSeedData = ItemConfig.GetSeedData(seedId)
+		end
 	end
 
-	if not seedData then
+	if not finalSeedData then
 		warn("❌ PLANTING FAIL: Seed data not found for " .. seedId)
 		self:SendNotification(player, "Invalid Seed", "Seed data not found for " .. seedId .. "!", "error")
 		return false
 	end
 	print("✅ Step 8: Seed data retrieved")
-	print("🌱 DEBUG: Seed data - resultCropId: " .. tostring(seedData.resultCropId) .. ", growTime: " .. tostring(seedData.growTime))
+	print("🌱 DEBUG: Seed data - resultCropId: " .. tostring(finalSeedData.resultCropId) .. ", growTime: " .. tostring(finalSeedData.growTime))
 
-	-- Step 9: Get crop type and rarity
-	local cropType = seedData.resultCropId
+	-- Step 9: Get crop type and rarity (FIXED - properly define these variables)
+	local cropType = finalSeedData.resultCropId
+	if not cropType then
+		warn("❌ PLANTING FAIL: No resultCropId in seed data")
+		self:SendNotification(player, "Invalid Seed", "Seed has no crop result!", "error")
+		return false
+	end
+
+	-- Calculate rarity
 	local playerBoosters = self:GetPlayerBoosters(playerData)
 	local cropRarity = "common" -- Default rarity
 
@@ -2727,7 +3117,7 @@ function GameCore:PlantSeed(player, plotModel, seedId)
 
 	-- Step 10: Create crop on plot (WITH ENHANCED ERROR HANDLING)
 	print("🌱 DEBUG: Starting crop creation...")
-	local success = self:CreateCropOnPlotWithDebug(plotModel, seedId, seedData, cropRarity)
+	local success = self:CreateCropOnPlotWithDebug(plotModel, seedId, finalSeedData, cropRarity)
 
 	if not success then
 		warn("❌ PLANTING FAIL: Crop creation failed")
@@ -2749,29 +3139,122 @@ function GameCore:PlantSeed(player, plotModel, seedId)
 	plotModel:SetAttribute("Rarity", cropRarity)
 	print("✅ Step 12: Plot attributes updated")
 
-	-- Step 13: Update stats and save
+	-- Step 13: Start growth timer
+	self:StartCropGrowthTimer(plotModel, finalSeedData, cropType, cropRarity)
+	print("✅ Step 13: Growth timer started")
+
+	-- Step 14: Update stats and save (FIXED - use optimized save)
 	playerData.stats = playerData.stats or {}
 	playerData.stats.seedsPlanted = (playerData.stats.seedsPlanted or 0) + 1
-	self:SavePlayerData(player)
-	print("✅ Step 13: Stats updated and data saved")
 
-	-- Step 14: Send client update
+	-- Use optimized save system (not immediate save)
+	self:SavePlayerData(player)
+	print("✅ Step 14: Stats updated and data saved")
+
+	-- Step 15: Send client update
 	if self.RemoteEvents.PlayerDataUpdated then
 		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-		print("✅ Step 14: Client data update sent")
+		print("✅ Step 15: Client data update sent")
 	end
 
-	-- Step 15: Success notification
+	-- Step 16: Success notification
 	local seedInfo = ItemConfig and ItemConfig.ShopItems and ItemConfig.ShopItems[seedId]
 	local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
 
-	local notificationText = "Successfully planted " .. seedName .. "!\n🌟 Rarity: " .. cropRarity .. "\n⏰ Ready in " .. math.floor(seedData.growTime/60) .. " minutes."
+	local notificationText = "Successfully planted " .. seedName .. "!\n🌟 Rarity: " .. cropRarity .. "\n⏰ Ready in " .. math.floor(finalSeedData.growTime/60) .. " minutes."
 
 	self:SendNotification(player, "🌱 Seed Planted!", notificationText, "success")
-	print("✅ Step 15: Success notification sent")
+	print("✅ Step 16: Success notification sent")
 
 	print("🎉 PLANTING SUCCESS: " .. seedId .. " (" .. cropRarity .. ") planted for " .. player.Name)
 	return true
+end
+
+-- ADD this helper method if you don't have it already
+function GameCore:GetPlayerBoosters(playerData)
+	local boosters = {}
+
+	if playerData.boosters then
+		if playerData.boosters.rarity_booster and playerData.boosters.rarity_booster > 0 then
+			boosters.rarity_booster = true
+		end
+	end
+
+	return boosters
+end
+
+-- ADD this helper method for growth timer
+function GameCore:StartCropGrowthTimer(plotModel, seedData, cropType, cropRarity)
+	spawn(function()
+		local growTime = seedData.growTime or 300 -- Default 5 minutes
+		local stages = {"planted", "sprouting", "growing", "ready"}
+		local stageTime = growTime / (#stages - 1)
+
+		for stage = 0, #stages - 2 do
+			wait(stageTime)
+
+			if plotModel and plotModel.Parent then
+				local currentStage = plotModel:GetAttribute("GrowthStage") or 0
+				if currentStage == stage then
+					local newStageIndex = stage + 1
+					plotModel:SetAttribute("GrowthStage", newStageIndex)
+
+					-- Update crop visual if possible
+					local cropModel = plotModel:FindFirstChild("CropModel")
+					if cropModel and cropModel.PrimaryPart then
+						self:UpdateCropVisualForStage(cropModel, newStageIndex, cropRarity)
+					end
+
+					print("🌱 Crop " .. cropType .. " advanced to stage " .. newStageIndex)
+				end
+			else
+				print("🌱 Growth timer stopped - plot no longer exists")
+				break
+			end
+		end
+
+		-- Mark as fully grown
+		if plotModel and plotModel.Parent then
+			plotModel:SetAttribute("GrowthStage", 4)
+			print("🌱 Crop fully grown: " .. cropType)
+		end
+	end)
+end
+
+-- ADD this helper method for visual updates
+function GameCore:UpdateCropVisualForStage(cropModel, stageIndex, cropRarity)
+	if not cropModel or not cropModel.PrimaryPart then return end
+
+	-- Simple visual update - change size based on growth stage
+	local baseScale = 0.5 + stageIndex * 0.375 -- Grows from 0.5 to 1.625
+	local rarityScale = self:GetRaritySizeMultiplier(cropRarity)
+	local finalScale = baseScale * rarityScale
+
+	-- Update the crop's mesh scale if it has one
+	local mesh = cropModel.PrimaryPart:FindFirstChild("SpecialMesh")
+	if mesh then
+		local TweenService = game:GetService("TweenService")
+		local sizeTween = TweenService:Create(mesh,
+			TweenInfo.new(1, Enum.EasingStyle.Elastic, Enum.EasingDirection.Out),
+			{Scale = Vector3.new(finalScale, finalScale * 0.75, finalScale)}
+		)
+		sizeTween:Play()
+	end
+end
+
+-- ADD this helper method for rarity size multipliers
+function GameCore:GetRaritySizeMultiplier(rarity)
+	if rarity == "legendary" then
+		return 1.5
+	elseif rarity == "epic" then
+		return 1.3
+	elseif rarity == "rare" then
+		return 1.2
+	elseif rarity == "uncommon" then
+		return 1.1
+	else
+		return 1.0
+	end
 end
 -- Check adjacent plots for mutation possibilities
 function GameCore:CheckAdjacentPlotsForMutationsSafe(player, plotModel, newCropType)
@@ -2852,114 +3335,7 @@ function GameCore:ScheduleMutationCheck(player, plotModel, potentialMutations)
 
 	print("🧬 Scheduled mutation check for " .. player.Name .. " on plot " .. plotModel.Name)
 end
-function GameCore:HarvestCrop(player, plotModel)
-	print("🌾 GameCore: ENHANCED harvest with mutation check - " .. player.Name .. " for plot " .. plotModel.Name)
 
-	local playerData = self:GetPlayerData(player)
-	if not playerData then 
-		self:SendNotification(player, "Error", "Player data not found", "error")
-		return false
-	end
-
-	local plotOwner = self:GetPlotOwner(plotModel)
-	if plotOwner ~= player.Name then
-		self:SendNotification(player, "Not Your Plot", "You can only harvest your own crops!", "error")
-		return false
-	end
-
-	-- Check if crop is ready
-	local isActuallyEmpty = self:IsPlotActuallyEmpty(plotModel)
-	if isActuallyEmpty then
-		self:SendNotification(player, "Nothing to Harvest", "This plot doesn't have any crops to harvest!", "warning")
-		return false
-	end
-
-	local growthStage = plotModel:GetAttribute("GrowthStage") or 0
-	if growthStage < 4 then
-		local timeLeft = self:GetCropTimeRemaining(plotModel)
-		self:SendNotification(player, "Not Ready", 
-			"Crop is not ready for harvest yet! " .. math.ceil(timeLeft/60) .. " minutes remaining.", "warning")
-		return false
-	end
-
-	-- Get crop data
-	local plantType = plotModel:GetAttribute("PlantType") or ""
-	local seedType = plotModel:GetAttribute("SeedType") or ""
-	local cropRarity = plotModel:GetAttribute("Rarity") or "common"
-
-	-- NEW: Process potential mutations before harvest
-	local mutationResult = self:ProcessPotentialMutations(player, plotModel)
-
-	if mutationResult.mutated then
-		-- Crop mutated! Handle mutation harvest instead
-		return self:HarvestMutatedCrop(player, plotModel, mutationResult)
-	end
-
-	-- Continue with normal harvest logic...
-	local cropData = ItemConfig.GetCropData(plantType)
-	local seedData = ItemConfig.GetSeedData(seedType)
-
-	if not cropData or not seedData then
-		self:SendNotification(player, "Invalid Crop", "Crop data not found for " .. plantType, "error")
-		return false
-	end
-
-	-- Create harvest effects
-	local cropModel = plotModel:FindFirstChild("CropModel")
-	if cropModel and cropModel.PrimaryPart then
-		local position = cropModel.PrimaryPart.Position
-
-		if _G.CropVisualManager then
-			_G.CropVisualManager:CreateEnhancedHarvestEffect(cropModel, plantType, cropRarity)
-		else
-			self:CreateBasicHarvestEffect(position, cropRarity)
-		end
-	end
-
-	-- Calculate yield with rarity bonus
-	local baseYield = seedData.yieldAmount or 1
-	local rarityMultiplier = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].valueMultiplier or 1.0
-	local finalYield = math.floor(baseYield * rarityMultiplier)
-
-	-- Add crops to inventory
-	if not playerData.farming then
-		playerData.farming = {inventory = {}}
-	end
-	if not playerData.farming.inventory then
-		playerData.farming.inventory = {}
-	end
-
-	local currentAmount = playerData.farming.inventory[plantType] or 0
-	playerData.farming.inventory[plantType] = currentAmount + finalYield
-
-	-- Clear plot
-	local cleanupSuccess = self:ClearPlotProperly(plotModel)
-
-	-- Update stats
-	playerData.stats = playerData.stats or {}
-	playerData.stats.cropsHarvested = (playerData.stats.cropsHarvested or 0) + finalYield
-	if cropRarity ~= "common" then
-		playerData.stats.rareCropsHarvested = (playerData.stats.rareCropsHarvested or 0) + 1
-	end
-
-	self:SavePlayerData(player)
-
-	if self.RemoteEvents.PlayerDataUpdated then
-		self.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-	end
-
-	local rarityName = ItemConfig.RaritySystem[cropRarity] and ItemConfig.RaritySystem[cropRarity].name or cropRarity
-	local rarityEmoji = cropRarity == "legendary" and "👑" or 
-		cropRarity == "epic" and "💜" or 
-		cropRarity == "rare" and "✨" or 
-		cropRarity == "uncommon" and "💚" or "⚪"
-
-	self:SendNotification(player, "🌾 Crop Harvested!", 
-		"Harvested " .. finalYield .. "x " .. rarityEmoji .. " " .. rarityName .. " " .. cropData.name .. "!", "success")
-
-	print("🌾 GameCore: Successfully harvested " .. finalYield .. "x " .. plantType .. " (" .. cropRarity .. ") for " .. player.Name)
-	return true
-end
 function GameCore:ProcessPotentialMutations(player, plotModel)
 	local userId = player.UserId
 	local plotId = tostring(plotModel)
@@ -4262,17 +4638,6 @@ print("  ✅ Fixed farm plot creation to use expandable system")
 print("  ✅ Enhanced farm expansion purchase handling")
 print("  ✅ Added farm existence verification")
 
-function GameCore:GetPlayerBoosters(playerData)
-	local boosters = {}
-
-	if playerData.boosters then
-		if playerData.boosters.rarity_booster and playerData.boosters.rarity_booster > 0 then
-			boosters.rarity_booster = true
-		end
-	end
-
-	return boosters
-end
 
 function GameCore:HarvestAllCrops(player)
 	print("🌾 GameCore: Enhanced harvest all request from " .. player.Name)
@@ -4645,82 +5010,6 @@ function GameCore:ValidatePlayerDataForSaving(playerData)
 end
 
 -- REPLACE your existing SavePlayerData method with this fixed version:
-function GameCore:SavePlayerData(player, forceImmediate)
-	if not player or not player.Parent then return end
-
-	local userId = player.UserId
-	local currentTime = os.time()
-
-	if not forceImmediate then
-		local lastSave = self.DataStoreCooldowns[userId] or 0
-		if currentTime - lastSave < self.SAVE_COOLDOWN then
-			return
-		end
-	end
-
-	local playerData = self.PlayerData[userId]
-	if not playerData then return end
-
-	-- STEP 1: Validate data before sanitization
-	local validationIssues = self:ValidatePlayerDataForSaving(playerData)
-	if #validationIssues > 0 then
-		warn("GameCore: Player data validation issues found for " .. player.Name .. ":")
-		for _, issue in ipairs(validationIssues) do
-			warn("  " .. issue)
-		end
-	end
-
-	-- STEP 2: Create safe data structure for saving
-	local safeData = {
-		coins = tonumber(playerData.coins) or 0,
-		farmTokens = tonumber(playerData.farmTokens) or 0,
-		upgrades = self:SanitizeDataForSaving(playerData.upgrades or {}),
-		stats = self:SanitizeDataForSaving(playerData.stats or {}),
-		purchaseHistory = self:SanitizeDataForSaving(playerData.purchaseHistory or {}),
-		farming = {
-			plots = tonumber(playerData.farming and playerData.farming.plots) or 0,
-			inventory = self:SanitizeDataForSaving(playerData.farming and playerData.farming.inventory or {})
-		},
-		livestock = {
-			cow = self:SanitizeDataForSaving(playerData.livestock and playerData.livestock.cow or {}),
-			cows = self:SanitizeCowData(playerData.livestock and playerData.livestock.cows or {}),
-			inventory = self:SanitizeDataForSaving(playerData.livestock and playerData.livestock.inventory or {})
-		},
-		defense = self:SanitizeDataForSaving(playerData.defense or {}),
-		boosters = self:SanitizeDataForSaving(playerData.boosters or {}),
-		pig = {
-			size = tonumber(playerData.pig and playerData.pig.size) or 1.0,
-			cropPoints = tonumber(playerData.pig and playerData.pig.cropPoints) or 0,
-			transformationCount = tonumber(playerData.pig and playerData.pig.transformationCount) or 0,
-			totalFed = tonumber(playerData.pig and playerData.pig.totalFed) or 0
-		},
-		lastSave = currentTime
-	}
-
-	-- STEP 3: Save with enhanced error handling
-	local success, errorMsg = pcall(function()
-		if not self.PlayerDataStore then
-			error("DataStore not available")
-		end
-
-		return self.PlayerDataStore:SetAsync("Player_" .. userId, safeData)
-	end)
-
-	if success then
-		self.DataStoreCooldowns[userId] = currentTime
-		print("GameCore: Successfully saved data for " .. player.Name)
-	else
-		warn("GameCore: Failed to save data for " .. player.Name .. ": " .. tostring(errorMsg))
-
-		-- Debug the data that failed to save
-		print("GameCore: Debugging failed save data:")
-		print("  Data size estimate: " .. self:EstimateDataSize(safeData))
-		print("  Sanitized data structure:")
-		for key, value in pairs(safeData) do
-			print("    " .. key .. ": " .. type(value))
-		end
-	end
-end
 
 -- Helper method to specifically sanitize cow data
 function GameCore:SanitizeCowData(cowData)
@@ -5140,7 +5429,231 @@ function GameCore:AddPlantingDebugCommands()
 		end)
 	end)
 end
+function GameCore:AddCropCreationDebugCommands()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
 
+				if command == "/debugcropissue" then
+					print("=== CROP CREATION DEBUG ===")
+
+					-- Check CropVisualManager availability
+					print("CropVisualManager Status:")
+					print("  _G.CropVisualManager exists: " .. tostring(_G.CropVisualManager ~= nil))
+					print("  DISABLE_CROPVISUALMANAGER: " .. tostring(_G.DISABLE_CROPVISUALMANAGER))
+
+					if _G.CropVisualManager then
+						print("  CreateCropModel method: " .. tostring(_G.CropVisualManager.CreateCropModel ~= nil))
+						print("  PositionCropModel method: " .. tostring(_G.CropVisualManager.PositionCropModel ~= nil))
+					end
+
+					-- Check ReplicatedStorage.CropModels
+					local cropModels = game:GetService("ReplicatedStorage"):FindFirstChild("CropModels")
+					print("  CropModels folder: " .. tostring(cropModels ~= nil))
+					if cropModels then
+						print("  Models available: " .. #cropModels:GetChildren())
+						for _, model in pairs(cropModels:GetChildren()) do
+							if model:IsA("Model") then
+								print("    - " .. model.Name)
+							end
+						end
+					end
+
+					-- Check player's farm
+					local farm = self:GetPlayerSimpleFarm(player)
+					print("  Player farm exists: " .. tostring(farm ~= nil))
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						print("  PlantingSpots folder: " .. tostring(plantingSpots ~= nil))
+						if plantingSpots then
+							local spotCount = 0
+							for _, spot in pairs(plantingSpots:GetChildren()) do
+								if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+									spotCount = spotCount + 1
+								end
+							end
+							print("  Total planting spots: " .. spotCount)
+						end
+					end
+
+					print("========================")
+
+				elseif command == "/testcropcreation" then
+					local plotName = args[2] or "PlantingSpot_1"
+					local cropType = args[3] or "carrot"
+
+					print("🧪 Testing crop creation on " .. plotName .. " with " .. cropType)
+
+					-- Find the plot
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local targetSpot = plantingSpots:FindFirstChild(plotName)
+							if targetSpot then
+								print("✅ Found target plot: " .. targetSpot.Name)
+
+								-- Clear the plot first
+								self:ClearPlotProperly(targetSpot)
+								wait(0.5)
+
+								-- Create test seed data
+								local testSeedData = {
+									resultCropId = cropType,
+									growTime = 300
+								}
+
+								-- Test crop creation
+								local success = self:CreateCropOnPlotWithDebug(targetSpot, cropType .. "_seeds", testSeedData, "common")
+
+								if success then
+									print("✅ Crop creation test SUCCESSFUL")
+
+									-- Check if crop visual exists
+									wait(1)
+									local cropModel = targetSpot:FindFirstChild("CropModel")
+									if cropModel then
+										print("✅ CropModel found in plot: " .. cropModel.Name)
+										print("  Model type: " .. tostring(cropModel:GetAttribute("ModelType")))
+										print("  Crop type: " .. tostring(cropModel:GetAttribute("CropType")))
+										print("  Position: " .. tostring(cropModel.PrimaryPart and cropModel.PrimaryPart.Position or "No PrimaryPart"))
+									else
+										print("❌ No CropModel found after creation!")
+									end
+								else
+									print("❌ Crop creation test FAILED")
+								end
+							else
+								print("❌ Could not find plot: " .. plotName)
+							end
+						else
+							print("❌ No PlantingSpots folder found")
+						end
+					else
+						print("❌ No farm found for player")
+					end
+
+				elseif command == "/forcecropvisual" then
+					local plotName = args[2] or "PlantingSpot_1"
+					local cropType = args[3] or "carrot"
+
+					print("🔧 Force creating crop visual...")
+
+					-- Find the plot
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local targetSpot = plantingSpots:FindFirstChild(plotName)
+							if targetSpot then
+								-- Force create using fallback method
+								local success = self:CreateEnhancedFallbackCrop(targetSpot, cropType .. "_seeds", {resultCropId = cropType}, "common")
+
+								if success then
+									print("✅ Force crop creation successful")
+								else
+									print("❌ Force crop creation failed")
+								end
+							end
+						end
+					end
+
+				elseif command == "/clearcrop" then
+					local plotName = args[2] or "PlantingSpot_1"
+
+					-- Find and clear the plot
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local targetSpot = plantingSpots:FindFirstChild(plotName)
+							if targetSpot then
+								print("🧹 Clearing plot: " .. targetSpot.Name)
+								self:ClearPlotProperly(targetSpot)
+								print("✅ Plot cleared")
+							end
+						end
+					end
+
+				--[[elseif command == "/fixcropvisualmanager" then
+					print("🔧 Attempting to fix CropVisualManager integration...")
+
+					-- Re-initialize the connection
+					spawn(function()
+						wait(1)
+
+						-- Check if CropVisualManager exists in _G
+						if _G.CropVisualManager then
+							print("✅ CropVisualManager found in _G")
+
+							-- Test a simple method call
+							local testSuccess, testResult = pcall(function()
+								return
+									_G.CropVisualManager:IsCropVisualManagerAvailable and _G.CropVisualManager:IsCropVisualManagerAvailable() or "method_missing"
+							end)
+
+							if testSuccess then
+								print("✅ CropVisualManager test call successful")
+							else
+								print("❌ CropVisualManager test call failed: " .. tostring(testResult))
+							end
+						else
+							print("❌ CropVisualManager not found in _G")
+							print("Available global objects:")
+							for key, value in pairs(_G) do
+								if type(key) == "string" and key:lower():find("crop") then
+									print("  " .. key .. ": " .. type(value))
+								end
+							end
+						end
+					end)]]
+
+				elseif command == "/cropstatus" then
+					-- Show status of all crops on player's farm
+					print("=== CROP STATUS ===")
+
+					local farm = self:GetPlayerSimpleFarm(player)
+					if farm then
+						local plantingSpots = farm:FindFirstChild("PlantingSpots")
+						if plantingSpots then
+							local totalSpots = 0
+							local occupiedSpots = 0
+							local emptySpots = 0
+
+							for _, spot in pairs(plantingSpots:GetChildren()) do
+								if spot:IsA("Model") and spot.Name:find("PlantingSpot") then
+									totalSpots = totalSpots + 1
+
+									local isEmpty = spot:GetAttribute("IsEmpty")
+									local cropModel = spot:FindFirstChild("CropModel")
+
+									if isEmpty == false or cropModel then
+										occupiedSpots = occupiedSpots + 1
+
+										local cropType = spot:GetAttribute("PlantType") or "unknown"
+										local growthStage = spot:GetAttribute("GrowthStage") or 0
+										local hasVisual = cropModel and "✅" or "❌"
+
+										print("  " .. spot.Name .. ": " .. cropType .. " (stage " .. growthStage .. ") " .. hasVisual)
+									else
+										emptySpots = emptySpots + 1
+									end
+								end
+							end
+
+							print("Total spots: " .. totalSpots)
+							print("Occupied: " .. occupiedSpots)
+							print("Empty: " .. emptySpots)
+						end
+					end
+					print("==================")
+				end
+			end
+		end)
+	end)
+end
 -- Add this admin command to your existing admin commands:
 function GameCore:SetupAdminCommands()
 	-- ... your existing admin commands ...
@@ -7195,6 +7708,321 @@ function GameCore:DebugMilkingPositions(player)
 		print("====================================")
 	end
 end
+
+function GameCore:AddDataStoreDebugCommands()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
+
+				if command == "/datastatus" then
+					print("=== DATASTORE STATUS ===")
+
+					local currentTime = os.time()
+
+					print("Save Cooldowns:")
+					for userId, lastSave in pairs(self.DataStoreCooldowns) do
+						local player = Players:GetPlayerByUserId(userId)
+						local playerName = player and player.Name or "Unknown"
+						local timeSince = currentTime - lastSave
+						local canSave = timeSince >= self.SAVE_COOLDOWN
+
+						print("  " .. playerName .. ": " .. timeSince .. "s ago " .. (canSave and "✅" or "❌"))
+					end
+
+					print("Dirty Players (need saving):")
+					local dirtyCount = 0
+					for userId, dirtyTime in pairs(self.DirtyPlayers) do
+						local player = Players:GetPlayerByUserId(userId)
+						local playerName = player and player.Name or "Unknown"
+						local timeDirty = currentTime - dirtyTime
+
+						print("  " .. playerName .. ": dirty for " .. timeDirty .. "s")
+						dirtyCount = dirtyCount + 1
+					end
+
+					if dirtyCount == 0 then
+						print("  No players need saving")
+					end
+
+					print("Pending Saves:")
+					local pendingCount = 0
+					for userId, _ in pairs(self.PendingSaves) do
+						local player = Players:GetPlayerByUserId(userId)
+						local playerName = player and player.Name or "Unknown"
+						print("  " .. playerName .. ": save scheduled")
+						pendingCount = pendingCount + 1
+					end
+
+					if pendingCount == 0 then
+						print("  No pending saves")
+					end
+
+					print("Settings:")
+					print("  Save Cooldown: " .. self.SAVE_COOLDOWN .. " seconds")
+					print("  Batch Delay: " .. self.BATCH_SAVE_DELAY .. " seconds")
+					print("========================")
+
+				elseif command == "/forcesave" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						print("🔧 Force saving data for " .. targetPlayer.Name)
+						local success = self:SavePlayerData(targetPlayer, true) -- Force immediate
+
+						if success then
+							print("✅ Force save successful")
+						else
+							print("❌ Force save failed")
+						end
+					else
+						print("❌ Player not found: " .. targetName)
+					end
+
+				elseif command == "/saveall" then
+					print("🔧 Force saving all player data...")
+
+					local savedCount = 0
+					local failedCount = 0
+
+					for _, targetPlayer in pairs(Players:GetPlayers()) do
+						if self.PlayerData[targetPlayer.UserId] then
+							local success = self:SavePlayerData(targetPlayer, true)
+
+							if success then
+								savedCount = savedCount + 1
+							else
+								failedCount = failedCount + 1
+							end
+
+							wait(0.5) -- Delay between saves to prevent queue overflow
+						end
+					end
+
+					print("✅ Save all complete: " .. savedCount .. " successful, " .. failedCount .. " failed")
+
+				elseif command == "/cleandirty" then
+					print("🧹 Cleaning dirty players list...")
+
+					local cleanedCount = 0
+					local currentTime = os.time()
+
+					for userId, dirtyTime in pairs(self.DirtyPlayers) do
+						local player = Players:GetPlayerByUserId(userId)
+
+						if not player then
+							self.DirtyPlayers[userId] = nil
+							cleanedCount = cleanedCount + 1
+						end
+					end
+
+					print("✅ Cleaned " .. cleanedCount .. " old dirty entries")
+
+				elseif command == "/savecooldown" then
+					local newCooldown = tonumber(args[2])
+
+					if newCooldown and newCooldown >= 5 and newCooldown <= 300 then
+						self.SAVE_COOLDOWN = newCooldown
+						print("✅ Save cooldown set to " .. newCooldown .. " seconds")
+					else
+						print("❌ Invalid cooldown. Use: /savecooldown [5-300]")
+						print("Current cooldown: " .. self.SAVE_COOLDOWN .. " seconds")
+					end
+
+				elseif command == "/datainfo" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						local userId = targetPlayer.UserId
+						local currentTime = os.time()
+
+						print("=== DATA INFO FOR " .. targetPlayer.Name .. " ===")
+
+						local lastSave = self.DataStoreCooldowns[userId] or 0
+						local timeSince = currentTime - lastSave
+
+						print("Last save: " .. timeSince .. " seconds ago")
+						print("Can save: " .. (timeSince >= self.SAVE_COOLDOWN and "✅ YES" or "❌ NO"))
+						print("Is dirty: " .. (self.DirtyPlayers[userId] and "✅ YES" or "❌ NO"))
+						print("Pending save: " .. (self.PendingSaves[userId] and "✅ YES" or "❌ NO"))
+
+						if self.DirtyPlayers[userId] then
+							local dirtyTime = currentTime - self.DirtyPlayers[userId]
+							print("Dirty for: " .. dirtyTime .. " seconds")
+						end
+
+						local playerData = self.PlayerData[userId]
+						if playerData then
+							print("Data exists: ✅ YES")
+							print("Coins: " .. (playerData.coins or 0))
+							print("Farm plots: " .. (playerData.farming and playerData.farming.plots or 0))
+						else
+							print("Data exists: ❌ NO")
+						end
+
+						print("==========================================")
+					else
+						print("❌ Player not found: " .. targetName)
+					end
+
+				elseif command == "/testplant" then
+					-- Test planting without triggering multiple saves
+					print("🧪 Testing optimized planting...")
+
+					local oldCooldown = self.SAVE_COOLDOWN
+					self.SAVE_COOLDOWN = 5 -- Temporarily reduce cooldown for testing
+
+					-- Give test seeds
+					local playerData = self:GetPlayerData(player)
+					if playerData then
+						playerData.farming = playerData.farming or {inventory = {}}
+						playerData.farming.inventory = playerData.farming.inventory or {}
+						playerData.farming.inventory.carrot_seeds = 5
+
+						print("✅ Added test seeds")
+						print("Now try planting normally - check output for DataStore messages")
+
+						-- Restore original cooldown after 30 seconds
+						spawn(function()
+							wait(30)
+							self.SAVE_COOLDOWN = oldCooldown
+							print("🔧 Restored original save cooldown: " .. oldCooldown .. " seconds")
+						end)
+					end
+
+				elseif command == "/queuestatus" then
+					print("=== DATASTORE QUEUE STATUS ===")
+					print("This is estimated based on recent activity:")
+
+					local recentSaves = 0
+					local currentTime = os.time()
+
+					-- Count saves in the last minute
+					for _, lastSave in pairs(self.DataStoreCooldowns) do
+						if currentTime - lastSave <= 60 then
+							recentSaves = recentSaves + 1
+						end
+					end
+
+					local playerCount = #Players:GetPlayers()
+					local maxRequestsPerMinute = 60 + (playerCount * 10)
+					local queueUsage = (recentSaves / maxRequestsPerMinute) * 100
+
+					print("Recent saves (last minute): " .. recentSaves)
+					print("Max requests per minute: " .. maxRequestsPerMinute)
+					print("Estimated queue usage: " .. math.floor(queueUsage) .. "%")
+
+					if queueUsage > 80 then
+						print("⚠️ HIGH USAGE - Risk of queue overflow")
+					elseif queueUsage > 50 then
+						print("⚠️ MODERATE USAGE - Monitor closely")
+					else
+						print("✅ LOW USAGE - Queue healthy")
+					end
+
+					print("==============================")
+				end
+			end
+		end)
+	end)
+end
+function GameCore:AddModuleDebugCommands()
+	Players.PlayerAdded:Connect(function(player)
+		player.Chatted:Connect(function(message)
+			if player.Name == "TommySalami311" then -- Replace with your username
+				local args = string.split(message:lower(), " ")
+				local command = args[1]
+
+				if command == "/cropmodulestatus" then
+					print("=== CROPVISUALMANAGER MODULE STATUS ===")
+
+					if CropVisualManager then
+						print("✅ Module loaded: YES")
+						print("✅ Available: " .. tostring(CropVisualManager:IsAvailable()))
+
+						local status = CropVisualManager:GetStatus()
+						print("✅ Models loaded: " .. status.modelsLoaded)
+						print("✅ Initialized: " .. tostring(status.initialized))
+
+						-- Test creation
+						local testCrop = CropVisualManager:CreateCropModel("carrot", "common", "ready")
+						if testCrop then
+							print("✅ Test creation: SUCCESS")
+							testCrop:Destroy()
+						else
+							print("❌ Test creation: FAILED")
+						end
+					else
+						print("❌ Module loaded: NO")
+						print("❌ CropVisualManager is nil")
+
+						-- Try to reload
+						print("🔧 Attempting to reload module...")
+						self:LoadCropVisualManager()
+					end
+
+					print("========================================")
+
+				elseif command == "/reloadcropmodule" then
+					print("🔧 Reloading CropVisualManager module...")
+
+					CropVisualManager = nil
+					local success = self:LoadCropVisualManager()
+
+					if success then
+						print("✅ Module reloaded successfully")
+					else
+						print("❌ Module reload failed")
+					end
+
+				elseif command == "/testmodulecrop" then
+					local cropType = args[2] or "carrot"
+					local plotName = args[3] or "PlantingSpot_1"
+
+					if CropVisualManager then
+						print("🧪 Testing module crop creation: " .. cropType .. " on " .. plotName)
+
+						local plot = self:FindPlotByName(player, plotName)
+						if plot then
+							local success = CropVisualManager:HandleCropPlanted(plot, cropType, "common")
+
+							if success then
+								print("✅ Module test successful")
+							else
+								print("❌ Module test failed")
+							end
+						else
+							print("❌ Plot not found: " .. plotName)
+						end
+					else
+						print("❌ CropVisualManager module not loaded")
+					end
+				end
+			end
+		end)
+	end)
+end
+
+-- Make sure to call this in your Initialize method:
+-- self:AddModuleDebugCommands()
+
+print("GameCore: ✅ MODULE INTEGRATION LOADED!")
+print("🔧 Key improvements:")
+print("  ✅ Direct module loading - no race conditions")
+print("  ✅ Proper initialization order")
+print("  ✅ Better error handling")
+print("  ✅ Module status checking")
+print("  ✅ Reload capabilities")
+print("")
+print("🧪 Debug commands:")
+print("  /cropmodulestatus - Check module status")
+print("  /reloadcropmodule - Reload the module")
+print("  /testmodulecrop [type] [plot] - Test module crop creation")
+-- Call this in your GameCore:Initialize() method
+-- self:AddDataStoreDebugCommands()
 function GameCore:AddCropDebugCommands()
 	Players.PlayerAdded:Connect(function(player)
 		player.Chatted:Connect(function(message)
@@ -7410,9 +8238,9 @@ end
 -- ========== UPDATE LOOPS ==========
 
 function GameCore:StartUpdateLoops()
-	print("GameCore: Starting update loops...")
+	print("GameCore: Starting OPTIMIZED update loops...")
 
-	-- Cow indicator update loop
+	-- Cow indicator update loop (unchanged)
 	spawn(function()
 		while true do
 			wait(1)
@@ -7420,16 +8248,58 @@ function GameCore:StartUpdateLoops()
 		end
 	end)
 
-	-- Auto-save loop
+	-- OPTIMIZED: Less frequent auto-save with dirty checking
 	spawn(function()
 		while true do
-			wait(300) -- Save every 5 minutes
+			wait(120) -- Check every 2 minutes instead of 5
+
+			local currentTime = os.time()
+			local savedCount = 0
+
 			for _, player in ipairs(Players:GetPlayers()) do
 				if player and player.Parent and self.PlayerData[player.UserId] then
-					pcall(function()
-						self:SavePlayerData(player)
-					end)
+					local userId = player.UserId
+					local lastSave = self.DataStoreCooldowns[userId] or 0
+
+					-- Only save if it's been a while since last save
+					if currentTime - lastSave >= 300 then -- 5 minutes
+						pcall(function()
+							self:SavePlayerData(player)
+							savedCount = savedCount + 1
+						end)
+
+						-- Add delay between saves to prevent queue overflow
+						if savedCount % 3 == 0 then
+							wait(2) -- Pause every 3 saves
+						end
+					end
 				end
+			end
+
+			if savedCount > 0 then
+				print("GameCore: Auto-saved data for " .. savedCount .. " players")
+			end
+		end
+	end)
+
+	-- NEW: Clean up dirty players list periodically
+	spawn(function()
+		while true do
+			wait(600) -- Every 10 minutes
+
+			local currentTime = os.time()
+			local cleanedCount = 0
+
+			for userId, dirtyTime in pairs(self.DirtyPlayers) do
+				-- Remove old dirty markers for players who left
+				if not Players:GetPlayerByUserId(userId) or currentTime - dirtyTime > 1800 then -- 30 minutes
+					self.DirtyPlayers[userId] = nil
+					cleanedCount = cleanedCount + 1
+				end
+			end
+
+			if cleanedCount > 0 then
+				print("GameCore: Cleaned up " .. cleanedCount .. " old dirty player markers")
 			end
 		end
 	end)

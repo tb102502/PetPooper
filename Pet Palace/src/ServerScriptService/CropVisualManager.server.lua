@@ -9,6 +9,28 @@
     ✅ Better debug and monitoring tools
     ✅ Enhanced model caching and performance
 ]]
+_G.CropVisualManager = _G.CropVisualManager or {}
+local function WaitForGameCoreImproved()
+    local attempts = 0
+    local maxAttempts = 60 -- Wait up to 30 seconds
+    
+    while not _G.GameCore and attempts < maxAttempts do
+        wait(0.5)
+        attempts = attempts + 1
+        
+        if attempts % 10 == 0 then
+            print("CropVisualManager: Still waiting for GameCore... (attempt " .. attempts .. "/" .. maxAttempts .. ")")
+        end
+    end
+
+    if _G.GameCore then
+        print("CropVisualManager: ✅ GameCore found after " .. (attempts * 0.5) .. " seconds")
+        return _G.GameCore
+    else
+        warn("CropVisualManager: ❌ GameCore not found after " .. (maxAttempts * 0.5) .. " seconds!")
+        return nil
+    end
+end
 
 local CropVisualManager = {}
 
@@ -1606,29 +1628,234 @@ end
 
 -- Direct integration function that GameCore can call
 function CropVisualManager:HandleCropPlanted(plotModel, cropType, rarity)
-	print("🌱 CropVisualManager: HandleCropPlanted - " .. cropType .. " (" .. rarity .. ")")
+	print("🌱 CropVisualManager: SIMPLIFIED HandleCropPlanted - " .. cropType .. " (" .. rarity .. ")")
 
 	if not plotModel then
 		warn("❌ No plotModel provided")
 		return false
 	end
 
-	-- Create and position the crop
-	local cropModel = self:CreateCropModelSafe(cropType, rarity, "planted")
-	if cropModel then
-		cropModel.Name = "CropModel" -- GameCore expects this name
-		cropModel.Parent = plotModel
+	local success, result = pcall(function()
+		-- Clean existing crops first
+		local existingCrop = plotModel:FindFirstChild("CropModel")
+		if existingCrop then
+			existingCrop:Destroy()
+			wait(0.1)
+		end
 
-		self:PositionCropModelSafe(cropModel, plotModel, "planted")
+		-- Create the crop visual
+		local cropModel = self:CreateSimplifiedCropModel(cropType, rarity, "planted")
 
-		print("✅ Crop visual created successfully")
-		return true
+		if cropModel then
+			cropModel.Name = "CropModel" -- GameCore expects this name
+			cropModel.Parent = plotModel
+
+			-- Position the crop
+			self:PositionCropSimple(cropModel, plotModel)
+
+			print("✅ Simplified crop visual created successfully")
+			return true
+		else
+			warn("❌ Failed to create simplified crop visual")
+			return false
+		end
+	end)
+
+	if success then
+		return result
 	else
-		warn("❌ Failed to create crop visual")
+		warn("CropVisualManager: Error in HandleCropPlanted: " .. tostring(result))
 		return false
 	end
 end
 
+-- ========== SIMPLIFIED CROP MODEL CREATION ==========
+
+function CropVisualManager:CreateSimplifiedCropModel(cropType, rarity, growthStage)
+	print("🔧 Creating simplified crop model for " .. cropType)
+
+	-- Create the crop model
+	local cropModel = Instance.new("Model")
+	cropModel.Name = cropType .. "_" .. rarity .. "_simplified"
+
+	-- Create the main crop part
+	local cropPart = Instance.new("Part")
+	cropPart.Name = "CropBody"
+	cropPart.Size = Vector3.new(2, 2, 2)
+	cropPart.Material = Enum.Material.Grass
+	cropPart.Shape = Enum.PartType.Block
+	cropPart.CanCollide = false
+	cropPart.Anchored = true
+	cropPart.Parent = cropModel
+
+	-- Set crop color based on type
+	local cropColors = {
+		carrot = Color3.fromRGB(255, 140, 0),
+		corn = Color3.fromRGB(255, 215, 0),
+		strawberry = Color3.fromRGB(220, 20, 60),
+		wheat = Color3.fromRGB(218, 165, 32),
+		potato = Color3.fromRGB(160, 82, 45),
+		cabbage = Color3.fromRGB(124, 252, 0),
+		radish = Color3.fromRGB(255, 69, 0),
+		broccoli = Color3.fromRGB(34, 139, 34),
+		tomato = Color3.fromRGB(255, 99, 71)
+	}
+
+	cropPart.Color = cropColors[cropType] or Color3.fromRGB(100, 200, 100)
+
+	-- Add a mesh for better appearance
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(1, 1.2, 1)
+	mesh.Parent = cropPart
+
+	-- Set as primary part
+	cropModel.PrimaryPart = cropPart
+
+	-- Add rarity effects
+	self:AddSimpleRarityEffects(cropPart, rarity)
+
+	-- Add attributes
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", rarity)
+	cropModel:SetAttribute("GrowthStage", growthStage)
+	cropModel:SetAttribute("ModelType", "Simplified")
+	cropModel:SetAttribute("CreatedBy", "CropVisualManager")
+
+	return cropModel
+end
+
+-- ========== SIMPLIFIED POSITIONING ==========
+
+function CropVisualManager:PositionCropSimple(cropModel, plotModel)
+	if not cropModel or not cropModel.PrimaryPart then
+		warn("CropVisualManager: Invalid crop model for positioning")
+		return
+	end
+
+	local spotPart = plotModel:FindFirstChild("SpotPart")
+	if not spotPart then
+		warn("CropVisualManager: No SpotPart found for positioning")
+		return
+	end
+
+	-- Position the crop above the plot
+	local plotPosition = spotPart.Position
+	local cropPosition = plotPosition + Vector3.new(0, 2, 0)
+
+	cropModel.PrimaryPart.CFrame = CFrame.new(cropPosition)
+	cropModel.PrimaryPart.Anchored = true
+	cropModel.PrimaryPart.CanCollide = false
+
+	print("🎯 Positioned crop at: " .. tostring(cropPosition))
+end
+
+-- ========== SIMPLIFIED RARITY EFFECTS ==========
+
+function CropVisualManager:AddSimpleRarityEffects(cropPart, rarity)
+	if rarity == "common" then return end
+
+	-- Add a simple point light for non-common rarities
+	local light = Instance.new("PointLight")
+	light.Parent = cropPart
+
+	if rarity == "uncommon" then
+		light.Color = Color3.fromRGB(0, 255, 0)
+		light.Brightness = 1
+		light.Range = 8
+	elseif rarity == "rare" then
+		light.Color = Color3.fromRGB(255, 215, 0)
+		light.Brightness = 1.5
+		light.Range = 10
+		cropPart.Material = Enum.Material.Neon
+	elseif rarity == "epic" then
+		light.Color = Color3.fromRGB(128, 0, 128)
+		light.Brightness = 2
+		light.Range = 12
+		cropPart.Material = Enum.Material.Neon
+	elseif rarity == "legendary" then
+		light.Color = Color3.fromRGB(255, 100, 100)
+		light.Brightness = 3
+		light.Range = 15
+		cropPart.Material = Enum.Material.Neon
+	end
+end
+
+-- ========== ENSURE IMMEDIATE AVAILABILITY ==========
+
+-- Set up the CropVisualManager global immediately
+_G.CropVisualManager.HandleCropPlanted = function(plotModel, cropType, rarity)
+	return CropVisualManager:HandleCropPlanted(plotModel, cropType, rarity)
+end
+
+_G.CropVisualManager.CreateCropModel = function(cropType, rarity, growthStage)
+	return CropVisualManager:CreateSimplifiedCropModel(cropType, rarity, growthStage)
+end
+
+_G.CropVisualManager.PositionCropModel = function(cropModel, plotModel, growthStage)
+	return CropVisualManager:PositionCropSimple(cropModel, plotModel)
+end
+
+-- ========== BACKWARDS COMPATIBILITY ==========
+
+-- Add methods that GameCore might be looking for
+CropVisualManager.CreateCropModelSafe = function(self, cropType, rarity, growthStage)
+	return self:CreateSimplifiedCropModel(cropType, rarity, growthStage)
+end
+
+CropVisualManager.PositionCropModelSafe = function(self, cropModel, plotModel, growthStage)
+	return self:PositionCropSimple(cropModel, plotModel)
+end
+
+-- ========== STATUS CHECK METHOD ==========
+
+function CropVisualManager:IsCropVisualManagerAvailable()
+	return true -- We're always available now
+end
+
+_G.CropVisualManager.IsCropVisualManagerAvailable = function()
+	return true
+end
+
+-- ========== IMMEDIATE REGISTRATION WITH GAMECORE ==========
+
+spawn(function()
+	-- Try to register with GameCore immediately
+	local attempts = 0
+	while attempts < 10 do
+		attempts = attempts + 1
+		wait(0.5)
+
+		if _G.GameCore then
+			print("🔗 CropVisualManager: Connecting to GameCore (attempt " .. attempts .. ")...")
+
+			-- Make ourselves available to GameCore
+			_G.GameCore.CropVisualManager = CropVisualManager
+
+			-- Also set up the global reference
+			_G.CropVisualManager = CropVisualManager
+
+			print("✅ CropVisualManager: Successfully connected to GameCore")
+			break
+		end
+	end
+
+	if not _G.GameCore then
+		warn("⚠️ CropVisualManager: Could not connect to GameCore, but methods are still available globally")
+	end
+
+	-- Ensure we're in the global space regardless
+	_G.CropVisualManager = CropVisualManager
+	print("✅ CropVisualManager: Registered in global space")
+end)
+
+print("🔧 ✅ CROPVISUALMANAGER SIMPLIFIED INTEGRATION LOADED!")
+print("Features:")
+print("  ✅ Immediate global registration")
+print("  ✅ Simplified crop creation methods")
+print("  ✅ Better GameCore integration")
+print("  ✅ Backwards compatibility")
+print("  ✅ Fallback support")
 -- ========== DIRECT GAMECORE HOOKUP ==========
 
 -- Wait for GameCore and connect directly
