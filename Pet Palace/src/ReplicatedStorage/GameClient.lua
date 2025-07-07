@@ -2093,7 +2093,37 @@ _G.TestFarm = function()
 		_G.GameClient:OpenMenu("Farm")
 	end
 end
+function GameClient:DebugModularSystem()
+	print("=== MODULAR SYSTEM CLIENT DEBUG ===")
+	print("Requesting server module status...")
 
+	-- You could add a new remote function to check server module status
+	if self.RemoteFunctions.GetModuleStatus then
+		local success, moduleStatus = pcall(function()
+			return self.RemoteFunctions.GetModuleStatus:InvokeServer()
+		end)
+
+		if success and moduleStatus then
+			print("Server Module Status:")
+			print("  CropCreation: " .. (moduleStatus.CropCreation and "✅ LOADED" or "❌ FAILED"))
+			print("  CropVisual: " .. (moduleStatus.CropVisual and "✅ LOADED" or "❌ FAILED"))
+			print("  FarmPlot: " .. (moduleStatus.FarmPlot and "✅ LOADED" or "❌ FAILED"))
+			print("  MutationSystem: " .. (moduleStatus.MutationSystem and "✅ LOADED" or "ℹ️ OPTIONAL"))
+		else
+			print("❌ Could not get module status from server")
+		end
+	else
+		print("ℹ️ Module status checking not available")
+	end
+	print("==================================")
+end
+
+-- Global debug function
+_G.DebugModularSystem = function()
+	if _G.GameClient and _G.GameClient.DebugModularSystem then
+		_G.GameClient:DebugModularSystem()
+	end
+end
 print("GameClient: ✅ Enhanced for tabbed shop system!")
 print("🎯 Changes Made:")
 print("  🛒 Enhanced shop system with tab support")
