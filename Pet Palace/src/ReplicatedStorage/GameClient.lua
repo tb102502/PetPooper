@@ -54,8 +54,6 @@ GameClient.FarmingState = {
 GameClient.Cache = {
 	ShopItems = {},
 	CowCooldown = 0,
-	PigState = {},
-	-- NEW: Shop tab cache
 	ShopTabCache = {},
 	LastShopRefresh = 0
 }
@@ -1011,16 +1009,15 @@ function GameClient:SetupRemoteConnections()
 
 	local requiredRemoteEvents = {
 		-- Core game events
-		"CollectMilk", "FeedPig", "PlayerDataUpdated", "ShowNotification",
+		"CollectMilk", "PlayerDataUpdated", "ShowNotification",
 		"PlantSeed", "HarvestCrop", "HarvestAllCrops",
-		"PestSpotted", "PestEliminated", "ChickenPlaced", "ChickenMoved",
-		"FeedAllChickens", "FeedChickensWithType", "UsePesticide",
+
 
 		-- Shop events (enhanced for tabbed system)
 		"PurchaseItem", "ItemPurchased", "SellItem", "ItemSold", "CurrencyUpdated",
 
 		-- Proximity events
-		"OpenShop", "CloseShop", "ShowPigFeedingUI", "HidePigFeedingUI"
+		"OpenShop", "CloseShop"
 	}
 
 	local requiredRemoteFunctions = {
@@ -1109,19 +1106,6 @@ function GameClient:SetupAllEventHandlers()
 			end)
 		end,
 
-		-- Pest Control Events
-		PestSpotted = function(pestType, cropType, plotInfo)
-			pcall(function() self:HandlePestSpottedNotification(pestType, cropType, plotInfo) end)
-		end,
-
-		PestEliminated = function(pestType, eliminatedBy)
-			pcall(function() self:HandlePestEliminatedNotification(pestType, eliminatedBy) end)
-		end,
-
-		-- Chicken Events
-		ChickenPlaced = function(chickenType, position)
-			pcall(function() self:HandleChickenPlacedNotification(chickenType, position) end)
-		end
 	}
 
 	-- Connect all handlers
@@ -1154,18 +1138,6 @@ function GameClient:SetupProximitySystemHandlers()
 			if self.UIManager and self.UIManager:GetCurrentPage() == "Shop" then
 				self.UIManager:CloseActiveMenus()
 			end
-		end)
-	end
-
-	if self.RemoteEvents.ShowPigFeedingUI then
-		self.RemoteEvents.ShowPigFeedingUI.OnClientEvent:Connect(function()
-			self:ShowPigFeedingInterface()
-		end)
-	end
-
-	if self.RemoteEvents.HidePigFeedingUI then
-		self.RemoteEvents.HidePigFeedingUI.OnClientEvent:Connect(function()
-			self:HidePigFeedingInterface()
 		end)
 	end
 
@@ -1404,38 +1376,6 @@ function GameClient:ShowSeedSelectionForPlot(plotModel)
 	self:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 end
 
-function GameClient:HandlePestSpottedNotification(pestType, cropType, plotInfo)
-	local pestName = pestType:gsub("_", " "):gsub("(%l)(%w*)", function(a,b) return string.upper(a)..b end)
-	if self.UIManager then
-		self.UIManager:ShowNotification("🐛 Pest Alert!", 
-			pestName .. " spotted on your " .. cropType .. " crop! Deploy chickens or use pesticide.", "warning")
-	end
-end
-
-function GameClient:HandlePestEliminatedNotification(pestType, eliminatedBy)
-	local pestName = pestType:gsub("_", " "):gsub("(%l)(%w*)", function(a,b) return string.upper(a)..b end)
-	if self.UIManager then
-		self.UIManager:ShowNotification("✅ Pest Eliminated!", 
-			pestName .. " eliminated by " .. eliminatedBy .. "!", "success")
-	end
-end
-
-function GameClient:HandleChickenPlacedNotification(chickenType, position)
-	if self.UIManager then
-		self.UIManager:ShowNotification("🐔 Chicken Deployed!", 
-			self:GetChickenDisplayName(chickenType) .. " is now protecting your farm!", "success")
-	end
-end
-
-function GameClient:GetChickenDisplayName(chickenType)
-	local names = {
-		basic_chicken = "Basic Chicken",
-		guinea_fowl = "Guinea Fowl",
-		rooster = "Rooster"
-	}
-	return names[chickenType] or chickenType:gsub("_", " ")
-end
-
 -- ========== FARMING MODE FUNCTIONS ==========
 
 function GameClient:StartPlantingMode(seedId)
@@ -1480,12 +1420,7 @@ function GameClient:RequestInitialData()
 					farming = {
 						plots = 0,
 						inventory = {}
-					},
-					pig = {
-						size = 1.0,
-						cropPoints = 0,
-						transformationCount = 0,
-						totalFed = 0
+	
 					}
 				})
 			end
@@ -1790,34 +1725,6 @@ function GameClient:PlantSelectedSeed(plotModel, seedId)
 	end
 end
 
--- ========== PIG FEEDING SYSTEM ==========
-
-function GameClient:ShowPigFeedingInterface()
-	print("GameClient: Showing simple pig feeding interface")
-
-	local existingUI = LocalPlayer.PlayerGui:FindFirstChild("PigFeedingUI")
-	if existingUI then existingUI:Destroy() end
-
-	local playerData = self:GetPlayerData()
-	if not playerData or not playerData.farming or not playerData.farming.inventory then
-		if self.UIManager then
-			self.UIManager:ShowNotification("No Crops", "You need to harvest crops first to feed the pig!", "warning")
-		end
-		return
-	end
-
-	if self.UIManager then
-		self.UIManager:ShowNotification("🐷 Pig Feeding", "Pig feeding system active - approach pig to feed!", "info")
-	end
-end
-
-function GameClient:HidePigFeedingInterface()
-	print("GameClient: Hiding pig feeding interface")
-	local pigUI = LocalPlayer.PlayerGui:FindFirstChild("PigFeedingUI")
-	if pigUI then
-		pigUI:Destroy()
-	end
-end
 
 function GameClient:GetCropDisplayName(cropId)
 	local displayNames = {
@@ -1834,9 +1741,6 @@ function GameClient:GetCropDisplayName(cropId)
 		glorious_sunflower = "🌻 Glorious Sunflower",
 		milk = "🥛 Fresh Milk",
 		fresh_milk = "🥛 Fresh Milk",
-		chicken_egg = "🥚 Chicken Egg",
-		guinea_egg = "🥚 Guinea Fowl Egg",
-		rooster_egg = "🥚 Rooster Egg",
 		copper_ore = "🟫 Copper Ore",
 		bronze_ore = "🟤 Bronze Ore",
 		silver_ore = "⚪ Silver Ore",
@@ -1879,19 +1783,6 @@ function GameClient:GetItemDisplayName(itemId)
 		-- Animal products
 		milk = "Fresh Milk",
 		fresh_milk = "Fresh Milk",
-		chicken_egg = "Chicken Eggs",
-		guinea_egg = "Guinea Fowl Eggs",
-		rooster_egg = "Rooster Eggs",
-
-		-- Defense items
-		basic_chicken = "Basic Chicken",
-		guinea_fowl = "Guinea Fowl",
-		rooster = "Rooster",
-		organic_pesticide = "Organic Pesticide",
-		super_pesticide = "Super Pesticide",
-		pest_detector = "Pest Detector",
-		basic_feed = "Basic Chicken Feed",
-		premium_feed = "Premium Chicken Feed",
 
 		-- Mining tools
 		basic_pickaxe = "Basic Pickaxe",
@@ -1909,7 +1800,6 @@ function GameClient:GetItemDisplayName(itemId)
 		-- Premium items
 		auto_harvester = "Auto Harvester",
 		rarity_booster = "Rarity Booster",
-		mega_dome = "Mega Protection Dome",
 
 		-- Cow system
 		milk_efficiency_1 = "Enhanced Milking I",
@@ -2059,7 +1949,6 @@ function GameClient:Cleanup()
 	self.Cache = {
 		ShopItems = {},
 		CowCooldown = 0,
-		PigState = {},
 		ShopTabCache = {},
 		LastShopRefresh = 0
 	}

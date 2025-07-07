@@ -53,8 +53,47 @@ function CowCreationModule:Initialize(gameCore, itemConfig)
 	-- Start monitoring
 	self:StartCowMonitoring()
 
+	-- Setup starter cow system for new players
+	self:SetupStarterCowSystem()
+
 	print("CowCreationModule: Cow creation system initialized!")
 	return true
+end
+
+function CowCreationModule:SetupStarterCowSystem()
+	print("CowCreationModule: Setting up starter cow system...")
+
+	-- Handle new players joining
+	Players.PlayerAdded:Connect(function(player)
+		-- Give starter cow after player data is loaded
+		spawn(function()
+			-- Wait for player data to be ready
+			local attempts = 0
+			while attempts < 10 do
+				if GameCore then
+					local playerData = GameCore:GetPlayerData(player)
+					if playerData then
+						break
+					end
+				end
+				wait(1)
+				attempts = attempts + 1
+			end
+
+			-- Give starter cow
+			self:GiveStarterCow(player)
+		end)
+	end)
+
+	-- Handle existing players (in case module loads after players join)
+	for _, player in pairs(Players:GetPlayers()) do
+		spawn(function()
+			wait(1) -- Small delay to ensure everything is ready
+			self:GiveStarterCow(player)
+		end)
+	end
+
+	print("CowCreationModule: Starter cow system setup complete!")
 end
 
 function CowCreationModule:InitializeCowTracking()
@@ -96,6 +135,172 @@ function CowCreationModule:RegisterExistingCow(cowModel, cowId, ownerName)
 	print("CowCreationModule: Registered existing cow " .. cowId .. " (tier: " .. tier .. ")")
 end
 
+-- ========== STARTER COW SYSTEM ==========
+
+function CowCreationModule:GiveStarterCow(player)
+	print("🐄 CowCreationModule: Checking starter cow for " .. player.Name)
+
+	if not GameCore then
+		warn("CowCreationModule: GameCore not available for starter cow")
+		return false
+	end
+
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData then 
+		warn("🐄 CowCreationModule: No player data for starter cow: " .. player.Name)
+		return false 
+	end
+
+	-- Check if player already has cows
+	if playerData.livestock and playerData.livestock.cows then
+		local cowCount = 0
+		for _ in pairs(playerData.livestock.cows) do
+			cowCount = cowCount + 1
+		end
+
+		if cowCount > 0 then
+			print("🐄 CowCreationModule: Player " .. player.Name .. " already has " .. cowCount .. " cows, skipping starter cow")
+			return true
+		end
+	end
+
+	-- Check if player already received starter cow (prevent duplicates)
+	if playerData.receivedStarterCow then
+		print("🐄 CowCreationModule: Player " .. player.Name .. " already received starter cow")
+		return true
+	end
+
+	-- Give starter cow after a short delay to ensure everything is loaded
+	spawn(function()
+		wait(2) -- Give time for player to fully load
+
+		-- Double-check player is still in game
+		if not player or not player.Parent then return end
+
+		local success = self:CreateStarterCow(player)
+		if success then
+			-- Mark that player received starter cow
+			playerData.receivedStarterCow = true
+			GameCore:SavePlayerData(player)
+
+			self:SendNotification(player, "🎉 Welcome Gift!", 
+				"You've received a free Basic Cow to get started! Find it near the spawn area.", "success")
+
+			print("🐄 CowCreationModule: Successfully gave starter cow to " .. player.Name)
+		else
+			warn("🐄 CowCreationModule: Failed to give starter cow to " .. player.Name)
+		end
+	end)
+
+	return true
+end
+
+function CowCreationModule:CreateStarterCow(player)
+	print("🐄 CowCreationModule: Creating starter cow for " .. player.Name)
+
+	-- Use the basic cow configuration
+	local cowConfig = self:GetCowConfiguration("basic_cow")
+	if not cowConfig then
+		-- Fallback configuration if basic_cow not found in ItemConfig
+		cowConfig = {
+			tier = "basic",
+			milkAmount = 1,
+			cooldown = 60,
+			visualEffects = {}
+		}
+		print("🐄 CowCreationModule: Using fallback starter cow config")
+	end
+
+	-- Generate unique cow ID for starter cow
+	local userId = player.UserId
+	local cowId = self:GenerateUniqueCowId(userId)
+	if not cowId then
+		warn("🐄 CowCreationModule: Failed to generate starter cow ID")
+		return false
+	end
+
+	-- Get starter position (guaranteed to be available)
+	local position = self:GetStarterCowPosition(player)
+	if not position then
+		warn("🐄 CowCreationModule: Failed to get starter cow position")
+		return false
+	end
+
+	-- Create cow data
+	local cowData = {
+		cowId = cowId,
+		tier = cowConfig.tier,
+		milkAmount = cowConfig.milkAmount,
+		cooldown = cowConfig.cooldown,
+		position = position,
+		lastMilkCollection = 0,
+		totalMilkProduced = 0,
+		purchaseTime = os.time(),
+		visualEffects = cowConfig.visualEffects or {},
+		isStarterCow = true -- Mark as starter cow
+	}
+
+	-- Ensure player data structure exists
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData.livestock then
+		playerData.livestock = {cows = {}}
+	end
+	if not playerData.livestock.cows then
+		playerData.livestock.cows = {}
+	end
+
+	-- Store cow data
+	playerData.livestock.cows[cowId] = cowData
+
+	-- Create physical cow model
+	local success = self:CreateCowModel(player, cowId, cowData)
+	if not success then
+		-- Clean up on failure
+		playerData.livestock.cows[cowId] = nil
+		warn("🐄 CowCreationModule: Failed to create starter cow model")
+		return false
+	end
+
+	-- Save data
+	if GameCore.SavePlayerData then
+		GameCore:SavePlayerData(player)
+	end
+
+	print("🐄 CowCreationModule: Successfully created starter cow " .. cowId .. " for " .. player.Name)
+	return true
+end
+
+function CowCreationModule:GetStarterCowPosition(player)
+	local userId = player.UserId
+
+	-- Calculate player offset (same system as regular cows but ensure first position)
+	local players = Players:GetPlayers()
+	table.sort(players, function(a, b) return a.UserId < b.UserId end)
+
+	local playerIndex = 0
+	for i, p in ipairs(players) do
+		if p.UserId == userId then
+			playerIndex = i - 1
+			break
+		end
+	end
+
+	-- Use the base position for starter cow (first position in player's area)
+	local playerOffset = self.Config.playerSeparation * playerIndex
+	local starterPosition = self.Config.basePosition + playerOffset
+
+	-- Mark this position as used
+	if not self.PlayerCowPositions[userId] then
+		self.PlayerCowPositions[userId] = {}
+	end
+
+	local posKey = tostring(starterPosition)
+	self.PlayerCowPositions[userId][posKey] = true
+
+	print("🐄 CowCreationModule: Starter cow position for " .. player.Name .. ": " .. tostring(starterPosition))
+	return starterPosition
+end
+
 -- ========== COW CREATION SYSTEM ==========
 
 function CowCreationModule:GetCowConfiguration(cowType)
@@ -109,7 +314,22 @@ function CowCreationModule:GetCowConfiguration(cowType)
 	local item = ItemConfig.ShopItems[cowType]
 	if not item then
 		warn("🐄 CowCreationModule: Item not found: " .. cowType)
-		return nil
+
+		-- For starter cow, try alternative names
+		if cowType == "basic_cow" then
+			local alternatives = {"cow", "basic", "starter_cow", "cow_basic"}
+			for _, altName in ipairs(alternatives) do
+				item = ItemConfig.ShopItems[altName]
+				if item then
+					print("🐄 CowCreationModule: Found alternative cow config: " .. altName)
+					break
+				end
+			end
+		end
+
+		if not item then
+			return nil
+		end
 	end
 
 	if not item.cowData then
@@ -189,7 +409,7 @@ function CowCreationModule:CreateNewCow(player, cowType, cowConfig)
 		purchaseTime = os.time(),
 		visualEffects = cowConfig.visualEffects or {}
 	}
-	local playerData = self:GetPlayerData(player)
+	local playerData = GameCore:GetPlayerData(player)
 	-- Store in player data
 	if not playerData.livestock then
 		playerData.livestock = {cows = {}}
@@ -1057,6 +1277,82 @@ function CowCreationModule:DeleteCow(player, cowId)
 	end
 
 	return true
+end
+
+-- ========== STARTER COW PUBLIC API ==========
+
+function CowCreationModule:ForceGiveStarterCow(player)
+	-- Public function to manually give a starter cow (ignores existing cow check)
+	print("🐄 CowCreationModule: Force giving starter cow to " .. player.Name)
+
+	if not GameCore then
+		warn("CowCreationModule: GameCore not available")
+		return false
+	end
+
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData then 
+		warn("🐄 CowCreationModule: No player data for " .. player.Name)
+		return false 
+	end
+
+	local success = self:CreateStarterCow(player)
+	if success then
+		playerData.receivedStarterCow = true
+		GameCore:SavePlayerData(player)
+
+		self:SendNotification(player, "🎉 Starter Cow Given!", 
+			"You've received a Basic Cow! Check near the spawn area.", "success")
+	end
+
+	return success
+end
+
+function CowCreationModule:CheckPlayerNeedsStarterCow(player)
+	-- Check if player needs a starter cow
+	if not GameCore then return false end
+
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData then return false end
+
+	-- Check if already received starter cow
+	if playerData.receivedStarterCow then return false end
+
+	-- Check if player has any cows
+	if playerData.livestock and playerData.livestock.cows then
+		for _ in pairs(playerData.livestock.cows) do
+			return false -- Has cows, doesn't need starter
+		end
+	end
+
+	return true -- Needs starter cow
+end
+
+function CowCreationModule:GetPlayerStarterCowStatus(player)
+	-- Get detailed info about player's starter cow status
+	if not GameCore then return nil end
+
+	local playerData = GameCore:GetPlayerData(player)
+	if not playerData then return nil end
+
+	local cowCount = 0
+	local hasStarterCow = false
+
+	if playerData.livestock and playerData.livestock.cows then
+		for cowId, cowData in pairs(playerData.livestock.cows) do
+			cowCount = cowCount + 1
+			if cowData.isStarterCow then
+				hasStarterCow = true
+			end
+		end
+	end
+
+	return {
+		receivedStarterCow = playerData.receivedStarterCow or false,
+		totalCows = cowCount,
+		hasStarterCow = hasStarterCow,
+		needsStarterCow = self:CheckPlayerNeedsStarterCow(player)
+	}
 end
 
 return CowCreationModule

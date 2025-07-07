@@ -43,12 +43,7 @@ ShopSystem.CategoryConfig = {
 		emoji = "🌾",
 		description = "Essential farming equipment and expansions",
 		priority = 2
-	},
-	defense = {
-		name = "Defense",
-		emoji = "🛡️",
-		description = "Protect your farm from pests and UFO attacks",
-		priority = 3
+
 	},
 	mining = {
 		name = "Mining",
@@ -330,7 +325,7 @@ function ShopSystem:ShouldShowItemFixed(item, itemId, playerData)
 		"carrot_seeds", 
 		"potato_seeds",
 		"cabbage_seeds",
-		"basic_cow",
+		--"basic_cow",
 		"cave_access_pass",
 		"basic_workbench"
 	}
@@ -494,10 +489,6 @@ function ShopSystem:HandleGetSellableItems(player)
 			-- Animal Products
 			{id = "milk", name = "🥛 Fresh Milk", sellPrice = 75},
 			{id = "fresh_milk", name = "🥛 Fresh Milk", sellPrice = 75},
-			{id = "chicken_egg", name = "🥚 Chicken Eggs", sellPrice = 15},
-			{id = "guinea_egg", name = "🥚 Guinea Fowl Eggs", sellPrice = 20},
-			{id = "rooster_egg", name = "🥚 Rooster Eggs", sellPrice = 25},
-
 			-- Ores
 			{id = "copper_ore", name = "🟫 Copper Ore", sellPrice = 30},
 			{id = "bronze_ore", name = "🟤 Bronze Ore", sellPrice = 45},
@@ -700,10 +691,6 @@ function ShopSystem:GetItemSellPrice(itemId)
 		-- Animal products
 		milk = 75,
 		fresh_milk = 75,
-		chicken_egg = 15,
-		guinea_egg = 20,
-		rooster_egg = 25,
-
 		-- Materials
 		wood = 10,
 		stone = 5

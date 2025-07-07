@@ -668,25 +668,6 @@ ItemConfig.ShopItems = {
 		}
 	},
 
-	extra_basic_cow = {
-		id = "extra_basic_cow",
-		name = "🐄 Additional Basic Cow",
-		description = "Expand your herd! More cows = more milk = more profit!\n\n🥛 Production:\n• 1 milk every 5 seconds per cow\n• Each cow produces independently\n• Stack up to 5 basic cows total\n\n🐄 Build your dairy operation!",
-		price = 1000,
-		currency = "coins",
-		category = "farm",
-		icon = "🐄",
-		maxQuantity = 4,
-		type = "cow",
-		purchaseOrder = 3, -- Additional cows
-		cowData = {
-			tier = "basic",
-			milkAmount = 1,
-			cooldown = 5,
-			visualEffects = {},
-			maxCows = 5
-		}
-	},
 
 	milk_efficiency_1 = {
 		id = "milk_efficiency_1",
@@ -840,19 +821,6 @@ ItemConfig.ShopItems = {
 		}
 	},
 
-	cow_relocator = {
-		id = "cow_relocator",
-		name = "🚜 Cow Relocator",
-		description = "Organize your dairy operation efficiently!\n\n🔧 Features:\n• Move any cow to new location\n• Reorganize farm layout\n• One-time use per cow\n• Works on all cow tiers\n\n🚜 Farm management tool!",
-		price = 100,
-		currency = "coins",
-		category = "farm",
-		icon = "🚜",
-		maxQuantity = 20,
-		type = "tool",
-		purchaseOrder = 13 -- Utility tool
-	},
-
 	-- FIXED: Added milk as purchasable item (remove notPurchasable flag)
 	fresh_milk = {
 		id = "fresh_milk",
@@ -867,215 +835,6 @@ ItemConfig.ShopItems = {
 		purchaseOrder = 14 -- Material purchase
 	},
 
-	-- ========== DEFENSE CATEGORY (Pest Control & Protection) ==========
-
-	organic_pesticide = {
-		id = "organic_pesticide",
-		name = "🧪 Organic Pesticide",
-		description = "Your first line of defense against crop pests!\n\n💪 Effectiveness:\n• Eliminates all pest types instantly\n• 3x3 area of effect around target\n• One-time use, eco-friendly formula\n\n🧪 Essential for protecting your investment!",
-		price = 50,
-		currency = "coins",
-		category = "defense",
-		icon = "🧪",
-		maxQuantity = 20,
-		type = "tool",
-		purchaseOrder = 1 -- First defense tool
-	},
-
-	pest_detector = {
-		id = "pest_detector",
-		name = "📡 Pest Detector",
-		description = "Early warning system for pest threats!\n\n🔍 Features:\n• Detect pests before major damage\n• Wide detection range\n• Automatic alerts and notifications\n• One-time purchase, permanent benefit\n\n📡 Knowledge is power!",
-		price = 250,
-		currency = "coins",
-		category = "defense",
-		icon = "📡",
-		maxQuantity = 1,
-		type = "upgrade",
-		purchaseOrder = 2 -- Detection before automation
-	},
-
-	basic_chicken = {
-		id = "basic_chicken",
-		name = "🐔 Basic Chicken",
-		description = "Your first automated pest control solution!\n\n🛡️ Protects Against:\n• Aphids and small pests\n• Patrols assigned area automatically\n\n💰 Bonus Production:\n• Lays eggs regularly\n• Additional income source\n\n🐔 Essential farm worker!",
-		price = 250,
-		currency = "coins",
-		category = "defense",
-		icon = "🐔",
-		maxQuantity = 20,
-		type = "chicken",
-		purchaseOrder = 3 -- First automated defense
-	},
-
-	basic_feed = {
-		id = "basic_feed",
-		name = "🌾 Basic Chicken Feed",
-		description = "Keep your chickens healthy and working efficiently!\n\n🐔 Benefits:\n• Feeds chickens for extended time\n• Maintains egg production\n• Keeps chickens in good health\n• Essential for chicken care\n\n🌾 Happy chickens = productive chickens!",
-		price = 10,
-		currency = "coins",
-		category = "defense",
-		icon = "🌾",
-		maxQuantity = 100,
-		type = "feed",
-		purchaseOrder = 4 -- Support chickens
-	},
-
-	guinea_fowl = {
-		id = "guinea_fowl",
-		name = "🦃 Guinea Fowl",
-		description = "Specialized anti-locust defender with early warning!\n\n🛡️ Advanced Protection:\n• Locust specialist - superior elimination\n• Handles aphids and small pests too\n• Provides pest alert system\n\n💰 Premium Production:\n• Premium eggs with better value\n\n🦃 Professional pest control!",
-		price = 500,
-		currency = "coins",
-		category = "defense",
-		icon = "🦃",
-		maxQuantity = 10,
-		type = "chicken",
-		purchaseOrder = 5 -- Advanced chicken
-	},
-
-	premium_feed = {
-		id = "premium_feed",
-		name = "⭐ Premium Chicken Feed",
-		description = "High-quality nutrition for peak performance!\n\n🐔 Premium Benefits:\n• Feeds chickens for longer periods\n• Boost to egg production\n• Superior nutrition and health\n• Happy chickens work harder!\n\n⭐ Investment in your workforce!",
-		price = 50,
-		currency = "coins",
-		category = "defense",
-		icon = "⭐",
-		maxQuantity = 50,
-		type = "feed",
-		purchaseOrder = 6 -- Better chicken care
-	},
-
-	rooster = {
-		id = "rooster",
-		name = "🐓 Rooster",
-		description = "Elite flock leader that enhances all nearby chickens!\n\n🛡️ Leadership Benefits:\n• Boosts all chickens within range\n• Reduces pest spawn rates\n• Territory protection and organization\n\n💰 Premium Production:\n• Premium eggs with high value\n\n🐓 The ultimate flock manager!",
-		price = 1000,
-		currency = "coins",
-		category = "defense",
-		icon = "🐓",
-		maxQuantity = 3,
-		type = "chicken",
-		purchaseOrder = 7 -- Elite chicken
-	},
-
-	plot_roof_basic = {
-		id = "plot_roof_basic",
-		name = "🏠 Basic Plot Roof",
-		description = "Physical protection for your most valuable plots!\n\n🛡️ Protection:\n• Blocks UFO beam damage\n• Weather damage immunity\n• Covers 1 farm plot completely\n• Durable construction\n\n🏠 Secure your investment!",
-		price = 200,
-		currency = "coins",
-		category = "defense",
-		icon = "🏠",
-		maxQuantity = 10,
-		type = "protection",
-		purchaseOrder = 8, -- Basic plot protection
-		effects = {
-			coverage = 1,
-			ufoProtection = true,
-			weatherProtection = true,
-			plotSpecific = true
-		}
-	},
-
-	plot_roof_reinforced = {
-		id = "plot_roof_reinforced",
-		name = "🏛️ Reinforced Plot Roof",
-		description = "Enhanced protection with advanced materials!\n\n🛡️ Enhanced Protection:\n• Superior UFO damage reduction\n• Complete weather immunity\n• Self-repairing smart materials\n• Covers 1 farm plot\n\n🏛️ Military-grade protection!",
-		price = 500,
-		currency = "coins",
-		category = "defense",
-		icon = "🏛️",
-		maxQuantity = 10,
-		type = "protection",
-		purchaseOrder = 9, -- Better plot protection
-		effects = {
-			coverage = 1,
-			ufoProtection = true,
-			weatherProtection = true,
-			damageReduction = 0.99,
-			selfRepairing = true,
-			plotSpecific = true
-		}
-	},
-
-	area_dome_small = {
-		id = "area_dome_small",
-		name = "🔘 Small Protection Dome",
-		description = "Energy dome technology protecting multiple plots!\n\n🛡️ Area Protection:\n• Protects multiple adjacent plots\n• UFO immunity\n• Weather protection\n• Pest deterrent energy field\n\n🔘 Efficiency through area coverage!",
-		price = 2500,
-		currency = "coins",
-		category = "defense",
-		icon = "🔘",
-		maxQuantity = 3,
-		type = "protection",
-		purchaseOrder = 10, -- Area protection
-		effects = {
-			coverage = 3,
-			ufoProtection = true,
-			weatherProtection = true,
-			pestDeterrent = true,
-			areaEffect = true
-		}
-	},
-
-	area_dome_large = {
-		id = "area_dome_large",
-		name = "🔵 Large Protection Dome", 
-		description = "Advanced energy dome with performance bonuses!\n\n🛡️ Large Area Protection:\n• Protects many adjacent plots\n• Complete damage immunity\n• Crop growth speed boost\n• Auto-pest elimination field\n\n🔵 Protection with benefits!",
-		price = 5000,
-		currency = "coins",
-		category = "defense",
-		icon = "🔵",
-		maxQuantity = 2,
-		type = "protection",
-		purchaseOrder = 11, -- Large area protection
-		effects = {
-			coverage = 6,
-			ufoProtection = true,
-			weatherProtection = true,
-			pestDeterrent = true,
-			growthBoost = 0.1,
-			autoPestElimination = true,
-			areaEffect = true
-		}
-	},
-
-	super_pesticide = {
-		id = "super_pesticide",
-		name = "💉 Super Pesticide",
-		description = "🏆 PREMIUM PEST ELIMINATION 🏆\nIndustrial-grade pesticide for emergency situations!\n\n💪 Ultimate Power:\n• Entire farm coverage instantly\n• ALL pest types eliminated\n• Immediate effect\n• Premium farm token formula\n\n💉 The nuclear option!",
-		price = 25,
-		currency = "farmTokens",
-		category = "defense",
-		icon = "💉",
-		maxQuantity = 5,
-		type = "tool",
-		purchaseOrder = 12 -- Premium emergency tool
-	},
-
-	mega_dome = {
-		id = "mega_dome",
-		name = "🛡️ Mega Protection Dome",
-		description = "🏆 ULTIMATE PROTECTION SYSTEM 🏆\nCovers ALL your plots with maximum benefits!\n\n🛡️ Ultimate Defense:\n• Covers ALL farm plots\n• Complete damage immunity\n• Major crop growth boost\n• Auto-harvest alerts\n• Pest elimination field\n\n🛡️ The ultimate farmer's shield!",
-		price = 100,
-		currency = "farmTokens",
-		category = "defense",
-		icon = "🛡️",
-		maxQuantity = 1,
-		type = "protection",
-		purchaseOrder = 13, -- Ultimate protection
-		effects = {
-			coverage = 999,
-			ufoProtection = true,
-			weatherProtection = true,
-			pestDeterrent = true,
-			growthBoost = 0.25,
-			autoHarvestAlerts = true,
-			ultimateProtection = true
-		}
-	},
 
 	-- ========== MINING CATEGORY ==========
 
@@ -1358,7 +1117,7 @@ function ItemConfig.IsItemSellable(itemId)
 
 	-- Check if it's milk or other sellable items
 	local sellableItems = {
-		"milk", "fresh_milk", "chicken_egg", "guinea_egg", "rooster_egg", "Broccoli", "Cabbage", "Carrot", "Corn", "Potato", "Radish", "Strawberry", "Tomato", "Wheat",
+		"milk", "fresh_milk", "Broccoli", "Cabbage", "Carrot", "Corn", "Potato", "Radish", "Strawberry", "Tomato", "Wheat",
 		"copper_ore", "bronze_ore", "silver_ore", "gold_ore", "platinum_ore", "obsidian_ore"
 	}
 
@@ -1381,11 +1140,8 @@ function ItemConfig.GetItemSellPrice(itemId)
 	-- Other item sell prices
 	local sellPrices = {
 		-- Animal products
-		milk = 75,
-		fresh_milk = 75,
-		chicken_egg = 15,
-		guinea_egg = 20,
-		rooster_egg = 25,
+		milk = 1,
+		fresh_milk = 5,
 
 		-- Ores
 		copper_ore = 30,
@@ -1462,17 +1218,7 @@ end
 
 -- ========== PURCHASE ORDER DEBUGGING ==========
 
-function ItemConfig.GetExpansionConfig(level)
-	-- Return simple config for compatibility
-	return {
-		name = "Simple Farm",
-		gridSize = 10,
-		totalSpots = 100,
-		baseSize = Vector3.new(60, 1, 60),
-		cost = 0,
-		description = "Full 10x10 farming grid (100 planting spots)"
-	}
-end
+
 function ItemConfig.GetMutationData(mutationType)
 	return ItemConfig.CropData[mutationType]
 end

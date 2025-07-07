@@ -4,7 +4,7 @@
     
     FIXES:
     ✅ Single item creation method for ALL categories
-    ✅ Consistent sizing across Seeds, Farming, Defense, Mining, Crafting, Premium
+    ✅ Consistent sizing across Seeds, Farming, Mining, Crafting, Premium
     ✅ Removed conflicting item creation pathways
     ✅ Unified population system
     ✅ Fixed height inconsistencies
@@ -60,7 +60,6 @@ UIManager.Config = {
 	ShopTabConfig = {
 		{id = "seeds", name = "🌱 Seeds", color = Color3.fromRGB(100, 200, 100)},
 		{id = "farm", name = "🌾 Farming", color = Color3.fromRGB(139, 90, 43)},
-		{id = "defense", name = "🛡️ Defense", color = Color3.fromRGB(120, 80, 200)},
 		{id = "mining", name = "⛏️ Mining", color = Color3.fromRGB(150, 150, 150)},
 		{id = "crafting", name = "🔨 Crafting", color = Color3.fromRGB(200, 120, 80)},
 		{id = "premium", name = "✨ Premium", color = Color3.fromRGB(255, 215, 0)},
@@ -2275,7 +2274,7 @@ print("  ✅ Removed all conflicting item creation methods")
 print("  ✅ Same 18% height for ALL items in ALL categories")
 print("")
 print("🔧 Key Fix:")
-print("  All Seeds, Farming, Defense, Mining, Crafting, Premium items")
+print("  All Seeds, Farming, Mining, Crafting, Premium items")
 print("  now use the EXACT SAME sizing configuration!")
 print("")
 print("🧪 Test Result:")
