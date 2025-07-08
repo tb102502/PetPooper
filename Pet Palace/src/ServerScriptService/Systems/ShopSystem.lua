@@ -325,7 +325,6 @@ function ShopSystem:ShouldShowItemFixed(item, itemId, playerData)
 		"carrot_seeds", 
 		"potato_seeds",
 		"cabbage_seeds",
-		--"basic_cow",
 		"cave_access_pass",
 		"basic_workbench"
 	}

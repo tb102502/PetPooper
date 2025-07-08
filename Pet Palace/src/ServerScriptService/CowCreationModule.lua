@@ -27,9 +27,9 @@ CowCreationModule.PlayerCowPositions = {} -- [userId] = {usedPositions}
 CowCreationModule.Config = {
 	basePosition = Vector3.new(-272.168, -2.068, 53.406),
 	spacing = Vector3.new(8, 0, 8),
-	rowSize = 5,
+	rowSize = 1,
 	playerSeparation = Vector3.new(60, 0, 0),
-	maxCowsPerPlayer = 10
+	maxCowsPerPlayer = 1
 }
 
 -- References (injected on initialize)
@@ -317,7 +317,7 @@ function CowCreationModule:GetCowConfiguration(cowType)
 
 		-- For starter cow, try alternative names
 		if cowType == "basic_cow" then
-			local alternatives = {"cow", "basic", "starter_cow", "cow_basic"}
+			local alternatives = {"cow", "basic", "starter_cow", "cow_basic", "OriginalCow"}
 			for _, altName in ipairs(alternatives) do
 				item = ItemConfig.ShopItems[altName]
 				if item then
@@ -488,7 +488,7 @@ end
 function CowCreationModule:CreateCowModel(player, cowId, cowData)
 	local success, error = pcall(function()
 		-- Find original cow model to clone
-		local originalCow = workspace:FindFirstChild("cow")
+		local originalCow = workspace:FindFirstChild("OriginalCow")
 		if not originalCow then
 			error("Original cow model not found in workspace")
 		end
