@@ -1,12 +1,12 @@
 --[[
-    FIXED CowMilkingModule.lua - Chair Detection and Nil Model Fixes
+    FIXED CowMilkingModule.lua - Position Error Fix
     Place in: ServerScriptService/CowMilkingModule.lua
     
     FIXES:
-    ✅ Fixed chair detection to recognize existing MilkingChair properly
-    ✅ Fixed nil cowModel error in VerifyCowOwnership
-    ✅ Improved chair registration and scanning
-    ✅ Better proximity detection for chairs
+    ✅ Fixed Position error for Model MilkingChair
+    ✅ Proper position detection for both Models and Parts
+    ✅ Better chair setup and detection
+    ✅ Enhanced error handling
 ]]
 
 local CowMilkingModule = {}
@@ -17,33 +17,81 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
--- Module State
-CowMilkingModule.ActiveSessions = {} -- [userId] = sessionData
-CowMilkingModule.MilkingChairs = {} -- [chairId] = chairModel
-CowMilkingModule.PlayerProximityState = {} -- [userId] = {lastPrompt, lastUpdate, currentState}
-
 -- Configuration
 CowMilkingModule.Config = {
+	clicksPerMilk = 10, -- 10 clicks = 1 milk
 	proximityDistance = 15,
-	milkingDistance = 8,
 	sessionTimeout = 30,
-	milkPerClick = 1,
-	maxMilkPerSession = 50,
+	maxMilkPerSession = 20,
 	proximityCheckInterval = 3,
-	promptDebounceTime = 5,
-	stateChangeDelay = 2,
 	movementThreshold = 8
 }
+
+-- Module State
+CowMilkingModule.ActiveSessions = {} -- [userId] = sessionData with progress
+CowMilkingModule.MilkingChairs = {} -- [chairId] = chairModel
+CowMilkingModule.PlayerProximityState = {} -- [userId] = proximityData
 
 -- References
 local GameCore = nil
 local CowCreationModule = nil
 local RemoteEvents = {}
 
+-- ========== UTILITY FUNCTIONS ==========
+
+-- FIXED: Helper function to get position from Model or Part
+function CowMilkingModule:GetModelPosition(object)
+	if not object then return Vector3.new(0, 0, 0) end
+
+	-- If it's a Part, return its position
+	if object:IsA("BasePart") then
+		return object.Position
+	end
+
+	-- If it's a Model, get position from PrimaryPart or calculate bounds
+	if object:IsA("Model") then
+		if object.PrimaryPart then
+			return object.PrimaryPart.Position
+		else
+			-- Calculate bounding box center
+			local success, cframe, size = pcall(function()
+				return object:GetBoundingBox()
+			end)
+
+			if success then
+				return cframe.Position
+			else
+				-- Fallback: average position of all parts
+				local totalPos = Vector3.new(0, 0, 0)
+				local partCount = 0
+
+				for _, child in pairs(object:GetDescendants()) do
+					if child:IsA("BasePart") then
+						totalPos = totalPos + child.Position
+						partCount = partCount + 1
+					end
+				end
+
+				if partCount > 0 then
+					return totalPos / partCount
+				end
+			end
+		end
+	end
+
+	-- Final fallback
+	return Vector3.new(0, 0, 0)
+end
+
+-- FIXED: Helper function to get model center safely
+function CowMilkingModule:GetModelCenter(model)
+	return self:GetModelPosition(model)
+end
+
 -- ========== INITIALIZATION ==========
 
 function CowMilkingModule:Initialize(gameCore, cowCreationModule)
-	print("CowMilkingModule: Initializing FIXED milking system...")
+	print("CowMilkingModule: Initializing FIXED 10-click milking system...")
 
 	GameCore = gameCore
 	CowCreationModule = cowCreationModule
@@ -51,16 +99,16 @@ function CowMilkingModule:Initialize(gameCore, cowCreationModule)
 	-- Setup remote events
 	self:SetupRemoteEvents()
 
-	-- FIXED: Enhanced chair setup
-	self:SetupMilkingChairs()
+	-- Setup existing chairs (no creation)
+	self:DetectExistingChairs()
 
 	-- Start proximity monitoring
-	self:StartConsolidatedProximityMonitoring()
+	self:StartProximityMonitoring()
 
 	-- Setup player handlers
 	self:SetupPlayerHandlers()
 
-	print("CowMilkingModule: FIXED milking system initialized!")
+	print("CowMilkingModule: FIXED 10-click milking system initialized!")
 	return true
 end
 
@@ -125,243 +173,133 @@ function CowMilkingModule:ConnectEventHandlers()
 	print("CowMilkingModule: Event handlers connected")
 end
 
--- ========== FIXED: ENHANCED CHAIR SETUP ==========
+-- ========== FIXED: CHAIR DETECTION ==========
 
-function CowMilkingModule:SetupMilkingChairs()
-	print("CowMilkingModule: Setting up ENHANCED milking chairs...")
+function CowMilkingModule:DetectExistingChairs()
+	print("CowMilkingModule: Detecting existing MilkingChair models...")
 
-	-- Clear existing chairs first
 	self.MilkingChairs = {}
-
-	-- FIXED: More comprehensive chair scanning
-	local existingChairs = self:ScanForAllChairs()
-
-	if existingChairs > 0 then
-		print("✅ CowMilkingModule: Found and registered " .. existingChairs .. " existing chairs")
-	else
-		print("⚠️ CowMilkingModule: No existing chairs found, creating default chairs...")
-		self:CreateDefaultChairs()
-	end
-
-	-- Force register any MilkingChair objects
-	self:ForceRegisterMilkingChairs()
-
-	local totalChairs = self:CountTable(self.MilkingChairs)
-	print("CowMilkingModule: Total milking chairs available: " .. totalChairs)
-
-	-- Debug: List all chairs
-	for chairId, chair in pairs(self.MilkingChairs) do
-		print("  Chair: " .. chairId .. " at " .. tostring(chair.Position))
-	end
-end
-
--- FIXED: Enhanced chair scanning
-function CowMilkingModule:ScanForAllChairs()
-	print("CowMilkingModule: Scanning for ALL possible chair types...")
 	local chairsFound = 0
 
+	-- Search workspace for MilkingChair models
 	for _, obj in pairs(workspace:GetChildren()) do
-		local registered = false
-
-		-- Method 1: Check by name "MilkingChair"
-		if obj.Name == "MilkingChair" then
-			if obj:IsA("Model") then
-				if self:RegisterExistingChairModel(obj) then
-					chairsFound = chairsFound + 1
-					registered = true
-					print("✅ Registered MilkingChair model: " .. obj.Name)
-				end
-			elseif obj:IsA("Seat") then
-				self:RegisterMilkingChair(obj)
+		if self:IsMilkingChair(obj) then
+			local chairId = self:SetupExistingChair(obj)
+			if chairId then
 				chairsFound = chairsFound + 1
-				registered = true
-				print("✅ Registered MilkingChair seat: " .. obj.Name)
+				local position = self:GetModelPosition(obj)
+				print("✅ Setup existing chair: " .. chairId .. " at " .. tostring(position))
 			end
 		end
+	end
 
-		-- Method 2: Check by attribute
-		if not registered and obj:GetAttribute("IsMilkingChair") then
-			if obj:IsA("Model") then
-				if self:RegisterExistingChairModel(obj) then
-					chairsFound = chairsFound + 1
-					registered = true
-					print("✅ Registered attributed chair model: " .. obj.Name)
-				end
-			elseif obj:IsA("Seat") then
-				self:RegisterMilkingChair(obj)
-				chairsFound = chairsFound + 1
-				registered = true
-				print("✅ Registered attributed chair seat: " .. obj.Name)
-			end
-		end
-
-		-- Method 3: Check for wooden chairs near cows (auto-detect)
-		if not registered and obj:IsA("Seat") and obj.Material == Enum.Material.Wood then
-			-- Check if there are cows nearby
-			local nearbyCows = 0
-			for _, otherObj in pairs(workspace:GetChildren()) do
-				if (otherObj.Name == "cow" or otherObj.Name:find("cow_")) and otherObj ~= obj then
-					local distance = (obj.Position - otherObj:GetPivot().Position).Magnitude
-					if distance < 20 then -- Within 20 studs of a cow
-						nearbyCows = nearbyCows + 1
+	-- Search in folders
+	for _, folder in pairs(workspace:GetChildren()) do
+		if folder:IsA("Folder") or folder:IsA("Model") then
+			for _, obj in pairs(folder:GetChildren()) do
+				if self:IsMilkingChair(obj) then
+					local chairId = self:SetupExistingChair(obj)
+					if chairId then
+						chairsFound = chairsFound + 1
+						local position = self:GetModelPosition(obj)
+						print("✅ Setup existing chair in folder: " .. chairId .. " at " .. tostring(position))
 					end
 				end
 			end
-
-			if nearbyCows > 0 then
-				print("🔍 Auto-detected potential milking chair: " .. obj.Name .. " (near " .. nearbyCows .. " cows)")
-				obj:SetAttribute("IsMilkingChair", true)
-				obj.Name = "MilkingChair" -- Rename for clarity
-				self:RegisterMilkingChair(obj)
-				chairsFound = chairsFound + 1
-				print("✅ Auto-registered chair: " .. obj.Name)
-			end
 		end
 	end
 
-	return chairsFound
+	print("CowMilkingModule: Found and setup " .. chairsFound .. " existing chairs")
 end
 
--- FIXED: Force register any MilkingChair objects
-function CowMilkingModule:ForceRegisterMilkingChairs()
-	print("CowMilkingModule: Force registering any missed MilkingChair objects...")
+function CowMilkingModule:IsMilkingChair(obj)
+	if not obj then return false end
 
-	for _, obj in pairs(workspace:GetChildren()) do
-		if obj.Name == "MilkingChair" then
-			local alreadyRegistered = false
+	-- Check by name
+	if obj.Name == "MilkingChair" then
+		return true
+	end
 
-			-- Check if already registered
-			for chairId, chair in pairs(self.MilkingChairs) do
-				if chair == obj then
-					alreadyRegistered = true
+	-- Check by attribute
+	if obj:GetAttribute("IsMilkingChair") then
+		return true
+	end
+
+	return false
+end
+
+function CowMilkingModule:SetupExistingChair(chairObj)
+	local chairId = "chair_" .. tick() .. "_" .. math.random(1000, 9999)
+
+	-- Handle both Model and Seat objects
+	local seatPart = nil
+
+	if chairObj:IsA("Seat") then
+		seatPart = chairObj
+		print("CowMilkingModule: Found Seat object: " .. chairObj.Name)
+	elseif chairObj:IsA("Model") then
+		print("CowMilkingModule: Found Model object: " .. chairObj.Name .. ", searching for Seat...")
+		-- Find seat in model
+		for _, child in pairs(chairObj:GetDescendants()) do
+			if child:IsA("Seat") then
+				seatPart = child
+				print("CowMilkingModule: Found Seat in model: " .. child.Name)
+				break
+			end
+		end
+
+		-- If no Seat found, check for VehicleSeat
+		if not seatPart then
+			for _, child in pairs(chairObj:GetDescendants()) do
+				if child:IsA("VehicleSeat") then
+					seatPart = child
+					print("CowMilkingModule: Found VehicleSeat in model: " .. child.Name)
 					break
 				end
 			end
-
-			if not alreadyRegistered then
-				print("🔧 Force registering missed chair: " .. obj.Name)
-				if obj:IsA("Model") then
-					self:RegisterExistingChairModel(obj)
-				elseif obj:IsA("Seat") then
-					self:RegisterMilkingChair(obj)
-				end
-			end
-		end
-	end
-end
-
-function CowMilkingModule:RegisterExistingChairModel(chairModel)
-	print("CowMilkingModule: Registering chair model: " .. chairModel.Name)
-
-	local seatPart = nil
-
-	-- Find the seat in the model
-	for _, child in pairs(chairModel:GetDescendants()) do
-		if child:IsA("Seat") then
-			seatPart = child
-			break
 		end
 	end
 
 	if not seatPart then
-		warn("CowMilkingModule: No Seat found in chair model: " .. chairModel.Name)
-		return false
+		warn("CowMilkingModule: No seat found in chair: " .. chairObj.Name)
+		warn("CowMilkingModule: Chair children:")
+		for _, child in pairs(chairObj:GetChildren()) do
+			warn("  - " .. child.Name .. " (" .. child.ClassName .. ")")
+		end
+		return nil
 	end
 
-	local chairId = chairModel:GetAttribute("ChairId") or ("chair_model_" .. tick() .. "_" .. math.random(1000, 9999))
-
-	-- Set attributes on both model and seat
-	chairModel:SetAttribute("IsMilkingChair", true)
-	chairModel:SetAttribute("ChairId", chairId)
+	-- Set attributes
+	chairObj:SetAttribute("IsMilkingChair", true)
+	chairObj:SetAttribute("ChairId", chairId)
 	seatPart:SetAttribute("IsMilkingChair", true)
 	seatPart:SetAttribute("ChairId", chairId)
-	seatPart:SetAttribute("ParentModel", chairModel.Name)
 
+	-- Store chair reference (store the seat part for easier position access)
 	self.MilkingChairs[chairId] = seatPart
 
 	-- Setup occupancy detection
-	if seatPart:IsA("Seat") then
-		local success = pcall(function()
+	if seatPart:IsA("Seat") or seatPart:IsA("VehicleSeat") then
+		local success, error = pcall(function()
 			seatPart:GetPropertyChangedSignal("Occupant"):Connect(function()
 				self:HandleChairOccupancyChange(seatPart)
 			end)
 		end)
 
-		if success then
-			print("✅ Occupancy detection setup for chair: " .. chairId)
-		else
-			warn("⚠️ Failed to setup occupancy detection for chair: " .. chairId)
+		if not success then
+			warn("CowMilkingModule: Failed to setup occupancy detection: " .. tostring(error))
 		end
 	end
 
-	print("✅ Registered chair model: " .. chairId)
-	return true
-end
-
-function CowMilkingModule:CreateDefaultChairs()
-	local basePosition = Vector3.new(-270, -2, 50)
-
-	for i = 1, 3 do
-		local position = basePosition + Vector3.new(i * 8, 0, 0)
-		local chair = self:CreateMilkingChair(position)
-		if chair then
-			print("Created default milking chair " .. i .. " at " .. tostring(position))
-		end
-	end
-end
-
-function CowMilkingModule:CreateMilkingChair(position)
-	local success, chair = pcall(function()
-		local seat = Instance.new("Seat")
-		seat.Name = "MilkingChair"
-		seat.Size = Vector3.new(4, 2, 4)
-		seat.Position = position
-		seat.BrickColor = BrickColor.new("Bright brown")
-		seat.Material = Enum.Material.Wood
-		seat.Anchored = true
-		seat.CanCollide = true
-		seat:SetAttribute("IsMilkingChair", true)
-		seat:SetAttribute("ChairId", "created_chair_" .. tick() .. "_" .. math.random(1000, 9999))
-		return seat
-	end)
-
-	if success and chair then
-		chair.Parent = workspace
-		self:RegisterMilkingChair(chair)
-		return chair
-	end
-
-	return nil
-end
-
-function CowMilkingModule:RegisterMilkingChair(chair)
-	local chairId = chair:GetAttribute("ChairId") or ("seat_" .. tick() .. "_" .. math.random(1000, 9999))
-	chair:SetAttribute("ChairId", chairId)
-	chair:SetAttribute("IsMilkingChair", true)
-
-	self.MilkingChairs[chairId] = chair
-
-	if chair:IsA("Seat") then
-		local success = pcall(function()
-			chair:GetPropertyChangedSignal("Occupant"):Connect(function()
-				self:HandleChairOccupancyChange(chair)
-			end)
-		end)
-
-		if success then
-			print("✅ Occupancy detection setup for seat: " .. chairId)
-		else
-			warn("⚠️ Failed to setup occupancy detection for seat: " .. chairId)
-		end
-	end
-
-	print("✅ Registered milking chair: " .. chairId .. " at " .. tostring(chair.Position))
+	local position = self:GetModelPosition(chairObj)
+	print("CowMilkingModule: Setup chair " .. chairId .. " at " .. tostring(position))
+	return chairId
 end
 
 -- ========== PROXIMITY MONITORING ==========
 
-function CowMilkingModule:StartConsolidatedProximityMonitoring()
-	print("CowMilkingModule: Starting consolidated proximity monitoring...")
+function CowMilkingModule:StartProximityMonitoring()
+	print("CowMilkingModule: Starting proximity monitoring...")
 
 	spawn(function()
 		while true do
@@ -369,14 +307,14 @@ function CowMilkingModule:StartConsolidatedProximityMonitoring()
 			self:UpdateAllPlayerProximity()
 		end
 	end)
-
-	print("✅ CowMilkingModule: Proximity monitoring started")
 end
 
 function CowMilkingModule:UpdateAllPlayerProximity()
 	for _, player in pairs(Players:GetPlayers()) do
 		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			self:UpdatePlayerProximityState(player)
+			pcall(function()
+				self:UpdatePlayerProximityState(player)
+			end)
 		end
 	end
 end
@@ -388,62 +326,25 @@ function CowMilkingModule:UpdatePlayerProximityState(player)
 
 	local userId = player.UserId
 	local playerPos = rootPart.Position
-	local currentTime = tick()
 
-	-- Initialize player proximity state
-	if not self.PlayerProximityState[userId] then
-		self.PlayerProximityState[userId] = {
-			lastPrompt = "none",
-			lastUpdate = 0,
-			currentState = "none",
-			lastPosition = playerPos,
-			lastStateChange = 0
-		}
-	end
-
-	local proximityState = self.PlayerProximityState[userId]
-
-	-- Skip if player is already in a milking session
+	-- Skip if already in a milking session
 	if self.ActiveSessions[userId] then
-		if proximityState.currentState ~= "milking" then
-			proximityState.currentState = "milking"
-			self:HideProximityPrompt(player)
-		end
 		return
 	end
 
-	-- Check if enough time has passed since last state change
-	local timeSinceLastChange = currentTime - proximityState.lastStateChange
-	if timeSinceLastChange < self.Config.stateChangeDelay then
-		return
-	end
+	-- Get nearby objects with proper position handling
+	local nearbyObjects = self:GetNearbyObjects(player, playerPos)
+	local promptState = self:DetermineProximityState(nearbyObjects)
 
-	-- Check if player moved significantly
-	local distanceMoved = (playerPos - proximityState.lastPosition).Magnitude
-	local movedEnough = distanceMoved > self.Config.movementThreshold
-
-	-- Get current nearby objects with enhanced chair detection
-	local nearbyObjects = self:GetVerifiedNearbyObjects(player, playerPos)
-	local newState = self:DetermineProximityState(nearbyObjects)
-
-	-- Only update if state changed OR player moved significantly OR enough time passed
-	local timeSinceLastPrompt = currentTime - proximityState.lastUpdate
-	local shouldUpdate = (newState ~= proximityState.currentState) or 
-		(movedEnough and timeSinceLastPrompt >= self.Config.promptDebounceTime)
-
-	if shouldUpdate then
-		print("🔄 Proximity state change for " .. player.Name .. ": " .. proximityState.currentState .. " -> " .. newState)
-
-		self:UpdatePlayerPrompt(player, newState, nearbyObjects)
-		proximityState.currentState = newState
-		proximityState.lastUpdate = currentTime
-		proximityState.lastStateChange = currentTime
-		proximityState.lastPosition = playerPos
+	-- Update player prompt
+	if promptState ~= "none" then
+		self:ShowProximityPrompt(player, promptState, nearbyObjects)
+	else
+		self:HideProximityPrompt(player)
 	end
 end
 
--- FIXED: Enhanced nearby object detection
-function CowMilkingModule:GetVerifiedNearbyObjects(player, playerPos)
+function CowMilkingModule:GetNearbyObjects(player, playerPos)
 	local nearby = {
 		cows = {},
 		chairs = {},
@@ -452,15 +353,19 @@ function CowMilkingModule:GetVerifiedNearbyObjects(player, playerPos)
 	}
 
 	-- Check for player's cows
-	if CowCreationModule and CowCreationModule.GetActiveCows then
-		local activeCows = CowCreationModule:GetActiveCows()
+	if CowCreationModule and CowCreationModule.GetPlayerCows then
+		local success, playerCows = pcall(function()
+			return CowCreationModule:GetPlayerCows(player)
+		end)
 
-		for cowId, cowModel in pairs(activeCows) do
-			if cowModel and cowModel.Parent and cowModel:IsDescendantOf(workspace) then
-				local isOwned = self:VerifyCowOwnership(player, cowId, cowModel)
+		if success and playerCows then
+			for _, cowId in ipairs(playerCows) do
+				local success2, cowModel = pcall(function()
+					return CowCreationModule:GetCowModel(cowId)
+				end)
 
-				if isOwned then
-					local cowPos = self:GetModelCenter(cowModel)
+				if success2 and cowModel and cowModel.Parent then
+					local cowPos = self:GetModelPosition(cowModel)
 					local distance = (playerPos - cowPos).Magnitude
 
 					if distance <= self.Config.proximityDistance then
@@ -470,8 +375,7 @@ function CowMilkingModule:GetVerifiedNearbyObjects(player, playerPos)
 							id = cowId,
 							model = cowModel,
 							distance = distance,
-							canMilk = canMilk,
-							owner = cowModel:GetAttribute("Owner")
+							canMilk = canMilk
 						})
 						nearby.playerCowsNearby = nearby.playerCowsNearby + 1
 					end
@@ -480,90 +384,50 @@ function CowMilkingModule:GetVerifiedNearbyObjects(player, playerPos)
 		end
 	end
 
-	-- FIXED: Enhanced chair detection
+	-- Check for chairs with proper position handling
 	for chairId, chair in pairs(self.MilkingChairs) do
-		if chair and chair.Parent and chair:IsDescendantOf(workspace) then
-			local distance = (playerPos - chair.Position).Magnitude
+		if chair and chair.Parent then
+			local success, chairPos = pcall(function()
+				return self:GetModelPosition(chair)
+			end)
 
-			if distance <= self.Config.proximityDistance then
-				local isOccupied = false
-				if chair:IsA("Seat") then
-					local success, occupant = pcall(function()
+			if success then
+				local distance = (playerPos - chairPos).Magnitude
+
+				if distance <= self.Config.proximityDistance then
+					local isOccupied = false
+
+					local occupantSuccess, occupant = pcall(function()
 						return chair.Occupant
 					end)
-					if success then
+
+					if occupantSuccess then
 						isOccupied = occupant ~= nil
 					end
+
+					table.insert(nearby.chairs, {
+						id = chairId,
+						model = chair,
+						distance = distance,
+						isOccupied = isOccupied
+					})
+					nearby.milkingChairsNearby = nearby.milkingChairsNearby + 1
 				end
-
-				table.insert(nearby.chairs, {
-					id = chairId,
-					model = chair,
-					distance = distance,
-					isOccupied = isOccupied
-				})
-				nearby.milkingChairsNearby = nearby.milkingChairsNearby + 1
-
-				print("🪑 Found nearby chair: " .. chairId .. " (occupied: " .. tostring(isOccupied) .. ", distance: " .. math.floor(distance) .. ")")
 			end
 		end
 	end
-
-	-- DEBUG: Print nearby objects
-	print("📊 " .. player.Name .. " - Nearby: " .. nearby.playerCowsNearby .. " cows, " .. nearby.milkingChairsNearby .. " chairs")
 
 	return nearby
 end
 
--- FIXED: Better cow ownership verification with nil check
-function CowMilkingModule:VerifyCowOwnership(player, cowId, cowModel)
-	-- Method 1: Check model attribute (only if cowModel is provided)
-	if cowModel then
-		local modelOwner = cowModel:GetAttribute("Owner")
-		if modelOwner == player.Name then
-			return true
-		end
-	end
-
-	-- Method 2: Check if cow is in player data
-	if GameCore then
-		local playerData = GameCore:GetPlayerData(player)
-		if playerData and playerData.livestock and playerData.livestock.cows then
-			if playerData.livestock.cows[cowId] then
-				return true
-			end
-		end
-	end
-
-	-- Method 3: Check if cowId contains player's UserId (for starter cows)
-	if cowId:find(tostring(player.UserId)) then
-		return true
-	end
-
-	-- Method 4: If no cowModel provided, try to find it
-	if not cowModel and CowCreationModule and CowCreationModule.GetActiveCows then
-		local activeCows = CowCreationModule:GetActiveCows()
-		local foundModel = activeCows[cowId]
-		if foundModel then
-			local modelOwner = foundModel:GetAttribute("Owner")
-			if modelOwner == player.Name then
-				return true
-			end
-		end
-	end
-
-	return false
-end
-
 function CowMilkingModule:VerifyCanMilkCow(player, cowId)
-	if not CowCreationModule or not CowCreationModule.GetCowData then
-		return false
-	end
+	if not CowCreationModule then return false end
 
-	local cowData = CowCreationModule:GetCowData(player, cowId)
-	if not cowData then 
-		return false 
-	end
+	local success, cowData = pcall(function()
+		return CowCreationModule:GetCowData(player, cowId)
+	end)
+
+	if not success or not cowData then return false end
 
 	local currentTime = os.time()
 	local lastMilked = cowData.lastMilkCollection or 0
@@ -608,14 +472,21 @@ function CowMilkingModule:DetermineProximityState(nearbyObjects)
 	end
 end
 
-function CowMilkingModule:UpdatePlayerPrompt(player, promptState, nearbyObjects)
-	if promptState == "none" then
-		self:HideProximityPrompt(player)
-		return
-	end
+function CowMilkingModule:ShowProximityPrompt(player, promptState, nearbyObjects)
+	if not RemoteEvents.ShowChairPrompt then return end
 
 	local promptData = self:CreatePromptData(promptState, nearbyObjects)
-	self:ShowProximityPrompt(player, promptData)
+
+	-- Use pcall to prevent errors from stopping the system
+	pcall(function()
+		RemoteEvents.ShowChairPrompt:FireClient(player, "proximity", {
+			title = promptData.title,
+			subtitle = promptData.subtitle,
+			instruction = promptData.instruction,
+			canUse = promptData.canUse,
+			promptType = promptData.type
+		})
+	end)
 end
 
 function CowMilkingModule:CreatePromptData(promptState, nearbyObjects)
@@ -631,13 +502,13 @@ function CowMilkingModule:CreatePromptData(promptState, nearbyObjects)
 		data.canUse = true
 		data.title = "🥛 Ready to Milk!"
 		data.subtitle = "Sit in the chair to start milking"
-		data.instruction = "Find the brown wooden chair and sit down"
+		data.instruction = "Find the MilkingChair and sit down"
 
 	elseif promptState == "need_chair" then
 		data.canUse = false
 		data.title = "🪑 Chair Needed"
 		data.subtitle = "Your cow is ready, but no chair available"
-		data.instruction = "Find an empty milking chair nearby"
+		data.instruction = "Find an empty MilkingChair nearby"
 
 	elseif promptState == "cow_cooldown" then
 		data.canUse = false
@@ -655,36 +526,18 @@ function CowMilkingModule:CreatePromptData(promptState, nearbyObjects)
 	return data
 end
 
-function CowMilkingModule:ShowProximityPrompt(player, promptData)
-	if not RemoteEvents.ShowChairPrompt then return end
-
-	print("📢 Showing proximity prompt to " .. player.Name .. ": " .. promptData.type)
-
-	RemoteEvents.ShowChairPrompt:FireClient(player, "proximity", {
-		title = promptData.title,
-		subtitle = promptData.subtitle,
-		instruction = promptData.instruction,
-		canUse = promptData.canUse,
-		promptType = promptData.type
-	})
-end
-
 function CowMilkingModule:HideProximityPrompt(player)
-	if not RemoteEvents.HideChairPrompt then return end
-
-	local userId = player.UserId
-	local proximityState = self.PlayerProximityState[userId]
-
-	if proximityState and proximityState.currentState ~= "none" then
-		print("🚫 Hiding proximity prompt for " .. player.Name)
-		RemoteEvents.HideChairPrompt:FireClient(player)
+	if RemoteEvents.HideChairPrompt then
+		pcall(function()
+			RemoteEvents.HideChairPrompt:FireClient(player)
+		end)
 	end
 end
 
 -- ========== CHAIR OCCUPANCY HANDLING ==========
 
 function CowMilkingModule:HandleChairOccupancyChange(chair)
-	if not chair or not chair.Parent or not chair:IsA("Seat") then
+	if not chair or not chair.Parent then
 		return
 	end
 
@@ -692,9 +545,7 @@ function CowMilkingModule:HandleChairOccupancyChange(chair)
 		return chair.Occupant
 	end)
 
-	if not success then
-		return
-	end
+	if not success then return end
 
 	if occupant then
 		local character = occupant.Parent
@@ -708,14 +559,12 @@ function CowMilkingModule:HandleChairOccupancyChange(chair)
 end
 
 function CowMilkingModule:HandlePlayerSatDown(player, chair)
-	print("🪑 " .. player.Name .. " sat in chair: " .. (chair:GetAttribute("ChairId") or "unknown"))
-
-	-- Check if player has nearby cows
+	-- Find nearby cow to milk
 	local character = player.Character
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then return end
 
-	local nearbyObjects = self:GetVerifiedNearbyObjects(player, rootPart.Position)
+	local nearbyObjects = self:GetNearbyObjects(player, rootPart.Position)
 	local nearbyCow = nil
 
 	-- Find the best cow to milk
@@ -727,7 +576,7 @@ function CowMilkingModule:HandlePlayerSatDown(player, chair)
 	end
 
 	if nearbyCow then
-		print("🥛 Starting milking session for " .. player.Name .. " with cow " .. nearbyCow.id)
+		print("🥛 Starting 10-click milking session for " .. player.Name .. " with cow " .. nearbyCow.id)
 		self:StartMilkingSession(player, nearbyCow.id, chair)
 	else
 		-- Check if there are any cows nearby (even if not ready)
@@ -741,12 +590,12 @@ function CowMilkingModule:HandlePlayerSatDown(player, chair)
 	end
 end
 
--- ========== MILKING SESSION MANAGEMENT ==========
+-- ========== 10-CLICK MILKING SESSION ==========
 
 function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 	local userId = player.UserId
 
-	print("🥛 Starting milking session for " .. player.Name .. " with cow " .. cowId)
+	print("🥛 Starting 10-click milking session for " .. player.Name .. " with cow " .. cowId)
 
 	-- Check if already in session
 	if self.ActiveSessions[userId] then
@@ -754,26 +603,22 @@ function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 		wait(0.1)
 	end
 
-	-- FIXED: Get cow model for verification
-	local cowModel = nil
-	if CowCreationModule and CowCreationModule.GetActiveCows then
-		local activeCows = CowCreationModule:GetActiveCows()
-		cowModel = activeCows[cowId]
-	end
+	-- Verify cow ownership
+	local success, owns = pcall(function()
+		return CowCreationModule:DoesPlayerOwnCow(player, cowId)
+	end)
 
-	-- Verify cow ownership with the model
-	if not self:VerifyCowOwnership(player, cowId, cowModel) then
+	if not success or not owns then
 		self:SendNotification(player, "🐄 Cow Error", "You don't own this cow!", "error")
 		return false
 	end
 
 	-- Get cow data
-	local cowData = nil
-	if CowCreationModule and CowCreationModule.GetCowData then
-		cowData = CowCreationModule:GetCowData(player, cowId)
-	end
+	local cowDataSuccess, cowData = pcall(function()
+		return CowCreationModule:GetCowData(player, cowId)
+	end)
 
-	if not cowData then
+	if not cowDataSuccess or not cowData then
 		self:SendNotification(player, "🐄 Cow Error", "Could not find cow data!", "error")
 		return false
 	end
@@ -790,44 +635,48 @@ function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 		return false
 	end
 
-	-- Create session
+	-- Create session with 10-click progress tracking
 	local session = {
 		userId = userId,
 		playerId = player.UserId,
 		cowId = cowId,
-		chairId = chair:GetAttribute("ChairId"),
+		chairId = chair:GetAttribute("ChairId") or "unknown",
 		startTime = currentTime,
 		milkCollected = 0,
+		clickProgress = 0, -- Track clicks toward next milk (0-9)
+		totalClicks = 0, -- Total clicks this session
 		lastClickTime = currentTime,
 		isActive = true,
-		maxMilk = cowData.milkAmount * 10
+		maxMilk = self.Config.maxMilkPerSession
 	}
 
 	self.ActiveSessions[userId] = session
 
-	-- Show milking GUI
+	-- Show milking GUI with progress
 	if RemoteEvents.ShowChairPrompt then
-		RemoteEvents.ShowChairPrompt:FireClient(player, "milking", {
-			title = "🥛 Milking Session Active",
-			subtitle = "Click to collect milk!",
-			instruction = "Stay seated and click to collect milk. Leave chair to stop.",
-			cowId = cowId,
-			maxMilk = session.maxMilk
-		})
+		pcall(function()
+			RemoteEvents.ShowChairPrompt:FireClient(player, "milking", {
+				title = "🥛 10-Click Milking Active",
+				subtitle = "Click " .. self.Config.clicksPerMilk .. " times to collect 1 milk!",
+				instruction = "Stay seated and click to collect milk. Leave chair to stop.",
+				cowId = cowId,
+				maxMilk = session.maxMilk,
+				clicksPerMilk = self.Config.clicksPerMilk,
+				currentProgress = 0
+			})
+		end)
 	end
 
 	-- Start session monitoring
 	self:StartSessionMonitoring(userId)
 
-	self:SendNotification(player, "🥛 Milking Started!", 
-		"Click to collect milk! Session will timeout after " .. self.Config.sessionTimeout .. " seconds of inactivity.", "success")
+	self:SendNotification(player, "🥛 10-Click Milking Started!", 
+		"Click " .. self.Config.clicksPerMilk .. " times to get 1 milk! Stay seated to continue.", "success")
 
 	return true
 end
 
 function CowMilkingModule:HandleStartMilkingSession(player, cowId)
-	print("🎮 Received start milking request from " .. player.Name .. " for cow " .. (cowId or "unknown"))
-
 	-- Find chair player is sitting in
 	local character = player.Character
 	if not character then return end
@@ -852,38 +701,12 @@ function CowMilkingModule:HandleStartMilkingSession(player, cowId)
 	end
 
 	if not seatPart or not seatPart:GetAttribute("IsMilkingChair") then
-		self:SendNotification(player, "🪑 Wrong Chair", "You must be sitting in a milking chair!", "warning")
+		self:SendNotification(player, "🪑 Wrong Chair", "You must be sitting in a MilkingChair!", "warning")
 		return
 	end
 
 	-- Start session
 	self:StartMilkingSession(player, cowId, seatPart)
-end
-
-function CowMilkingModule:HandleStopMilkingSession(player)
-	local userId = player.UserId
-	local session = self.ActiveSessions[userId]
-
-	if not session then return end
-
-	print("🛑 Stopping milking session for " .. player.Name)
-
-	local totalMilk = session.milkCollected
-	local sessionDuration = os.time() - session.startTime
-
-	if totalMilk > 0 then
-		self:GiveMilkRewards(player, session.cowId, totalMilk)
-		self:SendNotification(player, "🥛 Milking Complete!", 
-			"Collected " .. totalMilk .. " milk in " .. sessionDuration .. " seconds!", "success")
-	end
-
-	-- Clean up session
-	self.ActiveSessions[userId] = nil
-
-	-- Hide GUI
-	if RemoteEvents.HideChairPrompt then
-		RemoteEvents.HideChairPrompt:FireClient(player)
-	end
 end
 
 function CowMilkingModule:HandleContinueMilking(player)
@@ -917,12 +740,27 @@ function CowMilkingModule:HandleContinueMilking(player)
 		return
 	end
 
-	-- Collect milk
-	local milkCollected = self.Config.milkPerClick
-	session.milkCollected = session.milkCollected + milkCollected
+	-- Process click with 10-click system
+	session.totalClicks = session.totalClicks + 1
+	session.clickProgress = session.clickProgress + 1
 	session.lastClickTime = os.time()
 
-	print("🥛 " .. player.Name .. " collected " .. milkCollected .. " milk (total: " .. session.milkCollected .. ")")
+	print("🖱️ " .. player.Name .. " clicked - Progress: " .. session.clickProgress .. "/" .. self.Config.clicksPerMilk)
+
+	-- Check if we've reached 10 clicks for 1 milk
+	if session.clickProgress >= self.Config.clicksPerMilk then
+		-- Give 1 milk and reset progress
+		session.milkCollected = session.milkCollected + 1
+		session.clickProgress = 0
+
+		print("🥛 " .. player.Name .. " completed " .. self.Config.clicksPerMilk .. " clicks - awarded 1 milk! Total: " .. session.milkCollected)
+
+		-- Give milk to player immediately
+		self:GiveMilkToPlayer(player, session.cowId, 1)
+	end
+
+	-- Send progress update to client
+	self:SendMilkingProgressUpdate(player, session)
 
 	-- Check limits
 	if session.milkCollected >= session.maxMilk then
@@ -930,6 +768,104 @@ function CowMilkingModule:HandleContinueMilking(player)
 			"This cow has no more milk! Session ending.", "info")
 		self:HandleStopMilkingSession(player)
 		return
+	end
+end
+
+function CowMilkingModule:SendMilkingProgressUpdate(player, session)
+	if RemoteEvents.MilkingSessionUpdate then
+		pcall(function()
+			RemoteEvents.MilkingSessionUpdate:FireClient(player, "progress", {
+				milkCollected = session.milkCollected,
+				clickProgress = session.clickProgress,
+				clicksPerMilk = self.Config.clicksPerMilk,
+				totalClicks = session.totalClicks,
+				sessionDuration = os.time() - session.startTime,
+				lastClickTime = session.lastClickTime,
+				progressPercentage = math.floor((session.clickProgress / self.Config.clicksPerMilk) * 100)
+			})
+		end)
+	end
+end
+
+function CowMilkingModule:GiveMilkToPlayer(player, cowId, milkAmount)
+	if not GameCore then return end
+
+	local success, playerData = pcall(function()
+		return GameCore:GetPlayerData(player)
+	end)
+
+	if not success or not playerData then return end
+
+	-- Add milk to inventory
+	if not playerData.farming then
+		playerData.farming = {inventory = {}}
+	end
+	if not playerData.farming.inventory then
+		playerData.farming.inventory = {}
+	end
+
+	playerData.farming.inventory.milk = (playerData.farming.inventory.milk or 0) + milkAmount
+
+	-- Update cow data
+	if playerData.livestock and playerData.livestock.cows and playerData.livestock.cows[cowId] then
+		local cowData = playerData.livestock.cows[cowId]
+		cowData.lastMilkCollection = os.time()
+		cowData.totalMilkProduced = (cowData.totalMilkProduced or 0) + milkAmount
+	end
+
+	-- Update stats
+	if not playerData.stats then
+		playerData.stats = {}
+	end
+	playerData.stats.milkCollected = (playerData.stats.milkCollected or 0) + milkAmount
+
+	-- Save data
+	pcall(function()
+		GameCore:SavePlayerData(player)
+	end)
+
+	-- Trigger UI update
+	if GameCore.RemoteEvents and GameCore.RemoteEvents.PlayerDataUpdated then
+		pcall(function()
+			GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+		end)
+	end
+
+	print("🎁 Gave " .. milkAmount .. " milk to " .. player.Name)
+end
+
+function CowMilkingModule:HandleStopMilkingSession(player)
+	local userId = player.UserId
+	local session = self.ActiveSessions[userId]
+
+	if not session then return end
+
+	print("🛑 Stopping 10-click milking session for " .. player.Name)
+
+	local totalMilk = session.milkCollected
+	local totalClicks = session.totalClicks
+	local sessionDuration = os.time() - session.startTime
+
+	if totalMilk > 0 or totalClicks > 0 then
+		local clicksTowardsNext = session.clickProgress
+		local progressMessage = ""
+
+		if clicksTowardsNext > 0 then
+			progressMessage = " (" .. clicksTowardsNext .. "/" .. self.Config.clicksPerMilk .. " clicks towards next milk)"
+		end
+
+		self:SendNotification(player, "🥛 Milking Complete!", 
+			"Session ended! Collected " .. totalMilk .. " milk from " .. totalClicks .. " clicks" .. progressMessage, "success")
+	end
+
+	-- Clean up session
+	self.ActiveSessions[userId] = nil
+
+	-- Hide GUI
+	if RemoteEvents.HideChairPrompt then
+		pcall(function()
+			RemoteEvents.HideChairPrompt:FireClient(player)
+		end)
 	end
 end
 
@@ -960,57 +896,6 @@ function CowMilkingModule:StartSessionMonitoring(userId)
 	end)
 end
 
--- ========== REWARD SYSTEM ==========
-
-function CowMilkingModule:GiveMilkRewards(player, cowId, milkAmount)
-	print("🎁 Giving " .. milkAmount .. " milk rewards to " .. player.Name)
-
-	if not GameCore then
-		warn("CowMilkingModule: GameCore not available for rewards")
-		return
-	end
-
-	local playerData = GameCore:GetPlayerData(player)
-	if not playerData then
-		warn("CowMilkingModule: No player data for rewards")
-		return
-	end
-
-	-- Add milk to inventory
-	if not playerData.farming then
-		playerData.farming = {inventory = {}}
-	end
-	if not playerData.farming.inventory then
-		playerData.farming.inventory = {}
-	end
-
-	playerData.farming.inventory.milk = (playerData.farming.inventory.milk or 0) + milkAmount
-
-	-- Update cow data
-	if playerData.livestock and playerData.livestock.cows and playerData.livestock.cows[cowId] then
-		local cowData = playerData.livestock.cows[cowId]
-		cowData.lastMilkCollection = os.time()
-		cowData.totalMilkProduced = (cowData.totalMilkProduced or 0) + milkAmount
-	end
-
-	-- Update stats
-	if not playerData.stats then
-		playerData.stats = {}
-	end
-	playerData.stats.milkCollected = (playerData.stats.milkCollected or 0) + milkAmount
-	playerData.stats.milkingSessions = (playerData.stats.milkingSessions or 0) + 1
-
-	-- Save data
-	if GameCore.SavePlayerData then
-		GameCore:SavePlayerData(player)
-	end
-
-	-- Trigger UI update
-	if GameCore.RemoteEvents and GameCore.RemoteEvents.PlayerDataUpdated then
-		GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-	end
-end
-
 -- ========== PLAYER HANDLERS ==========
 
 function CowMilkingModule:SetupPlayerHandlers()
@@ -1027,27 +912,18 @@ function CowMilkingModule:SetupPlayerHandlers()
 			self.PlayerProximityState[userId] = nil
 		end
 	end)
-
-	print("CowMilkingModule: Player handlers setup complete")
 end
 
 -- ========== UTILITY FUNCTIONS ==========
 
 function CowMilkingModule:SendNotification(player, title, message, notificationType)
 	if GameCore and GameCore.SendNotification then
-		GameCore:SendNotification(player, title, message, notificationType)
+		pcall(function()
+			GameCore:SendNotification(player, title, message, notificationType)
+		end)
 	else
 		print("NOTIFICATION for " .. player.Name .. ": [" .. (notificationType or "info"):upper() .. "] " .. title .. " - " .. message)
 	end
-end
-
-function CowMilkingModule:GetModelCenter(model)
-	if model.PrimaryPart then
-		return model.PrimaryPart.Position
-	end
-
-	local cf, size = model:GetBoundingBox()
-	return cf.Position
 end
 
 function CowMilkingModule:CountTable(t)
@@ -1060,58 +936,36 @@ end
 
 -- ========== DEBUG FUNCTIONS ==========
 
-function CowMilkingModule:DebugChairs()
-	print("=== CHAIR DEBUG ===")
-	print("Total registered chairs: " .. self:CountTable(self.MilkingChairs))
+function CowMilkingModule:DebugStatus()
+	print("=== FIXED 10-CLICK MILKING DEBUG ===")
+	print("Active sessions: " .. self:CountTable(self.ActiveSessions))
+	print("Milking chairs: " .. self:CountTable(self.MilkingChairs))
+	print("Clicks per milk: " .. self.Config.clicksPerMilk)
 
+	for userId, session in pairs(self.ActiveSessions) do
+		local player = Players:GetPlayerByUserId(userId)
+		local playerName = player and player.Name or "Unknown"
+		print("Session - " .. playerName .. ":")
+		print("  Click progress: " .. session.clickProgress .. "/" .. self.Config.clicksPerMilk)
+		print("  Total clicks: " .. session.totalClicks)
+		print("  Milk collected: " .. session.milkCollected)
+	end
+
+	print("Chairs:")
 	for chairId, chair in pairs(self.MilkingChairs) do
-		if chair and chair.Parent then
-			local isOccupied = false
-			if chair:IsA("Seat") then
-				local success, occupant = pcall(function()
-					return chair.Occupant
-				end)
-				if success then
-					isOccupied = occupant ~= nil
-				end
-			end
+		local success, position = pcall(function()
+			return self:GetModelPosition(chair)
+		end)
+		local posStr = success and tostring(position) or "Error getting position"
 
-			print("Chair: " .. chairId)
-			print("  Position: " .. tostring(chair.Position))
-			print("  Occupied: " .. tostring(isOccupied))
-			print("  Name: " .. chair.Name)
-			print("  IsMilkingChair: " .. tostring(chair:GetAttribute("IsMilkingChair")))
-		else
-			print("Chair: " .. chairId .. " - INVALID (nil or no parent)")
-		end
+		local occupiedSuccess, occupied = pcall(function()
+			return chair.Occupant and "YES" or "NO"
+		end)
+		local occupiedStr = occupiedSuccess and occupied or "Unknown"
+
+		print("  " .. chairId .. " - Occupied: " .. occupiedStr .. " - Pos: " .. posStr)
 	end
-
-	-- Check workspace for any missed chairs
-	print("\nWorkspace scan:")
-	for _, obj in pairs(workspace:GetChildren()) do
-		if obj.Name == "MilkingChair" then
-			local registered = false
-			for chairId, chair in pairs(self.MilkingChairs) do
-				if chair == obj then
-					registered = true
-					break
-				end
-			end
-			print("Workspace MilkingChair: " .. obj.Name .. " - Registered: " .. tostring(registered))
-		end
-	end
-
-	print("===================")
-end
-
-function CowMilkingModule:ForceRescanChairs()
-	print("🔄 Force rescanning chairs...")
-	self.MilkingChairs = {}
-	local found = self:ScanForAllChairs()
-	self:ForceRegisterMilkingChairs()
-	local total = self:CountTable(self.MilkingChairs)
-	print("✅ Rescan complete - found: " .. found .. ", total: " .. total)
-	return total
+	print("=====================================")
 end
 
 function CowMilkingModule:GetSystemStatus()
@@ -1124,88 +978,33 @@ function CowMilkingModule:GetSystemStatus()
 			count = self:CountTable(self.MilkingChairs),
 			chairs = self.MilkingChairs
 		},
-		proximityStates = {
-			count = self:CountTable(self.PlayerProximityState),
-			states = self.PlayerProximityState
-		}
+		config = self.Config
 	}
 end
 
-function CowMilkingModule:GetPlayerSession(player)
-	return self.ActiveSessions[player.UserId]
+-- ========== GLOBAL ACCESS ==========
+
+_G.CowMilkingModule = CowMilkingModule
+
+_G.DebugMilking = function()
+	CowMilkingModule:DebugStatus()
 end
 
-function CowMilkingModule:ResetPlayerProximity(player)
-	local userId = player.UserId
-	print("🔄 Resetting proximity state for " .. player.Name)
-
-	self:HideProximityPrompt(player)
-	self.PlayerProximityState[userId] = nil
-
-	print("✅ Proximity state reset for " .. player.Name)
-end
-
-function CowMilkingModule:DebugPlayerProximity(player)
-	local userId = player.UserId
-	local proximityState = self.PlayerProximityState[userId]
-	local character = player.Character
-
-	print("=== COW MILKING DEBUG FOR " .. player.Name .. " ===")
-
-	if proximityState then
-		print("Last prompt: " .. proximityState.lastPrompt)
-		print("Current state: " .. proximityState.currentState)
-		print("Last update: " .. proximityState.lastUpdate)
-		print("Last state change: " .. proximityState.lastStateChange)
-	else
-		print("No proximity state found")
-	end
-
-	if character and character:FindFirstChild("HumanoidRootPart") then
-		local nearbyObjects = self:GetVerifiedNearbyObjects(player, character.HumanoidRootPart.Position)
-		print("Nearby cows: " .. nearbyObjects.playerCowsNearby)
-		print("Nearby chairs: " .. nearbyObjects.milkingChairsNearby)
-
-		for i, cow in ipairs(nearbyObjects.cows) do
-			print("  Cow " .. i .. ": " .. cow.id .. " (owner: " .. tostring(cow.owner) .. ", can milk: " .. tostring(cow.canMilk) .. ")")
-		end
-
-		for i, chair in ipairs(nearbyObjects.chairs) do
-			print("  Chair " .. i .. ": " .. chair.id .. " (occupied: " .. tostring(chair.isOccupied) .. ", distance: " .. math.floor(chair.distance) .. ")")
-		end
-	end
-
-	-- Check if player has cows in data
-	if GameCore then
-		local playerData = GameCore:GetPlayerData(player)
-		if playerData and playerData.livestock and playerData.livestock.cows then
-			local cowCount = 0
-			for cowId, cowData in pairs(playerData.livestock.cows) do
-				cowCount = cowCount + 1
-				print("  Data cow " .. cowCount .. ": " .. cowId .. " (tier: " .. (cowData.tier or "unknown") .. ")")
-			end
-			print("Total cows in data: " .. cowCount)
-		else
-			print("No cow data found")
-		end
-	end
-
-	print("=======================================")
-end
-
-function CowMilkingModule:Cleanup()
-	-- Stop all active sessions
-	for userId, session in pairs(self.ActiveSessions) do
-		local player = Players:GetPlayerByUserId(userId)
-		if player then
-			self:HandleStopMilkingSession(player)
-		end
-	end
-
-	self.ActiveSessions = {}
-	self.PlayerProximityState = {}
-
-	print("CowMilkingModule: Cleanup complete")
-end
+print("CowMilkingModule: ✅ FIXED 10-CLICK SYSTEM LOADED!")
+print("🔧 POSITION FIXES:")
+print("  📍 Fixed Position error for Model MilkingChair")
+print("  🛠️ Added GetModelPosition helper function")
+print("  ⚡ Enhanced error handling with pcall")
+print("  🪑 Better chair detection for Models and Parts")
+print("")
+print("🖱️ 10-CLICK FEATURES:")
+print("  📊 10 clicks = 1 milk system")
+print("  📈 Progress indicator (0-" .. CowMilkingModule.Config.clicksPerMilk .. " clicks)")
+print("  🪑 Works with existing MilkingChair models")
+print("  🐄 Works with existing cow models")
+print("  📱 Real-time progress updates")
+print("")
+print("🔧 Debug Commands:")
+print("  _G.DebugMilking() - Show milking system status")
 
 return CowMilkingModule
