@@ -1,202 +1,469 @@
 --[[
-    FIXED ClientLoader.client.lua - Proper Module Loading
+    FIXED ClientLoader.client.lua - Proper Client System Coordination
     Place in: StarterPlayer/StarterPlayerScripts/ClientLoader.client.lua
     
     FIXES:
-    ✅ Proper module loading and initialization
-    ✅ Correct initialization order
-    ✅ Error handling for missing modules
-    ✅ Debug information for troubleshooting
+    ✅ Proper module loading and initialization order
+    ✅ Better error handling and retry logic
+    ✅ Eliminates duplicate milking click handlers
+    ✅ Coordinates all client systems properly
 ]]
 
-print("🚀 ClientLoader: Starting client initialization...")
+print("🚀 ClientLoader: Starting FIXED client coordination...")
 
 -- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 -- Get local player
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Wait for required modules
-local function waitForModule(name, parent, timeout)
-	timeout = timeout or 15
+-- Client system state
+local ClientState = {
+	UIManagerLoaded = false,
+	GameClientLoaded = false,
+	SystemsConnected = false,
+	MilkingSystemReady = false,
+	RemoteEventsReady = false,
+	RetryCount = 0,
+	MaxRetries = 5
+}
+
+-- ========== SAFE MODULE LOADING ==========
+
+local function SafeWaitForModule(name, parent, timeout)
+	timeout = timeout or 30
 	local startTime = tick()
+
+	print("⏳ Waiting for " .. name .. "...")
 
 	while not parent:FindFirstChild(name) and (tick() - startTime) < timeout do
 		wait(0.1)
 	end
 
 	if parent:FindFirstChild(name) then
-		print("✅ Found module: " .. name)
+		print("✅ Found " .. name)
 		return parent:FindFirstChild(name)
 	else
-		error("❌ Module not found: " .. name .. " after " .. timeout .. " seconds")
+		warn("❌ " .. name .. " not found after " .. timeout .. " seconds")
+		return nil
 	end
 end
 
--- Step 1: Wait for UIManager
-print("📱 Loading UIManager...")
-local uiManagerModule = waitForModule("UIManager", ReplicatedStorage)
-local UIManager = require(uiManagerModule)
+local function SafeRequireModule(moduleScript, moduleName)
+	if not moduleScript then
+		warn("❌ " .. moduleName .. " module script not found")
+		return nil
+	end
 
--- Step 2: Wait for GameClient  
-print("🎮 Loading GameClient...")
-local gameClientModule = waitForModule("GameClient", ReplicatedStorage)
-local GameClient = require(gameClientModule)
+	local success, result = pcall(function()
+		return require(moduleScript)
+	end)
 
--- Step 3: Initialize UIManager first
-print("🔧 Initializing UIManager...")
-local uiSuccess, uiError = pcall(function()
-	return UIManager:Initialize()
-end)
-
-if not uiSuccess then
-	error("❌ UIManager initialization failed: " .. tostring(uiError))
+	if success and result then
+		print("✅ " .. moduleName .. " loaded successfully")
+		return result
+	else
+		warn("❌ " .. moduleName .. " failed to load: " .. tostring(result))
+		return nil
+	end
 end
 
-print("✅ UIManager initialized successfully")
+-- ========== STEP 1: WAIT FOR REMOTE EVENTS ==========
 
--- Step 4: Initialize GameClient with UIManager reference
-print("🔧 Initializing GameClient...")
-local clientSuccess, clientError = pcall(function()
-	return GameClient:Initialize(UIManager)
-end)
+local function WaitForRemoteEvents()
+	print("📡 Waiting for remote events...")
 
-if not clientSuccess then
-	error("❌ GameClient initialization failed: " .. tostring(clientError))
+	local gameRemotes = ReplicatedStorage:WaitForChild("GameRemotes", 30)
+	if not gameRemotes then
+		warn("❌ GameRemotes folder not found")
+		return false
+	end
+
+	-- Essential remote events for client
+	local essentialEvents = {
+		"ShowChairPrompt", "HideChairPrompt",
+		"StartMilkingSession", "StopMilkingSession", 
+		"ContinueMilking", "MilkingSessionUpdate",
+		"PlayerDataUpdated", "ShowNotification"
+	}
+
+	local eventsReady = 0
+	for _, eventName in ipairs(essentialEvents) do
+		local event = gameRemotes:WaitForChild(eventName, 10)
+		if event then
+			eventsReady = eventsReady + 1
+			print("✅ " .. eventName .. " ready")
+		else
+			print("⚠️ " .. eventName .. " not ready")
+		end
+	end
+
+	ClientState.RemoteEventsReady = eventsReady >= (math.ceil(#essentialEvents * 0.75)) -- 75% must be ready
+	print("📡 Remote events status: " .. eventsReady .. "/" .. #essentialEvents .. " ready")
+	return ClientState.RemoteEventsReady
 end
 
-print("✅ GameClient initialized successfully")
+-- ========== STEP 2: LOAD CORE MODULES ==========
 
--- Step 5: Cross-link the systems
-UIManager:SetGameClient(GameClient)
-print("🔗 Systems cross-linked successfully")
+local function LoadCoreModules()
+	print("📱 Loading core client modules...")
 
--- Step 6: Setup global access for debugging
-_G.UIManager = UIManager
-_G.GameClient = GameClient
+	-- Load UIManager
+	local uiManagerModule = SafeWaitForModule("UIManager", ReplicatedStorage, 15)
+	local UIManager = SafeRequireModule(uiManagerModule, "UIManager")
 
--- Step 7: Setup debug commands
-local function setupDebugCommands()
-	if LocalPlayer then
-		LocalPlayer.Chatted:Connect(function(message)
-			local args = string.split(message:lower(), " ")
-			local command = args[1]
+	if not UIManager then
+		error("❌ UIManager is required but failed to load")
+	end
 
-			if command == "/debugui" then
-				print("=== UI DEBUG STATUS ===")
-				print("UIManager initialized: " .. tostring(UIManager ~= nil))
-				print("GameClient initialized: " .. tostring(GameClient ~= nil))
-				print("UIManager has GameClient: " .. tostring(UIManager.State and UIManager.State.GameClient ~= nil))
-				print("Current page: " .. (UIManager:GetCurrentPage() or "None"))
+	-- Load GameClient
+	local gameClientModule = SafeWaitForModule("GameClient", ReplicatedStorage, 15)
+	local GameClient = SafeRequireModule(gameClientModule, "GameClient")
 
-				-- Check for left-side buttons
-				local leftSideUI = LocalPlayer.PlayerGui:FindFirstChild("LeftSideButtonsUI")
-				print("Left-side buttons UI exists: " .. tostring(leftSideUI ~= nil))
+	if not GameClient then
+		error("❌ GameClient is required but failed to load")
+	end
 
-				if leftSideUI then
-					local buttonCount = 0
-					for _, child in pairs(leftSideUI:GetChildren()) do
-						if child:IsA("TextButton") then
-							buttonCount = buttonCount + 1
+	ClientState.UIManagerLoaded = UIManager ~= nil
+	ClientState.GameClientLoaded = GameClient ~= nil
+
+	return UIManager, GameClient
+end
+
+-- ========== STEP 3: INITIALIZE SYSTEMS ==========
+
+local function InitializeCoreSystemsInOrder(UIManager, GameClient)
+	print("🔧 Initializing client systems in proper order...")
+
+	-- Step 3a: Initialize UIManager first
+	print("🔧 Initializing UIManager...")
+	local uiSuccess, uiError = pcall(function()
+		return UIManager:Initialize()
+	end)
+
+	if not uiSuccess then
+		error("❌ UIManager initialization failed: " .. tostring(uiError))
+	end
+	print("✅ UIManager initialized")
+
+	-- Step 3b: Initialize GameClient with UIManager reference
+	print("🔧 Initializing GameClient...")
+	local clientSuccess, clientError = pcall(function()
+		return GameClient:Initialize(UIManager)
+	end)
+
+	if not clientSuccess then
+		error("❌ GameClient initialization failed: " .. tostring(clientError))
+	end
+	print("✅ GameClient initialized")
+
+	-- Step 3c: Cross-link the systems
+	UIManager:SetGameClient(GameClient)
+	print("🔗 Systems cross-linked")
+
+	-- Step 3d: Set global references for other scripts
+	_G.UIManager = UIManager
+	_G.GameClient = GameClient
+
+	ClientState.SystemsConnected = true
+	return true
+end
+
+-- ========== STEP 4: SETUP MILKING SYSTEM INTEGRATION ==========
+
+local function SetupMilkingSystemIntegration()
+	print("🥛 Setting up milking system integration...")
+
+	-- Wait for ChairMilkingGUI to be available
+	local chairGUIReady = false
+	local attempts = 0
+
+	while not chairGUIReady and attempts < 10 do
+		wait(1)
+		attempts = attempts + 1
+
+		if _G.ChairMilkingGUI then
+			chairGUIReady = true
+			print("✅ ChairMilkingGUI detected")
+		else
+			print("⏳ Waiting for ChairMilkingGUI... (attempt " .. attempts .. ")")
+		end
+	end
+
+	if not chairGUIReady then
+		warn("⚠️ ChairMilkingGUI not detected - milking GUI may be limited")
+	end
+
+	-- Setup unified click handling (prevents conflicts)
+	local function SetupUnifiedClickHandling()
+		print("🖱️ Setting up unified click handling...")
+
+		local isInMilkingSession = false
+		local lastClickTime = 0
+		local clickCooldown = 0.05
+
+		-- Single click handler for milking
+		UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if gameProcessed then return end
+
+			-- Check if we're in a milking session
+			if _G.ChairMilkingGUI and _G.ChairMilkingGUI.State then
+				isInMilkingSession = (_G.ChairMilkingGUI.State.guiType == "milking" and 
+					_G.ChairMilkingGUI.State.isVisible)
+			end
+
+			-- Fallback check for milking GUI
+			if not isInMilkingSession then
+				local milkingGUI = PlayerGui:FindFirstChild("ChairMilkingGUI") or 
+					PlayerGui:FindFirstChild("MilkingGUI")
+				isInMilkingSession = milkingGUI ~= nil
+			end
+
+			if isInMilkingSession then
+				local currentTime = tick()
+
+				-- Check cooldown
+				if (currentTime - lastClickTime) < clickCooldown then
+					return
+				end
+
+				local isClick = (input.UserInputType == Enum.UserInputType.MouseButton1) or 
+					(input.UserInputType == Enum.UserInputType.Touch) or
+					(input.KeyCode == Enum.KeyCode.Space)
+
+				if isClick then
+					lastClickTime = currentTime
+
+					-- Send to server
+					local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+					if gameRemotes then
+						local continueMilking = gameRemotes:FindFirstChild("ContinueMilking")
+						if continueMilking then
+							continueMilking:FireServer()
+							print("🖱️ Click sent to server")
 						end
-					end
-					print("Number of left-side buttons: " .. buttonCount)
-				end
-
-				print("========================")
-
-			elseif command == "/testshop" then
-				print("Testing shop opening...")
-				if UIManager and UIManager.OpenMenu then
-					UIManager:OpenMenu("Shop")
-				else
-					print("❌ UIManager.OpenMenu not available")
-				end
-
-			elseif command == "/recreateui" then
-				print("Recreating UI systems...")
-
-				-- Cleanup existing
-				if UIManager and UIManager.Cleanup then
-					UIManager:Cleanup()
-				end
-
-				-- Reinitialize
-				local success, error = pcall(function()
-					UIManager:Initialize()
-					UIManager:SetGameClient(GameClient)
-				end)
-
-				if success then
-					print("✅ UI recreated successfully")
-				else
-					print("❌ UI recreation failed: " .. tostring(error))
-				end
-
-			elseif command == "/forceleftbuttons" then
-				print("Force creating left-side buttons...")
-				if UIManager and UIManager.SetupLeftSideButtons then
-					local success, error = pcall(function()
-						UIManager:SetupLeftSideButtons()
-					end)
-
-					if success then
-						print("✅ Left-side buttons created")
-					else
-						print("❌ Left-side buttons failed: " .. tostring(error))
 					end
 				end
 			end
 		end)
+
+		print("✅ Unified click handling setup")
+	end
+
+	SetupUnifiedClickHandling()
+	ClientState.MilkingSystemReady = true
+	return true
+end
+
+-- ========== STEP 5: VERIFICATION AND DIAGNOSTICS ==========
+
+local function VerifySystemIntegration()
+	print("🔍 Verifying system integration...")
+
+	-- Check UI elements exist
+	local mainUI = PlayerGui:FindFirstChild("MainGameUI")
+	local topMenuUI = PlayerGui:FindFirstChild("TopMenuUI")
+
+	print("UI Elements:")
+	print("  Main UI: " .. (mainUI and "✅" or "❌"))
+	print("  Top Menu UI: " .. (topMenuUI and "✅" or "❌"))
+
+	-- Check global references
+	print("Global References:")
+	print("  _G.UIManager: " .. (_G.UIManager and "✅" or "❌"))
+	print("  _G.GameClient: " .. (_G.GameClient and "✅" or "❌"))
+	print("  _G.ChairMilkingGUI: " .. (_G.ChairMilkingGUI and "✅" or "❌"))
+
+	-- Check remote connections
+	local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+	if gameRemotes then
+		local openShop = gameRemotes:FindFirstChild("OpenShop")
+		local continueMilking = gameRemotes:FindFirstChild("ContinueMilking")
+
+		print("Remote Connections:")
+		print("  OpenShop: " .. (openShop and "✅" or "❌"))
+		print("  ContinueMilking: " .. (continueMilking and "✅" or "❌"))
+	else
+		print("❌ GameRemotes not found")
+	end
+
+	-- Test basic functionality
+	local basicFunctionsWork = true
+
+	if _G.UIManager and _G.UIManager.ShowNotification then
+		pcall(function()
+			_G.UIManager:ShowNotification("System Test", "Client systems loaded successfully!", "success")
+		end)
+	else
+		basicFunctionsWork = false
+	end
+
+	print("Basic Functions: " .. (basicFunctionsWork and "✅" or "❌"))
+	return basicFunctionsWork
+end
+
+-- ========== STEP 6: SETUP DEBUG COMMANDS ==========
+
+local function SetupClientDebugCommands()
+	print("🔧 Setting up client debug commands...")
+
+	LocalPlayer.Chatted:Connect(function(message)
+		local command = message:lower()
+
+		if command == "/clientstatus" then
+			print("=== CLIENT SYSTEM STATUS ===")
+			print("UIManager loaded: " .. (ClientState.UIManagerLoaded and "✅" or "❌"))
+			print("GameClient loaded: " .. (ClientState.GameClientLoaded and "✅" or "❌"))
+			print("Systems connected: " .. (ClientState.SystemsConnected and "✅" or "❌"))
+			print("Milking system ready: " .. (ClientState.MilkingSystemReady and "✅" or "❌"))
+			print("Remote events ready: " .. (ClientState.RemoteEventsReady and "✅" or "❌"))
+			print("Retry count: " .. ClientState.RetryCount)
+			print("")
+			VerifySystemIntegration()
+			print("============================")
+
+		elseif command == "/testui" then
+			if _G.UIManager then
+				print("Testing UI system...")
+				_G.UIManager:ShowNotification("UI Test", "UI system is working!", "success")
+
+				-- Try opening shop
+				spawn(function()
+					wait(2)
+					_G.UIManager:OpenMenu("Shop")
+				end)
+			else
+				print("❌ UIManager not available")
+			end
+
+		elseif command == "/testmilkclick" then
+			print("Testing milking click...")
+			local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+			if gameRemotes then
+				local continueMilking = gameRemotes:FindFirstChild("ContinueMilking")
+				if continueMilking then
+					continueMilking:FireServer()
+					print("✅ Test click sent")
+				else
+					print("❌ ContinueMilking remote not found")
+				end
+			else
+				print("❌ GameRemotes not found")
+			end
+
+		elseif command == "/recreateclient" then
+			print("🔄 Recreating client systems...")
+
+			ClientState.RetryCount = 0
+			local success = AttemptClientInitialization()
+
+			if success then
+				print("✅ Client systems recreated")
+			else
+				print("❌ Client recreation failed")
+			end
+
+		elseif command == "/clearguis" then
+			print("🧹 Cleaning up old GUIs...")
+
+			local guisToClean = {
+				"MainGameUI", "TopMenuUI", "ChairMilkingGUI", 
+				"MilkingGUI", "ChairProximityGUI"
+			}
+
+			for _, guiName in ipairs(guisToClean) do
+				local gui = PlayerGui:FindFirstChild(guiName)
+				if gui then
+					gui:Destroy()
+					print("🗑️ Removed " .. guiName)
+				end
+			end
+		end
+	end)
+
+	print("✅ Client debug commands ready")
+end
+
+-- ========== MAIN CLIENT INITIALIZATION ==========
+
+function AttemptClientInitialization()
+	print("🔧 Attempting client initialization (Attempt " .. (ClientState.RetryCount + 1) .. ")...")
+
+	ClientState.RetryCount = ClientState.RetryCount + 1
+
+	local success, errorMessage = pcall(function()
+		-- Step 1: Wait for remote events
+		if not WaitForRemoteEvents() then
+			warn("⚠️ Some remote events missing - continuing anyway")
+		end
+
+		-- Step 2: Load core modules
+		local UIManager, GameClient = LoadCoreModules()
+
+		-- Step 3: Initialize systems in order
+		InitializeCoreSystemsInOrder(UIManager, GameClient)
+
+		-- Step 4: Setup milking integration
+		SetupMilkingSystemIntegration()
+
+		-- Step 5: Verify everything works
+		VerifySystemIntegration()
+
+		-- Step 6: Setup debug commands
+		SetupClientDebugCommands()
+
+		return true
+	end)
+
+	if success then
+		print("🎉 Client initialization successful!")
+		print("")
+		print("🎮 CLIENT SYSTEMS READY:")
+		print("  📱 UIManager: " .. (ClientState.UIManagerLoaded and "✅" or "❌"))
+		print("  🎮 GameClient: " .. (ClientState.GameClientLoaded and "✅" or "❌"))
+		print("  🔗 Connected: " .. (ClientState.SystemsConnected and "✅" or "❌"))
+		print("  🥛 Milking: " .. (ClientState.MilkingSystemReady and "✅" or "❌"))
+		print("")
+		print("🎮 Debug Commands:")
+		print("  /clientstatus - Show client status")
+		print("  /testui - Test UI system")
+		print("  /testmilkclick - Test milking click")
+		print("  /recreateclient - Recreate client systems")
+		print("  /clearguis - Clean up old GUIs")
+		return true
+	else
+		warn("💥 Client initialization failed: " .. tostring(errorMessage))
+
+		if ClientState.RetryCount < ClientState.MaxRetries then
+			print("🔄 Retrying in 3 seconds...")
+			wait(3)
+			return AttemptClientInitialization()
+		else
+			warn("❌ Client initialization failed after " .. ClientState.MaxRetries .. " attempts")
+			-- Still setup debug commands for troubleshooting
+			SetupClientDebugCommands()
+			return false
+		end
 	end
 end
 
--- Setup debug commands
-setupDebugCommands()
+-- ========== EXECUTE CLIENT INITIALIZATION ==========
 
--- Step 8: Verify everything is working
 spawn(function()
-	wait(3) -- Give everything time to settle
+	wait(2) -- Give ReplicatedStorage time to populate
 
-	print("🔍 Final verification...")
+	print("🚀 Starting FIXED client initialization...")
 
-	-- Check UI elements
-	local mainUI = LocalPlayer.PlayerGui:FindFirstChild("MainGameUI")
-	local leftSideUI = LocalPlayer.PlayerGui:FindFirstChild("LeftSideButtonsUI")
+	local success = AttemptClientInitialization()
 
-	print("Main UI exists: " .. tostring(mainUI ~= nil))
-	print("Left-side UI exists: " .. tostring(leftSideUI ~= nil))
-
-	if not leftSideUI and UIManager.SetupLeftSideButtons then
-		print("⚠️ Left-side buttons missing, attempting to create...")
-		local success, error = pcall(function()
-			UIManager:SetupLeftSideButtons()
-		end)
-
-		if success then
-			print("✅ Successfully created missing left-side buttons")
-		else
-			warn("❌ Failed to create left-side buttons: " .. tostring(error))
-		end
-	end
-
-	-- Test proximity system connection
-	if GameClient and GameClient.RemoteEvents then
-		local openShopRemote = GameClient.RemoteEvents.OpenShop
-		if openShopRemote then
-			print("✅ OpenShop remote event connected")
-		else
-			warn("❌ OpenShop remote event not found")
-		end
+	if success then
+		print("✅ All client systems ready!")
+	else
+		warn("❌ Client initialization incomplete - debug commands available")
 	end
 end)
 
-print("🎉 ClientLoader: Initialization complete!")
-print("")
-print("🔧 Debug Commands:")
-print("  /debugui - Show UI system status")
-print("  /testshop - Test shop opening")
-print("  /recreateui - Recreate UI systems")
-print("  /forceleftbuttons - Force create left-side buttons")
+print("🔧 Fixed ClientLoader ready - initialization starting in 2 seconds...")

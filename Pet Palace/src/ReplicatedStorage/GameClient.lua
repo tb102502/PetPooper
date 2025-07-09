@@ -1025,9 +1025,8 @@ function GameClient:SetupRemoteConnections()
 		"GetPlayerData", "GetFarmingData",
 
 		-- Shop functions (enhanced for tabbed system)
-		"GetShopItems", "GetShopItemsByCategory", "GetSellableItems" -- ADD GetSellableItems HERE
+		"GetShopItems", "GetSellableItems" -- REMOVED GetShopItemsByCategory
 	}
-
 
 	-- Load remote events
 	for _, eventName in ipairs(requiredRemoteEvents) do

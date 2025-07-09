@@ -1237,13 +1237,79 @@ function UIManager:AddScrollingDebugCommands()
 		end)
 	end)
 end
+function UIManager:DebugTransitionState()
+	print("=== TRANSITION STATE DEBUG ===")
+	print("IsTransitioning:", self.State.IsTransitioning)
+	print("TransitionStartTime:", self.State.TransitionStartTime)
+	print("CurrentPage:", self.State.CurrentPage)
+	print("ActiveMenus:", #self.State.ActiveMenus)
+	for i, menu in ipairs(self.State.ActiveMenus) do
+		print("  " .. i .. ". " .. menu)
+	end
 
+	if self.State.TransitionStartTime then
+		local duration = tick() - self.State.TransitionStartTime
+		print("Transition Duration:", duration .. "s")
+		if duration > 2 then
+			print("⚠️ STUCK TRANSITION DETECTED!")
+		end
+	end
+
+	local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
+	if menuContainer then
+		print("MenuContainer Visible:", menuContainer.Visible)
+		print("MenuContainer Transparency:", menuContainer.BackgroundTransparency)
+	end
+	print("==============================")
+end
+
+-- Global debug commands
+_G.DebugUITransition = function()
+	if _G.UIManager and _G.UIManager.DebugTransitionState then
+		_G.UIManager:DebugTransitionState()
+	end
+end
+
+_G.RecoverUI = function()
+	if _G.UIManager and _G.UIManager.RecoverFromStuckState then
+		_G.UIManager:RecoverFromStuckState()
+		print("UI state recovered!")
+	end
+end
+
+_G.ForceShop = function()
+	if _G.UIManager then
+		_G.UIManager:RecoverFromStuckState()
+		wait(0.1)
+		local success = _G.UIManager:OpenMenu("Shop")
+		print("Force shop open:", success and "SUCCESS" or "FAILED")
+	end
+end
 function UIManager:HandleOpenShopFromServer()
 	print("UIManager: Handling shop open request from server...")
 
+	-- FIXED: Force reset transition state to prevent stuck states
+	self.State.IsTransitioning = false
+
+	-- FIXED: Better menu closing with proper waiting
 	if #self.State.ActiveMenus > 0 then
 		print("UIManager: Closing existing menus before opening shop...")
-		self:CloseActiveMenus()
+		self:CloseActiveMenusForced()
+		-- Wait longer for animations to complete
+		spawn(function()
+			wait(0.5) -- Increased wait time
+			self:AttemptShopOpen()
+		end)
+	else
+		self:AttemptShopOpen()
+	end
+end
+
+function UIManager:AttemptShopOpen()
+	-- Double-check transition state
+	if self.State.IsTransitioning then
+		print("UIManager: Still transitioning, forcing reset...")
+		self.State.IsTransitioning = false
 		wait(0.1)
 	end
 
@@ -1254,7 +1320,31 @@ function UIManager:HandleOpenShopFromServer()
 		self:ShowNotification("🛒 Shop Opened", "Welcome to the Pet Palace Market!", "success")
 	else
 		print("UIManager: ❌ Failed to open shop from server event")
-		self:ShowNotification("Shop Error", "Failed to open shop. Please try again.", "error")
+		-- FIXED: More specific error handling
+		local errorReason = "Unknown error"
+		if self.State.IsTransitioning then
+			errorReason = "UI is transitioning"
+		elseif #self.State.ActiveMenus > 0 then
+			errorReason = "Other menus still active"
+		end
+
+		print("UIManager: Error reason: " .. errorReason)
+		self:ShowNotification("Shop Access", "Please try again in a moment.", "info")
+
+		-- FIXED: Retry mechanism
+		spawn(function()
+			wait(1)
+			print("UIManager: Retrying shop open...")
+			self.State.IsTransitioning = false
+			self.State.ActiveMenus = {}
+			self.State.CurrentPage = "None"
+			local retrySuccess = self:OpenMenu("Shop")
+			if retrySuccess then
+				print("UIManager: ✅ Shop opened successfully on retry!")
+			else
+				print("UIManager: ❌ Shop open retry also failed")
+			end
+		end)
 	end
 end
 
@@ -1616,20 +1706,39 @@ end
 -- ========== MENU MANAGEMENT ==========
 
 function UIManager:OpenMenu(menuName)
+	-- FIXED: More permissive transition checking with timeout
 	if self.State.IsTransitioning then
-		print("UIManager: Ignoring menu open during transition")
-		return false
+		print("UIManager: Menu open requested during transition, checking timeout...")
+
+		-- Check if transition has been stuck for too long
+		local currentTime = tick()
+		if not self.State.TransitionStartTime then
+			self.State.TransitionStartTime = currentTime
+		end
+
+		local transitionDuration = currentTime - self.State.TransitionStartTime
+		if transitionDuration > 2.0 then -- 2 second timeout
+			print("UIManager: Transition timeout detected, forcing reset...")
+			self.State.IsTransitioning = false
+			self.State.TransitionStartTime = nil
+		else
+			print("UIManager: Ignoring menu open during transition (duration: " .. transitionDuration .. "s)")
+			return false
+		end
 	end
 
 	print("UIManager: Opening menu: " .. menuName)
 
+	-- FIXED: Better handling of existing menus
 	if #self.State.ActiveMenus > 0 then
 		print("UIManager: Closing existing menus...")
-		self:CloseActiveMenus()
+		self:CloseActiveMenusForced() -- Use forced close for immediate effect
 		wait(0.1)
 	end
 
+	-- FIXED: Set transition state and start time
 	self.State.IsTransitioning = true
+	self.State.TransitionStartTime = tick()
 	self.State.CurrentPage = menuName
 
 	local success = false
@@ -1661,27 +1770,54 @@ function UIManager:OpenMenu(menuName)
 			tween:Play()
 
 			tween.Completed:Connect(function()
+				-- FIXED: Reset transition state and clear start time
 				self.State.IsTransitioning = false
+				self.State.TransitionStartTime = nil
 				print("UIManager: Menu " .. menuName .. " opened successfully")
 			end)
 		else
 			warn("UIManager: MenuContainer not found!")
+			-- FIXED: Reset state on failure
 			self.State.IsTransitioning = false
+			self.State.TransitionStartTime = nil
+			self.State.CurrentPage = "None"
 			return false
 		end
 
 		table.insert(self.State.ActiveMenus, menuName)
 	else
 		print("UIManager: Failed to create menu content for " .. menuName)
+		-- FIXED: Reset state on failure
 		self.State.IsTransitioning = false
+		self.State.TransitionStartTime = nil
 		self.State.CurrentPage = "None"
 	end
 
 	return success
 end
 
+function UIManager:RecoverFromStuckState()
+	print("UIManager: Recovering from stuck state...")
+
+	-- Force reset all problematic state
+	self.State.IsTransitioning = false
+	self.State.TransitionStartTime = nil
+	self.State.ActiveMenus = {}
+	self.State.CurrentPage = "None"
+
+	-- Hide any visible menu containers
+	local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
+	if menuContainer then
+		menuContainer.Visible = false
+	end
+
+	print("UIManager: State recovery completed")
+end
+
 function UIManager:CloseActiveMenus()
 	if #self.State.ActiveMenus == 0 then
+		-- FIXED: Reset transition state even if no menus
+		self.State.IsTransitioning = false
 		return
 	end
 
@@ -1706,11 +1842,42 @@ function UIManager:CloseActiveMenus()
 					end
 				end
 			end
+
+			-- FIXED: Reset transition state when closing completes
+			self.State.IsTransitioning = false
+			print("UIManager: Menu close animation completed, transition state reset")
 		end)
+	else
+		-- FIXED: Reset transition state immediately if no animation needed
+		self.State.IsTransitioning = false
 	end
 
 	self.State.ActiveMenus = {}
 	self.State.CurrentPage = "None"
+end
+function UIManager:CloseActiveMenusForced()
+	print("UIManager: Force closing active menus")
+
+	local menuContainer = self.State.MainUI:FindFirstChild("MenuContainer")
+	if menuContainer then
+		menuContainer.Visible = false
+
+		local menuFrame = menuContainer:FindFirstChild("MenuFrame")
+		if menuFrame then
+			for _, child in pairs(menuFrame:GetChildren()) do
+				if child.Name ~= "CloseButton" and not child:IsA("UICorner") then
+					child:Destroy()
+				end
+			end
+		end
+	end
+
+	-- FIXED: Force reset all state
+	self.State.ActiveMenus = {}
+	self.State.CurrentPage = "None"
+	self.State.IsTransitioning = false
+
+	print("UIManager: Force close completed, all state reset")
 end
 
 -- ========== SHOP MENU SYSTEM ==========

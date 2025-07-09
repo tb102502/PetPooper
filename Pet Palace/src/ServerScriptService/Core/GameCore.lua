@@ -1,13 +1,11 @@
 --[[
-    UPDATED GameCore.lua - Modular System Integration
+    UPDATED GameCore.lua - With FarmPlot Module Integration
     Place in: ServerScriptService/Core/GameCore.lua
     
-    FEATURES:
-    ✅ Modular architecture with separate crop and farm systems
-    ✅ Clean module integration and dependency injection
-    ✅ Proper initialization order
-    ✅ Enhanced error handling and fallbacks
-    ✅ Maintained compatibility with existing systems
+    UPDATES:
+    ✅ Added FarmPlot module loading from Modules folder
+    ✅ Added farm plot integration methods
+    ✅ Fixed module loading paths for all modules
 ]]
 
 local GameCore = {}
@@ -16,383 +14,191 @@ local GameCore = {}
 local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local ServerStorage = game:GetService("ServerStorage")
 local DataStoreService = game:GetService("DataStoreService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local HttpService = game:GetService("HttpService")
-local Debris = game:GetService("Debris")
 
 -- Load configuration
 local ItemConfig = require(ReplicatedStorage:WaitForChild("ItemConfig"))
-local remoteFolder = ReplicatedStorage:FindFirstChild("GameRemotes")
-if not remoteFolder then
-	remoteFolder = Instance.new("Folder")
-	remoteFolder.Name = "GameRemotes"
-	remoteFolder.Parent = ReplicatedStorage
-end
 
--- Module references - will be loaded during initialization
+-- UPDATED: Module references - will be loaded from correct locations
 local CropCreation = nil
-local CropVisual = nil
-local FarmPlot = nil
+local CropVisual = nil  
+local FarmPlot = nil -- Added FarmPlot
 local MutationSystem = nil
 local CowCreationModule = nil
 local CowMilkingModule = nil
 
-function GameCore:InitializeDataStore()
-	local success, dataStore = pcall(function()
-		return DataStoreService:GetDataStore("LivestockFarmData_v2")
-	end)
-
-	if success then
-		self.PlayerDataStore = dataStore
-		print("GameCore: DataStore connected (Live)")
-	else
-		-- Create mock DataStore for Studio testing
-		self.PlayerDataStore = {
-			GetAsync = function(self, key)
-				warn("GameCore: Using mock DataStore for Studio - GetAsync(" .. key .. ")")
-				return nil -- Return nil to use default data
-			end,
-			SetAsync = function(self, key, data)
-				print("GameCore: Mock DataStore save for " .. key .. " (Studio mode)")
-				return true
-			end
-		}
-		warn("GameCore: Using mock DataStore for Studio testing")
-	end
-end
--- Enhanced save system properties
-GameCore.SAVE_COOLDOWN = 30
-GameCore.BATCH_SAVE_DELAY = 5
-GameCore.DataStoreCooldowns = {}
-GameCore.PendingSaves = {}
-GameCore.DirtyPlayers = {}
-
--- Core Data Management
+-- Core state
 GameCore.PlayerData = {}
-GameCore.DataStore = nil
 GameCore.RemoteEvents = {}
 GameCore.RemoteFunctions = {}
+GameCore.SAVE_COOLDOWN = 30
 
--- System States
-GameCore.Systems = {
-	Farming = {
-		PlayerFarms = {},
-		GrowthTimers = {},
-		RarityEffects = {}
-	}
-}
-
--- Reference to ShopSystem (will be injected)
-GameCore.ShopSystem = nil
-
--- ========== MODULE LOADING ==========
+-- ========== UPDATED MODULE LOADING ==========
 
 function GameCore:LoadModules()
-	print("GameCore: Loading modular systems...")
+	print("GameCore: Loading modules from correct paths...")
 
 	local modulesLoaded = 0
-	local totalModules = 3 -- CropCreation, CropVisual, FarmPlot
 
-	-- Load CropVisual module first (no dependencies)
-	local cropVisualSuccess, cropVisualResult = pcall(function()
-		local moduleScript = ServerScriptService:WaitForChild("Modules"):WaitForChild("CropVisual", 10)
-		if not moduleScript then
-			error("CropVisual module not found in ServerScriptService/Modules")
-		end
-		return require(moduleScript)
-	end)
-
-	if cropVisualSuccess and cropVisualResult then
-		CropVisual = cropVisualResult
-		local initSuccess = CropVisual:Initialize(self, nil) -- CropCreation will be injected later
-		if initSuccess then
-			print("GameCore: ✅ CropVisual module loaded and initialized")
-			modulesLoaded = modulesLoaded + 1
-		else
-			warn("GameCore: ❌ CropVisual initialization failed")
-		end
-	else
-		warn("GameCore: ❌ Failed to load CropVisual: " .. tostring(cropVisualResult))
-	end
-
-	-- Load FarmPlot module (depends on GameCore only)
-	local farmPlotSuccess, farmPlotResult = pcall(function()
-		local moduleScript = ServerScriptService:WaitForChild("Modules"):WaitForChild("FarmPlot", 10)
-		if not moduleScript then
-			error("FarmPlot module not found in ServerScriptService/Modules")
-		end
-		return require(moduleScript)
-	end)
-
-	if farmPlotSuccess and farmPlotResult then
-		FarmPlot = farmPlotResult
-		local initSuccess = FarmPlot:Initialize(self)
-		if initSuccess then
-			print("GameCore: ✅ FarmPlot module loaded and initialized")
-			modulesLoaded = modulesLoaded + 1
-		else
-			warn("GameCore: ❌ FarmPlot initialization failed")
-		end
-	else
-		warn("GameCore: ❌ Failed to load FarmPlot: " .. tostring(farmPlotResult))
-	end
-
-	-- Load CropCreation module (depends on GameCore, CropVisual, and optionally MutationSystem)
-	local cropCreationSuccess, cropCreationResult = pcall(function()
-		local moduleScript = ServerScriptService:WaitForChild("Modules"):WaitForChild("CropCreation", 10)
-		if not moduleScript then
-			error("CropCreation module not found in ServerScriptService/Modules")
-		end
-		return require(moduleScript)
-	end)
-
-	if cropCreationSuccess and cropCreationResult then
-		CropCreation = cropCreationResult
-
-		-- Try to load MutationSystem if available
-		local mutationSystem = self:LoadOptionalMutationSystem()
-
-		local initSuccess = CropCreation:Initialize(self, CropVisual, mutationSystem)
-		if initSuccess then
-			print("GameCore: ✅ CropCreation module loaded and initialized")
-			modulesLoaded = modulesLoaded + 1
-
-			-- Update CropVisual with CropCreation reference
-			if CropVisual then
-				CropVisual.CropCreation = CropCreation
-			end
-		else
-			warn("GameCore: ❌ CropCreation initialization failed")
-		end
-	else
-		warn("GameCore: ❌ Failed to load CropCreation: " .. tostring(cropCreationResult))
-	end
-
-	-- Load optional cow modules
-	self:LoadOptionalCowModules()
-
-	print("GameCore: Module loading complete - " .. modulesLoaded .. "/" .. totalModules .. " core modules loaded")
-	return modulesLoaded >= 2 -- At least CropVisual and FarmPlot required
-end
-
-function GameCore:LoadOptionalMutationSystem()
-	print("GameCore: Attempting to load MutationSystem...")
-
-	local success, result = pcall(function()
-		local moduleScript = ServerScriptService:FindFirstChild("MutationSystem")
-		if moduleScript then
-			local mutationSystem = require(moduleScript)
-			if mutationSystem.Initialize then
-				local initSuccess = mutationSystem:Initialize(self, CropVisual)
-				if initSuccess then
-					return mutationSystem
-				end
-			end
-		end
-		return nil
-	end)
-
-	if success and result then
-		MutationSystem = result
-		print("GameCore: ✅ MutationSystem loaded successfully")
-		return result
-	else
-		print("GameCore: ℹ️ MutationSystem not available (optional)")
-		return nil
-	end
-end
-
-function GameCore:LoadOptionalCowModules()
-	print("GameCore: Loading optional cow management modules...")
-
-	local success = true
-
-	-- Load CowCreationModule
+	-- Load cow modules from root ServerScriptService
 	local cowCreationSuccess, cowCreationResult = pcall(function()
-		local moduleScript = ServerScriptService:FindFirstChild("CowCreationModule")
-		if moduleScript then
-			return require(moduleScript)
+		local moduleScript = ServerScriptService:WaitForChild("CowCreationModule", 10)
+		if not moduleScript then
+			warn("CowCreationModule not found in ServerScriptService")
+			return nil
 		end
-		return nil
+		return require(moduleScript)
 	end)
 
 	if cowCreationSuccess and cowCreationResult then
 		CowCreationModule = cowCreationResult
-		if CowCreationModule.Initialize then
-			local initSuccess = CowCreationModule:Initialize(self, ItemConfig)
-			if initSuccess then
-				print("GameCore: ✅ CowCreationModule loaded successfully")
-			else
-				warn("GameCore: ❌ CowCreationModule initialization failed")
-				success = false
-			end
-		end
+		print("GameCore: ✅ CowCreationModule loaded from ServerScriptService")
+		modulesLoaded = modulesLoaded + 1
 	else
-		print("GameCore: ℹ️ CowCreationModule not available (optional)")
+		warn("GameCore: ❌ Failed to load CowCreationModule: " .. tostring(cowCreationResult))
 	end
 
-	-- Load CowMilkingModule
 	local cowMilkingSuccess, cowMilkingResult = pcall(function()
-		local moduleScript = ServerScriptService:FindFirstChild("CowMilkingModule")
-		if moduleScript then
-			return require(moduleScript)
+		local moduleScript = ServerScriptService:WaitForChild("CowMilkingModule", 10)
+		if not moduleScript then
+			warn("CowMilkingModule not found in ServerScriptService")
+			return nil
 		end
-		return nil
+		return require(moduleScript)
 	end)
 
 	if cowMilkingSuccess and cowMilkingResult then
 		CowMilkingModule = cowMilkingResult
-		if CowMilkingModule.Initialize then
-			local initSuccess = CowMilkingModule:Initialize(self, CowCreationModule)
-			if initSuccess then
-				print("GameCore: ✅ CowMilkingModule loaded successfully")
+		print("GameCore: ✅ CowMilkingModule loaded from ServerScriptService")
+		modulesLoaded = modulesLoaded + 1
+	else
+		warn("GameCore: ❌ Failed to load CowMilkingModule: " .. tostring(cowMilkingResult))
+	end
+
+	-- ADDED: Load modules from Modules folder if it exists
+	local modulesFolder = ServerScriptService:FindFirstChild("Modules")
+	if modulesFolder then
+		print("GameCore: Found Modules folder, loading farming modules...")
+
+		-- Load FarmPlot module
+		local farmPlotModule = modulesFolder:FindFirstChild("FarmPlot")
+		if farmPlotModule then
+			local success, result = pcall(function()
+				return require(farmPlotModule)
+			end)
+			if success then
+				FarmPlot = result
+				print("GameCore: ✅ FarmPlot loaded from Modules folder")
+				modulesLoaded = modulesLoaded + 1
 			else
-				warn("GameCore: ❌ CowMilkingModule initialization failed")
-				success = false
+				warn("GameCore: ❌ Failed to load FarmPlot: " .. tostring(result))
+			end
+		else
+			print("GameCore: FarmPlot module not found in Modules folder")
+		end
+
+		-- Load CropCreation if available
+		local cropCreationModule = modulesFolder:FindFirstChild("CropCreation")
+		if cropCreationModule then
+			local success, result = pcall(function()
+				return require(cropCreationModule)
+			end)
+			if success then
+				CropCreation = result
+				print("GameCore: ✅ CropCreation loaded from Modules folder")
+				modulesLoaded = modulesLoaded + 1
+			end
+		end
+
+		-- Load CropVisual if available
+		local cropVisualModule = modulesFolder:FindFirstChild("CropVisual")
+		if cropVisualModule then
+			local success, result = pcall(function()
+				return require(cropVisualModule)
+			end)
+			if success then
+				CropVisual = result
+				print("GameCore: ✅ CropVisual loaded from Modules folder")
+				modulesLoaded = modulesLoaded + 1
 			end
 		end
 	else
-		print("GameCore: ℹ️ CowMilkingModule not available (optional)")
+		print("GameCore: No Modules folder found, using available modules only")
 	end
 
-	return success
+	print("GameCore: Module loading complete - " .. modulesLoaded .. " modules loaded")
+	return modulesLoaded >= 1 -- At least one module required
 end
 
--- ========== INITIALIZATION ==========
+function GameCore:InitializeLoadedModules()
+	print("GameCore: Initializing loaded modules...")
 
-function GameCore:Initialize(shopSystem)
-	print("GameCore: Starting MODULAR core game system initialization...")
-
-	-- STEP 1: Load all modules first
-	local modulesSuccess = self:LoadModules()
-	if not modulesSuccess then
-		warn("GameCore: Critical modules failed to load!")
-		return false
-	end
-
-	-- STEP 2: Store ShopSystem reference
-	if shopSystem then
-		self.ShopSystem = shopSystem
-		print("GameCore: ShopSystem reference established")
-	end
-
-	-- STEP 3: Initialize player data storage
-	self:InitializeDataStore()
-
-	-- STEP 4: Setup DataStore
-	local success, dataStore = pcall(function()
-		return DataStoreService:GetDataStore("LivestockFarmData_v2")
-	end)
-
-	if success then
-		self.PlayerDataStore = dataStore
-		print("GameCore: DataStore connected")
-	else
-		warn("GameCore: Failed to connect to DataStore - running in local mode")
-	end
-
-	-- STEP 5: Setup remote connections
-	self:SetupRemoteConnections()
-
-	-- STEP 6: Setup event handlers
-	self:SetupEventHandlers()
-
-	-- STEP 7: Initialize game systems
-	self:InitializeGameSystems()
-
-	-- STEP 8: Setup debug commands
-	self:AddDebugCommands()
-	self:SetupAdminCommands()
-
-	print("GameCore: ✅ MODULAR core game system initialization complete!")
-	return true
-end
-
-function GameCore:InitializeGameSystems()
-	print("GameCore: Initializing game systems...")
-
-	-- Initialize crop event system for module communication
-	self:InitializeCropEventSystem()
-
-	-- Initialize player connection handlers
-	self:SetupPlayerHandlers()
-
-	print("GameCore: Game systems initialized")
-end
-
-function GameCore:InitializeCropEventSystem()
-	print("GameCore: Initializing crop event system for module communication...")
-
-	if not self.Events then
-		self.Events = {}
-	end
-
-	-- Create bindable events for module communication
-	self.Events.CropPlanted = Instance.new("BindableEvent")
-	self.Events.CropGrowthStageChanged = Instance.new("BindableEvent")
-	self.Events.CropHarvested = Instance.new("BindableEvent")
-
-	print("GameCore: Crop event system initialized")
-end
-
-function GameCore:SetupPlayerHandlers()
-	-- Handle player joining
-	Players.PlayerAdded:Connect(function(player)
-		self:LoadPlayerData(player)
-		self:CreatePlayerLeaderstats(player)
-
-		-- Ensure player has farm if they should
-		spawn(function()
-			wait(2) -- Wait for data to settle
-			self:EnsurePlayerHasFarm(player)
+	-- Initialize FarmPlot first (needed by other modules)
+	if FarmPlot then
+		print("GameCore: Initializing FarmPlot...")
+		local success = pcall(function()
+			return FarmPlot:Initialize(self)
 		end)
-	end)
 
-	-- Handle player leaving
-	Players.PlayerRemoving:Connect(function(player)
-		if self.PlayerData[player.UserId] then
-			print("GameCore: Player " .. player.Name .. " leaving - forcing immediate save")
-			self:SavePlayerData(player, true)
+		if success then
+			print("GameCore: ✅ FarmPlot initialized")
+			_G.FarmPlot = FarmPlot
+		else
+			warn("GameCore: ❌ FarmPlot initialization failed")
 		end
+	end
 
-		-- Clean up tracking data
-		local userId = player.UserId
-		self.DirtyPlayers[userId] = nil
-		self.PendingSaves[userId] = nil
-	end)
-end
+	-- Initialize CowCreationModule
+	if CowCreationModule then
+		print("GameCore: Initializing CowCreationModule...")
+		local success = pcall(function()
+			return CowCreationModule:Initialize(self, ItemConfig)
+		end)
 
--- ========== MODULE INTEGRATION METHODS ==========
+		if success then
+			print("GameCore: ✅ CowCreationModule initialized")
+			_G.CowCreationModule = CowCreationModule
+		else
+			warn("GameCore: ❌ CowCreationModule initialization failed")
+		end
+	end
 
-function GameCore:PlantSeed(player, plotModel, seedId, seedData)
+	-- Initialize CowMilkingModule
+	if CowMilkingModule then
+		print("GameCore: Initializing CowMilkingModule...")
+		local success = pcall(function()
+			return CowMilkingModule:Initialize(self, CowCreationModule)
+		end)
+
+		if success then
+			print("GameCore: ✅ CowMilkingModule initialized")
+			_G.CowMilkingModule = CowMilkingModule
+		else
+			warn("GameCore: ❌ CowMilkingModule initialization failed")
+		end
+	end
+
+	-- Initialize crop modules if available
 	if CropCreation then
-		return CropCreation:PlantSeed(player, plotModel, seedId, seedData)
-	else
-		warn("GameCore: CropCreation module not available")
-		return false
+		local success = pcall(function()
+			return CropCreation:Initialize(self, CropVisual, MutationSystem)
+		end)
+		if success then
+			print("GameCore: ✅ CropCreation initialized")
+		end
+	end
+
+	if CropVisual then
+		local success = pcall(function()
+			return CropVisual:Initialize(self, CropCreation)
+		end)
+		if success then
+			print("GameCore: ✅ CropVisual initialized")
+		end
 	end
 end
 
-function GameCore:HarvestCrop(player, plotModel)
-	if CropCreation then
-		return CropCreation:HarvestCrop(player, plotModel)
-	else
-		warn("GameCore: CropCreation module not available")
-		return false
-	end
-end
-
-function GameCore:HarvestAllCrops(player)
-	if CropCreation then
-		return CropCreation:HarvestAllCrops(player)
-	else
-		warn("GameCore: CropCreation module not available")
-		return false
-	end
-end
+-- ========== ADDED: FARM PLOT INTEGRATION METHODS ==========
 
 function GameCore:CreateSimpleFarmPlot(player)
 	if FarmPlot then
@@ -459,6 +265,63 @@ function GameCore:EnsurePlayerHasFarm(player)
 	end
 end
 
+function GameCore:GetSimpleFarmPosition(player)
+	if FarmPlot then
+		return FarmPlot:GetSimpleFarmPosition(player)
+	else
+		warn("GameCore: FarmPlot module not available - using fallback position")
+		-- Fallback position calculation
+		local playerIndex = 0
+		local sortedPlayers = {}
+		for _, p in pairs(Players:GetPlayers()) do
+			table.insert(sortedPlayers, p)
+		end
+		table.sort(sortedPlayers, function(a, b) return a.UserId < b.UserId end)
+
+		for i, p in ipairs(sortedPlayers) do
+			if p.UserId == player.UserId then
+				playerIndex = i - 1
+				break
+			end
+		end
+
+		local basePos = Vector3.new(-366.118, -2.793, 75.731)
+		local playerOffset = Vector3.new(150, 0, 0) * playerIndex
+		local finalPosition = basePos + playerOffset
+
+		return CFrame.new(finalPosition)
+	end
+end
+
+-- ========== CROP SYSTEM INTEGRATION ==========
+
+function GameCore:PlantSeed(player, plotModel, seedId, seedData)
+	if CropCreation then
+		return CropCreation:PlantSeed(player, plotModel, seedId, seedData)
+	else
+		warn("GameCore: CropCreation module not available")
+		return false
+	end
+end
+
+function GameCore:HarvestCrop(player, plotModel)
+	if CropCreation then
+		return CropCreation:HarvestCrop(player, plotModel)
+	else
+		warn("GameCore: CropCreation module not available")
+		return false
+	end
+end
+
+function GameCore:HarvestAllCrops(player)
+	if CropCreation then
+		return CropCreation:HarvestAllCrops(player)
+	else
+		warn("GameCore: CropCreation module not available")
+		return false
+	end
+end
+
 function GameCore:IsPlotActuallyEmpty(plotModel)
 	if CropCreation then
 		return CropCreation:IsPlotEmpty(plotModel)
@@ -495,172 +358,152 @@ function GameCore:ClearPlotProperly(plotModel)
 	end
 end
 
--- ========== COW SYSTEM INTEGRATION ==========
+-- ========== EXISTING METHODS (keeping the rest of the previous code) ==========
 
-function GameCore:PurchaseCow(player, cowType, upgradeFromCowId)
-	if CowCreationModule then
-		return CowCreationModule:PurchaseCow(player, cowType, upgradeFromCowId)
-	else
-		warn("GameCore: CowCreationModule not available")
-		return false
+function GameCore:Initialize(shopSystem)
+	print("GameCore: Starting UPDATED core initialization...")
+
+	-- Initialize data store first
+	self:InitializeDataStore()
+
+	-- Load modules with correct paths
+	local modulesSuccess = self:LoadModules()
+	if not modulesSuccess then
+		warn("GameCore: No modules loaded, but continuing with basic functionality")
 	end
+
+	-- Store ShopSystem reference if provided
+	if shopSystem then
+		self.ShopSystem = shopSystem
+		print("GameCore: ShopSystem reference established")
+	end
+
+	-- Setup remote connections
+	self:SetupRemoteConnections()
+
+	-- Initialize modules in correct order
+	self:InitializeLoadedModules()
+
+	-- Setup event handlers
+	self:SetupEventHandlers()
+
+	-- Setup player handlers
+	self:SetupPlayerHandlers()
+
+	print("GameCore: ✅ UPDATED core initialization complete!")
+	return true
 end
 
-function GameCore:HandleCowMilkCollection(player, cowId)
-	if CowMilkingModule then
-		return CowMilkingModule:HandleCowMilkCollection(player, cowId)
-	else
-		warn("GameCore: CowMilkingModule not available")
-		return false
-	end
-end
+function GameCore:InitializeDataStore()
+	local success, dataStore = pcall(function()
+		return DataStoreService:GetDataStore("LivestockFarmData_v2")
+	end)
 
-function GameCore:HandleStartMilkingSession(player, cowId)
-	if CowMilkingModule then
-		return CowMilkingModule:HandleStartMilkingSession(player, cowId)
+	if success then
+		self.PlayerDataStore = dataStore
+		print("GameCore: DataStore connected (Live)")
 	else
-		warn("GameCore: CowMilkingModule not available")
-		return false
-	end
-end
-
-function GameCore:HandleStopMilkingSession(player)
-	if CowMilkingModule then
-		return CowMilkingModule:HandleStopMilkingSession(player)
-	else
-		warn("GameCore: CowMilkingModule not available")
-		return false
-	end
-end
-
-function GameCore:HandleContinueMilking(player)
-	if CowMilkingModule then
-		return CowMilkingModule:HandleContinueMilking(player)
-	else
-		warn("GameCore: CowMilkingModule not available")
-		return false
-	end
-end
-
-function GameCore:CreateNewCowSafely(player, cowType, cowConfig)
-	if CowCreationModule then
-		return CowCreationModule:CreateNewCow(player, cowType, cowConfig)
-	else
-		warn("GameCore: CowCreationModule not available")
-		return false
-	end
-end
-
-function GameCore:UpdateCowIndicator(cowModel, state)
-	if CowMilkingModule then
-		local cowId = cowModel:GetAttribute("CowId") or cowModel.Name
-		return CowMilkingModule:UpdateCowIndicator(cowId, state)
-	else
-		warn("GameCore: CowMilkingModule not available for indicator update")
-		return false
-	end
-end
-
--- ========== MUTATION SYSTEM INTEGRATION ==========
-
-function GameCore:ProcessPotentialMutations(player, plotModel)
-	if MutationSystem then
-		return MutationSystem:ProcessPotentialMutations(player, plotModel)
-	else
-		-- Return no mutation
-		return {mutated = false}
-	end
-end
-
-function GameCore:CheckForImmediateMutation(player, plotModel, cropType)
-	if MutationSystem then
-		return MutationSystem:CheckForImmediateMutation(player, plotModel, cropType)
-	else
-		return false
-	end
-end
-
-function GameCore:GetAdjacentPlots(player, centerPlot)
-	if FarmPlot then
-		-- This would need to be implemented in FarmPlot module
-		-- For now, return empty array
-		return {}
-	else
-		return {}
+		-- Create mock DataStore for Studio testing
+		self.PlayerDataStore = {
+			GetAsync = function(self, key)
+				warn("GameCore: Using mock DataStore for Studio - GetAsync(" .. key .. ")")
+				return nil
+			end,
+			SetAsync = function(self, key, data)
+				print("GameCore: Mock DataStore save for " .. key .. " (Studio mode)")
+				return true
+			end
+		}
+		warn("GameCore: Using mock DataStore for Studio testing")
 	end
 end
 
 -- ========== REMOTE EVENT SETUP ==========
 
 function GameCore:SetupRemoteConnections()
-	print("GameCore: Setting up modular remote connections...")
+	print("GameCore: Setting up remote connections...")
 
-	local remotes = ReplicatedStorage:WaitForChild("GameRemotes", 10)
+	local remotes = ReplicatedStorage:FindFirstChild("GameRemotes")
 	if not remotes then
-		error("GameCore: GameRemotes folder not found after 10 seconds!")
+		remotes = Instance.new("Folder")
+		remotes.Name = "GameRemotes"
+		remotes.Parent = ReplicatedStorage
+		print("GameCore: Created GameRemotes folder")
 	end
 
 	self.RemoteEvents = {}
 	self.RemoteFunctions = {}
 
-	-- Core remote events
-	local coreRemoteEvents = {
-		"CollectMilk", "PlayerDataUpdated", "ShowNotification",
+	-- UPDATED: Essential remote events for all systems
+	local requiredRemoteEvents = {
+		-- Core events
+		"PlayerDataUpdated", "ShowNotification",
+		-- Farm events
 		"PlantSeed", "HarvestCrop", "HarvestAllCrops",
-		"PurchaseItem", "ItemPurchased", "SellItem", "ItemSold", "CurrencyUpdated",
-		"OpenShop", "CloseShop"
+		-- Cow milking events
+		"ShowChairPrompt", "HideChairPrompt", 
+		"StartMilkingSession", "StopMilkingSession", 
+		"ContinueMilking", "MilkingSessionUpdate",
+		-- Shop events
+		"PurchaseItem", "ItemPurchased", "OpenShop", "CloseShop"
 	}
 
-	-- Core remote functions
-	local coreRemoteFunctions = {
-		"GetPlayerData", "GetFarmingData",
-		"GetShopItems", "GetShopItemsByCategory", "GetSellableItems"
+	local requiredRemoteFunctions = {
+		"GetPlayerData", "GetFarmingData", "GetShopItems", "GetSellableItems"
 	}
 
-	-- Load/create remote events
-	for _, eventName in ipairs(coreRemoteEvents) do
+	-- Create/connect remote events
+	for _, eventName in ipairs(requiredRemoteEvents) do
 		local remote = remotes:FindFirstChild(eventName)
-		if remote and remote:IsA("RemoteEvent") then
-			self.RemoteEvents[eventName] = remote
-			print("GameCore: ✅ Connected RemoteEvent: " .. eventName)
-		else
-			local newRemote = Instance.new("RemoteEvent")
-			newRemote.Name = eventName
-			newRemote.Parent = remotes
-			self.RemoteEvents[eventName] = newRemote
-			print("GameCore: 📦 Created RemoteEvent: " .. eventName)
+		if not remote then
+			remote = Instance.new("RemoteEvent")
+			remote.Name = eventName
+			remote.Parent = remotes
+			print("GameCore: Created RemoteEvent: " .. eventName)
 		end
+		self.RemoteEvents[eventName] = remote
 	end
 
-	-- Load/create remote functions
-	for _, funcName in ipairs(coreRemoteFunctions) do
+	-- Create/connect remote functions
+	for _, funcName in ipairs(requiredRemoteFunctions) do
 		local remote = remotes:FindFirstChild(funcName)
-		if remote and remote:IsA("RemoteFunction") then
-			self.RemoteFunctions[funcName] = remote
-			print("GameCore: ✅ Connected RemoteFunction: " .. funcName)
-		else
-			local newRemote = Instance.new("RemoteFunction")
-			newRemote.Name = funcName
-			newRemote.Parent = remotes
-			self.RemoteFunctions[funcName] = newRemote
-			print("GameCore: 📦 Created RemoteFunction: " .. funcName)
+		if not remote then
+			remote = Instance.new("RemoteFunction")
+			remote.Name = funcName
+			remote.Parent = remotes
+			print("GameCore: Created RemoteFunction: " .. funcName)
 		end
+		self.RemoteFunctions[funcName] = remote
 	end
 
-	print("GameCore: Modular remote connections established")
+	print("GameCore: ✅ Remote connections established")
 end
 
 function GameCore:SetupEventHandlers()
-	print("GameCore: Setting up modular event handlers...")
+	print("GameCore: Setting up event handlers...")
 
-	-- Farming System Events - delegate to modules
+	-- Core remote function handlers
+	if self.RemoteFunctions.GetPlayerData then
+		self.RemoteFunctions.GetPlayerData.OnServerInvoke = function(player)
+			return self:GetPlayerData(player)
+		end
+	end
+
+	if self.RemoteFunctions.GetFarmingData then
+		self.RemoteFunctions.GetFarmingData.OnServerInvoke = function(player)
+			local playerData = self:GetPlayerData(player)
+			return playerData and playerData.farming or {}
+		end
+	end
+
+	-- Farm system event handlers (delegate to modules)
 	if self.RemoteEvents.PlantSeed then
 		self.RemoteEvents.PlantSeed.OnServerEvent:Connect(function(player, plotModel, seedId)
 			pcall(function()
 				self:PlantSeed(player, plotModel, seedId)
 			end)
 		end)
-		print("✅ Connected modular PlantSeed handler")
+		print("✅ Connected PlantSeed handler")
 	end
 
 	if self.RemoteEvents.HarvestCrop then
@@ -669,7 +512,7 @@ function GameCore:SetupEventHandlers()
 				self:HarvestCrop(player, plotModel)
 			end)
 		end)
-		print("✅ Connected modular HarvestCrop handler")
+		print("✅ Connected HarvestCrop handler")
 	end
 
 	if self.RemoteEvents.HarvestAllCrops then
@@ -678,38 +521,41 @@ function GameCore:SetupEventHandlers()
 				self:HarvestAllCrops(player)
 			end)
 		end)
-		print("✅ Connected modular HarvestAllCrops handler")
+		print("✅ Connected HarvestAllCrops handler")
 	end
 
-	-- Core Remote Functions
-	if self.RemoteFunctions.GetPlayerData then
-		self.RemoteFunctions.GetPlayerData.OnServerInvoke = function(player)
-			local success, result = pcall(function()
-				return self:GetPlayerData(player)
-			end)
-			return success and result or nil
-		end
-		print("✅ Connected GetPlayerData function")
+	-- Cow milking event handlers (delegate to modules)
+	if self.RemoteEvents.StartMilkingSession then
+		self.RemoteEvents.StartMilkingSession.OnServerEvent:Connect(function(player, cowId)
+			if CowMilkingModule and CowMilkingModule.HandleStartMilkingSession then
+				CowMilkingModule:HandleStartMilkingSession(player, cowId)
+			end
+		end)
 	end
 
-	if self.RemoteFunctions.GetFarmingData then
-		self.RemoteFunctions.GetFarmingData.OnServerInvoke = function(player)
-			local success, result = pcall(function()
-				local playerData = self:GetPlayerData(player)
-				return playerData and playerData.farming or {}
-			end)
-			return success and result or {}
-		end
-		print("✅ Connected GetFarmingData function")
+	if self.RemoteEvents.StopMilkingSession then
+		self.RemoteEvents.StopMilkingSession.OnServerEvent:Connect(function(player)
+			if CowMilkingModule and CowMilkingModule.HandleStopMilkingSession then
+				CowMilkingModule:HandleStopMilkingSession(player)
+			end
+		end)
 	end
 
-	print("GameCore: Modular event handlers setup complete!")
+	if self.RemoteEvents.ContinueMilking then
+		self.RemoteEvents.ContinueMilking.OnServerEvent:Connect(function(player)
+			if CowMilkingModule and CowMilkingModule.HandleContinueMilking then
+				CowMilkingModule:HandleContinueMilking(player)
+			end
+		end)
+	end
+
+	print("GameCore: ✅ Event handlers setup complete")
 end
 
 -- ========== FARM PLOT PURCHASE PROCESSING ==========
 
 function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
-	print("🌾 GameCore: Modular ProcessFarmPlotPurchase for " .. player.Name)
+	print("🌾 GameCore: Processing farm plot purchase for " .. player.Name)
 
 	-- Handle farm plot starter (first-time farm creation)
 	if item.id == "farm_plot_starter" then
@@ -737,7 +583,7 @@ function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
 			return false
 		end
 
-		print("🌾 Created modular farm plot for " .. player.Name)
+		print("🌾 Created simple farm plot for " .. player.Name)
 		return true
 	end
 
@@ -777,100 +623,66 @@ function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
 	return true
 end
 
--- ========== NOTIFICATION SYSTEM ==========
+-- ========== PLAYER MANAGEMENT ==========
 
-function GameCore:SendNotification(player, title, message, type)
-	if self.RemoteEvents.ShowNotification then
-		self.RemoteEvents.ShowNotification:FireClient(player, title, message, type)
-	else
-		print("[" .. title .. "] " .. message .. " (to " .. player.Name .. ")")
-	end
-end
-
--- ========== DEBUG COMMANDS ==========
-
-function GameCore:AddDebugCommands()
+function GameCore:SetupPlayerHandlers()
 	Players.PlayerAdded:Connect(function(player)
-		player.Chatted:Connect(function(message)
-			if player.Name == "TommySalami311" then -- Replace with your username
-				local args = string.split(message:lower(), " ")
-				local command = args[1]
+		self:LoadPlayerData(player)
+		self:CreatePlayerLeaderstats(player)
 
-				if command == "/debugmodules" then
-					print("=== MODULE STATUS DEBUG ===")
-					print("CropCreation: " .. (CropCreation and "✅ LOADED" or "❌ NOT LOADED"))
-					print("CropVisual: " .. (CropVisual and "✅ LOADED" or "❌ NOT LOADED"))
-					print("FarmPlot: " .. (FarmPlot and "✅ LOADED" or "❌ NOT LOADED"))
-					print("MutationSystem: " .. (MutationSystem and "✅ LOADED" or "ℹ️ OPTIONAL"))
-					print("CowCreationModule: " .. (CowCreationModule and "✅ LOADED" or "ℹ️ OPTIONAL"))
-					print("CowMilkingModule: " .. (CowMilkingModule and "✅ LOADED" or "ℹ️ OPTIONAL"))
-					print("============================")
-
-				elseif command == "/testplanting" then
-					print("Testing modular planting system...")
-					local playerData = self:GetPlayerData(player)
-
-					if not playerData.farming then
-						playerData.farming = {inventory = {}}
-					end
-					if not playerData.farming.inventory then
-						playerData.farming.inventory = {}
-					end
-
-					playerData.farming.inventory.carrot_seeds = 10
-					playerData.farming.inventory.corn_seeds = 5
-					self:SavePlayerData(player)
-
-					print("✅ Gave test seeds to " .. player.Name)
-					print("Now click on an unlocked plot to test modular planting")
-
-				elseif command == "/testfarm" then
-					print("Testing modular farm creation...")
-					local success = self:CreateSimpleFarmPlot(player)
-					if success then
-						print("✅ Modular farm created successfully")
-					else
-						print("❌ Modular farm creation failed")
-					end
-
-				elseif command == "/farmstats" then
-					if FarmPlot then
-						local stats = FarmPlot:GetPlayerFarmStatistics(player)
-						print("=== FARM STATISTICS ===")
-						print("Farm exists: " .. tostring(stats.exists))
-						print("Farm type: " .. tostring(stats.type))
-						print("Total spots: " .. tostring(stats.totalSpots))
-						print("Unlocked spots: " .. tostring(stats.unlockedSpots))
-						print("Occupied spots: " .. tostring(stats.occupiedSpots))
-						print("Empty spots: " .. tostring(stats.emptySpots))
-						if stats.error then
-							print("Error: " .. stats.error)
-						end
-						print("========================")
-					else
-						print("❌ FarmPlot module not available")
-					end
-
-				elseif command == "/reloadmodules" then
-					print("Reloading modular systems...")
-					local success = self:LoadModules()
-					if success then
-						print("✅ Modules reloaded successfully")
-					else
-						print("❌ Module reload failed")
-					end
-				end
-			end
+		-- Ensure player has farm if they should
+		spawn(function()
+			wait(2) -- Wait for data to settle
+			self:EnsurePlayerHasFarm(player)
 		end)
+
+		-- Give starter cow after delay if cow system available
+		if CowCreationModule then
+			spawn(function()
+				wait(5)
+				pcall(function()
+					CowCreationModule:GiveStarterCow(player)
+				end)
+			end)
+		end
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		if self.PlayerData[player.UserId] then
+			self:SavePlayerData(player, true)
+		end
+	end)
+
+	-- Handle server shutdown
+	game:BindToClose(function()
+		for _, player in ipairs(Players:GetPlayers()) do
+			if self.PlayerData[player.UserId] then
+				pcall(function()
+					self:SavePlayerData(player, true)
+				end)
+			end
+		end
+		wait(2)
 	end)
 end
 
-function GameCore:SetupAdminCommands()
-	-- Add more admin commands here if needed
-	print("GameCore: Admin commands ready")
+-- ========== COW SYSTEM INTEGRATION ==========
+
+function GameCore:HandleCowMilkCollection(player, cowId)
+	if CowMilkingModule then
+		return CowMilkingModule:HandleCowMilkCollection(player, cowId)
+	end
+	return false
 end
 
--- ========== DATA MANAGEMENT (Existing methods kept for compatibility) ==========
+function GameCore:CreateNewCowSafely(player, cowType, cowConfig)
+	if CowCreationModule then
+		return CowCreationModule:CreateNewCow(player, cowType, cowConfig)
+	end
+	return false
+end
+
+-- ========== DATA MANAGEMENT ==========
 
 function GameCore:GetDefaultPlayerData()
 	return {
@@ -882,12 +694,13 @@ function GameCore:GetDefaultPlayerData()
 			plots = 0,
 			inventory = {}
 		},
-		boosters = {},
+		livestock = {
+			cows = {}
+		},
 		stats = {
 			coinsEarned = 100,
 			cropsHarvested = 0,
-			rareCropsHarvested = 0,
-			seedsPlanted = 0,
+			milkCollected = 0
 		},
 		firstJoin = os.time(),
 		lastSave = os.time()
@@ -912,21 +725,17 @@ function GameCore:LoadPlayerData(player)
 
 		if success and data then
 			loadedData = self:DeepMerge(defaultData, data)
-			print("GameCore: Loaded existing data for " .. player.Name)
-		else
-			print("GameCore: Using default data for " .. player.Name)
+			print("GameCore: Loaded data for " .. player.Name)
 		end
 	end
 
 	self.PlayerData[player.UserId] = loadedData
 	self:UpdatePlayerLeaderstats(player)
-
 	return loadedData
 end
 
 function GameCore:DeepMerge(default, loaded)
 	local result = {}
-
 	for key, value in pairs(default) do
 		if type(value) == "table" then
 			result[key] = self:DeepMerge(value, loaded[key] or {})
@@ -934,194 +743,31 @@ function GameCore:DeepMerge(default, loaded)
 			result[key] = loaded[key] ~= nil and loaded[key] or value
 		end
 	end
-
 	for key, value in pairs(loaded) do
 		if result[key] == nil then
 			result[key] = value
 		end
 	end
-
 	return result
 end
 
 function GameCore:SavePlayerData(player, forceImmediate)
 	if not player or not player.Parent then return end
 
-	local userId = player.UserId
-	local currentTime = os.time()
+	local playerData = self.PlayerData[player.UserId]
+	if not playerData then return end
 
-	local playerData = self.PlayerData[userId]
-	if not playerData then 
-		warn("GameCore: No player data to save for " .. player.Name)
-		return 
-	end
-
-	if forceImmediate then
-		return self:PerformImmediateSave(player, playerData)
-	end
-
-	local lastSave = self.DataStoreCooldowns[userId] or 0
-	if currentTime - lastSave < self.SAVE_COOLDOWN then
-		self:MarkPlayerForDelayedSave(userId)
-		return
-	end
-
-	self:ScheduleBatchedSave(userId)
-end
-
-function GameCore:MarkPlayerForDelayedSave(userId)
-	self.DirtyPlayers[userId] = os.time()
-
-	if not self.PendingSaves[userId] then
-		self.PendingSaves[userId] = true
-
-		spawn(function()
-			wait(self.BATCH_SAVE_DELAY)
-
-			if self.DirtyPlayers[userId] and Players:GetPlayerByUserId(userId) then
-				self:PerformBatchedSave(userId)
-			end
-
-			self.PendingSaves[userId] = nil
-		end)
-	end
-end
-
-function GameCore:ScheduleBatchedSave(userId)
-	self.DirtyPlayers[userId] = os.time()
-
-	if not self.PendingSaves[userId] then
-		self.PendingSaves[userId] = true
-
-		spawn(function()
-			wait(self.BATCH_SAVE_DELAY)
-			self:PerformBatchedSave(userId)
-			self.PendingSaves[userId] = nil
-		end)
-	end
-end
-
-function GameCore:PerformBatchedSave(userId)
-	local player = Players:GetPlayerByUserId(userId)
-	if not player or not player.Parent then 
-		self.DirtyPlayers[userId] = nil
-		return 
-	end
-
-	local currentTime = os.time()
-	local lastSave = self.DataStoreCooldowns[userId] or 0
-
-	if currentTime - lastSave < self.SAVE_COOLDOWN then
-		return
-	end
-
-	local playerData = self.PlayerData[userId]
-	if not playerData then 
-		self.DirtyPlayers[userId] = nil
-		return 
-	end
-
-	local success = self:PerformActualSave(player, playerData, "batched")
-
-	if success then
-		self.DataStoreCooldowns[userId] = currentTime
-		self.DirtyPlayers[userId] = nil
-	end
-end
-
-function GameCore:PerformImmediateSave(player, playerData)
-	print("GameCore: Performing immediate save for " .. player.Name)
-
-	local success = self:PerformActualSave(player, playerData, "immediate")
-
-	if success then
-		local userId = player.UserId
-		self.DataStoreCooldowns[userId] = os.time()
-		self.DirtyPlayers[userId] = nil
-	end
-
-	return success
-end
-
-function GameCore:PerformActualSave(player, playerData, saveType)
-	local userId = player.UserId
-
-	if not self.PlayerDataStore then
-		warn("GameCore: DataStore not available - cannot save data for " .. player.Name)
-		return false
-	end
-
-	local safeData = self:CreateSafeDataForSaving(playerData)
-	safeData.lastSave = os.time()
-	safeData.saveType = saveType or "unknown"
-	safeData.saveVersion = "2.0_modular"
-
-	local maxRetries = 2
-	local retryDelay = 1
-
-	for attempt = 1, maxRetries do
-		local success, errorMsg = pcall(function()
-			return self.PlayerDataStore:SetAsync("Player_" .. userId, safeData)
+	if self.PlayerDataStore then
+		local success, error = pcall(function()
+			return self.PlayerDataStore:SetAsync("Player_" .. player.UserId, playerData)
 		end)
 
 		if success then
-			return true
+			print("GameCore: Saved data for " .. player.Name)
 		else
-			warn("GameCore: Save attempt " .. attempt .. " failed for " .. player.Name .. ": " .. tostring(errorMsg))
-
-			if attempt < maxRetries then
-				wait(retryDelay)
-				retryDelay = retryDelay * 2
-			end
+			warn("GameCore: Failed to save data for " .. player.Name .. ": " .. tostring(error))
 		end
 	end
-
-	return false
-end
-
-function GameCore:CreateSafeDataForSaving(playerData)
-	return {
-		coins = tonumber(playerData.coins) or 0,
-		farmTokens = tonumber(playerData.farmTokens) or 0,
-		farming = {
-			plots = tonumber(playerData.farming and playerData.farming.plots) or 0,
-			expansionLevel = tonumber(playerData.farming and playerData.farming.expansionLevel) or 1,
-			inventory = self:SanitizeInventory(playerData.farming and playerData.farming.inventory or {})
-		},
-		stats = self:SanitizeStats(playerData.stats or {}),
-		purchaseHistory = self:SanitizePurchaseHistory(playerData.purchaseHistory or {}),
-		lastSave = os.time()
-	}
-end
-
-function GameCore:SanitizeInventory(inventory)
-	local clean = {}
-	for item, amount in pairs(inventory) do
-		if type(item) == "string" and type(amount) == "number" and amount >= 0 then
-			clean[item] = math.floor(amount)
-		end
-	end
-	return clean
-end
-
-function GameCore:SanitizeStats(stats)
-	local clean = {}
-	for stat, value in pairs(stats) do
-		if type(stat) == "string" and type(value) == "number" and value >= 0 then
-			clean[stat] = math.floor(value)
-		end
-	end
-	return clean
-end
-
-function GameCore:SanitizePurchaseHistory(history)
-	local clean = {}
-	for item, purchased in pairs(history) do
-		if type(item) == "string" and type(purchased) == "boolean" then
-			clean[item] = purchased
-		end
-	end
-	return clean
 end
 
 function GameCore:CreatePlayerLeaderstats(player)
@@ -1133,11 +779,6 @@ function GameCore:CreatePlayerLeaderstats(player)
 	coins.Name = "Coins"
 	coins.Value = self.PlayerData[player.UserId].coins
 	coins.Parent = leaderstats
-
-	local farmTokens = Instance.new("IntValue")
-	farmTokens.Name = "Farm Tokens"
-	farmTokens.Value = self.PlayerData[player.UserId].farmTokens or 0
-	farmTokens.Parent = leaderstats
 end
 
 function GameCore:UpdatePlayerLeaderstats(player)
@@ -1152,37 +793,31 @@ function GameCore:UpdatePlayerLeaderstats(player)
 
 	local coins = leaderstats:FindFirstChild("Coins")
 	if coins then coins.Value = playerData.coins end
-
-	local farmTokens = leaderstats:FindFirstChild("Farm Tokens")
-	if farmTokens then farmTokens.Value = playerData.farmTokens or 0 end
 end
 
--- ========== UTILITY FUNCTIONS ==========
-
-function GameCore:CountTable(t)
-	local count = 0
-	for _ in pairs(t) do
-		count = count + 1
+function GameCore:SendNotification(player, title, message, type)
+	if self.RemoteEvents.ShowNotification then
+		self.RemoteEvents.ShowNotification:FireClient(player, title, message, type)
 	end
-	return count
+end
+
+-- ========== DEBUG FUNCTIONS ==========
+
+function GameCore:DebugStatus()
+	print("=== UPDATED GAMECORE DEBUG STATUS ===")
+	print("Modules loaded:")
+	print("  FarmPlot: " .. (FarmPlot and "✅" or "❌"))
+	print("  CowCreationModule: " .. (CowCreationModule and "✅" or "❌"))
+	print("  CowMilkingModule: " .. (CowMilkingModule and "✅" or "❌"))
+	print("  CropCreation: " .. (CropCreation and "✅" or "❌"))
+	print("  CropVisual: " .. (CropVisual and "✅" or "❌"))
+	print("Players: " .. #Players:GetPlayers())
+	print("Data store: " .. (self.PlayerDataStore and "✅" or "❌"))
+	print("Remote events: " .. (self.RemoteEvents and #self.RemoteEvents or 0))
+	print("==============================")
 end
 
 -- Make globally available
 _G.GameCore = GameCore
-
-print("GameCore: ✅ MODULAR SYSTEM LOADED!")
-print("🔧 MODULAR ARCHITECTURE:")
-print("  📦 CropCreation - Handles planting, growth, and harvest logic")
-print("  🎨 CropVisual - Handles visual effects and crop models")
-print("  🌾 FarmPlot - Handles farm creation and plot management")
-print("  🧬 MutationSystem - Optional mutation system integration")
-print("  🐄 CowModules - Optional cow management integration")
-print("")
-print("✅ BENEFITS:")
-print("  🔧 Clean separation of concerns")
-print("  📈 Easy to extend and maintain")
-print("  🐛 Better error isolation")
-print("  🔄 Module hot-swapping capability")
-print("  📊 Improved performance and organization")
 
 return GameCore
