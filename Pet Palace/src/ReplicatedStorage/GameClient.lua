@@ -1025,8 +1025,9 @@ function GameClient:SetupRemoteConnections()
 		"GetPlayerData", "GetFarmingData",
 
 		-- Shop functions (enhanced for tabbed system)
-		"GetShopItems", "GetSellableItems" -- REMOVED GetShopItemsByCategory
+		"GetShopItems", "GetShopItemsByCategory", "GetSellableItems" -- ADD GetSellableItems HERE
 	}
+
 
 	-- Load remote events
 	for _, eventName in ipairs(requiredRemoteEvents) do
@@ -1123,6 +1124,13 @@ end
 
 function GameClient:SetupProximitySystemHandlers()
 	print("GameClient: Setting up proximity system handlers...")
+
+	if self.RemoteEvents.OpenShop then
+		self.RemoteEvents.OpenShop.OnClientEvent:Connect(function()
+			print("GameClient: Proximity shop triggered - opening tabbed shop menu")
+			self:OpenShopProximity()
+		end)
+	end
 
 	if self.RemoteEvents.CloseShop then
 		self.RemoteEvents.CloseShop.OnClientEvent:Connect(function()
@@ -1901,12 +1909,7 @@ function GameClient:DebugShopCache()
 	for category, data in pairs(self.Cache.ShopTabCache or {}) do
 		print("  " .. category .. ": " .. #data.items .. " items (age: " .. (tick() - data.timestamp) .. "s)")
 	end
-	if self.RemoteEvents.OpenShop then
-		self.RemoteEvents.OpenShop.OnClientEvent:Connect(function()
-			print("🛒 GameClient: OpenShop event received!")
-			-- Don't handle here - let UIManager handle it
-		end)
-	end
+
 	-- Test sellable items
 	if self.GetSellableItems then
 		local sellableItems = self:GetSellableItems()
