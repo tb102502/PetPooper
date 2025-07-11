@@ -1,13 +1,12 @@
 --[[
-    FIXED CowCreationModule.lua - Works with Existing Cow Models
+    UPDATED CowCreationModule.lua - Auto-Assign Workspace Cow
     Place in: ServerScriptService/CowCreationModule.lua
     
-    FIXES:
-    ✅ Works with existing cow models in workspace
-    ✅ No cow creation - only detection and setup
-    ✅ Proper GetActiveCows method
-    ✅ Player cow ownership system
-    ✅ Integration with milking system
+    UPDATES:
+    ✅ Automatically assigns workspace cow to joining players
+    ✅ Ensures every player gets the cow for milking
+    ✅ Better cow detection and setup
+    ✅ Improved player assignment logic
 ]]
 
 local CowCreationModule = {}
@@ -28,7 +27,7 @@ local ItemConfig = nil
 -- ========== INITIALIZATION ==========
 
 function CowCreationModule:Initialize(gameCore, itemConfig)
-	print("CowCreationModule: Initializing with existing cow detection...")
+	print("CowCreationModule: Initializing with workspace cow auto-assignment...")
 
 	GameCore = gameCore
 	ItemConfig = itemConfig
@@ -36,7 +35,7 @@ function CowCreationModule:Initialize(gameCore, itemConfig)
 	-- Find and setup existing cows
 	self:DetectExistingCows()
 
-	-- Setup player handlers
+	-- Setup player handlers with auto-assignment
 	self:SetupPlayerHandlers()
 
 	-- Monitor for new cows that might be added
@@ -46,7 +45,7 @@ function CowCreationModule:Initialize(gameCore, itemConfig)
 	return true
 end
 
--- ========== COW DETECTION ==========
+-- ========== ENHANCED COW DETECTION ==========
 
 function CowCreationModule:DetectExistingCows()
 	print("CowCreationModule: Detecting existing cows in workspace...")
@@ -59,7 +58,7 @@ function CowCreationModule:DetectExistingCows()
 			local cowId = self:SetupExistingCow(obj)
 			if cowId then
 				cowsFound = cowsFound + 1
-				print("✅ Setup existing cow: " .. cowId)
+				print("✅ Setup existing cow: " .. cowId .. " at " .. tostring(obj:GetPivot().Position))
 			end
 		end
 	end
@@ -80,6 +79,13 @@ function CowCreationModule:DetectExistingCows()
 	end
 
 	print("CowCreationModule: Found and setup " .. cowsFound .. " existing cows")
+
+	-- If we found cows, assign them to any existing players
+	if cowsFound > 0 then
+		for _, player in pairs(Players:GetPlayers()) do
+			self:EnsurePlayerHasCow(player)
+		end
+	end
 end
 
 function CowCreationModule:IsCowModel(obj)
@@ -89,7 +95,7 @@ function CowCreationModule:IsCowModel(obj)
 	end
 
 	local name = obj.Name:lower()
-	return name == "cow" or name:find("cow") or name:find("cattle")
+	return name == "cow" or name:find("cow") or name:find("cattle") or name:find("milk")
 end
 
 function CowCreationModule:SetupExistingCow(cowModel)
@@ -98,23 +104,42 @@ function CowCreationModule:SetupExistingCow(cowModel)
 	-- Store cow reference
 	self.ActiveCows[cowId] = cowModel
 
-	-- Set attributes
+	-- Set attributes for identification
 	cowModel:SetAttribute("CowId", cowId)
 	cowModel:SetAttribute("IsSetup", true)
 	cowModel:SetAttribute("Tier", "basic")
 
-	-- Default cow data
+	-- Default cow data for milking system
 	cowModel:SetAttribute("MilkAmount", 1)
 	cowModel:SetAttribute("Cooldown", 60)
 	cowModel:SetAttribute("LastMilkCollection", 0)
 
-	print("CowCreationModule: Setup cow " .. cowId .. " at " .. tostring(cowModel:GetPivot().Position))
+	-- Add visual indicator (optional)
+	if not cowModel:FindFirstChild("NameTag") then
+		local nameTag = Instance.new("BillboardGui")
+		nameTag.Name = "NameTag"
+		nameTag.Size = UDim2.new(0, 100, 0, 30)
+		nameTag.StudsOffset = Vector3.new(0, 3, 0)
+		nameTag.Parent = cowModel
 
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Size = UDim2.new(1, 0, 1, 0)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.Text = "🐄 Cow"
+		nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+		nameLabel.TextScaled = true
+		nameLabel.Font = Enum.Font.GothamBold
+		nameLabel.TextStrokeTransparency = 0
+		nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		nameLabel.Parent = nameTag
+	end
+
+	print("CowCreationModule: Setup cow " .. cowId .. " at " .. tostring(cowModel:GetPivot().Position))
 	return cowId
 end
 
 function CowCreationModule:GenerateCowId(cowModel)
-	-- Generate unique ID for cow
+	-- Generate unique ID for cow based on position
 	local position = cowModel:GetPivot().Position
 	local baseId = "cow_" .. math.floor(position.X) .. "_" .. math.floor(position.Z)
 
@@ -129,7 +154,62 @@ function CowCreationModule:GenerateCowId(cowModel)
 	return cowId
 end
 
--- ========== COW OWNERSHIP ==========
+-- ========== ENHANCED PLAYER COW ASSIGNMENT ==========
+
+function CowCreationModule:EnsurePlayerHasCow(player)
+	print("CowCreationModule: Ensuring " .. player.Name .. " has a cow...")
+
+	local userId = player.UserId
+
+	-- Check if player already has a cow
+	if self.PlayerCows[userId] and #self.PlayerCows[userId] > 0 then
+		print("CowCreationModule: " .. player.Name .. " already has " .. #self.PlayerCows[userId] .. " cow(s)")
+		return true
+	end
+
+	-- Find available cow or assign existing cow to this player
+	local assignedCow = self:AssignAvailableCowToPlayer(player)
+
+	if assignedCow then
+		print("CowCreationModule: ✅ " .. player.Name .. " assigned cow: " .. assignedCow)
+		return true
+	else
+		print("CowCreationModule: ⚠️ No cows available for " .. player.Name)
+		return false
+	end
+end
+
+function CowCreationModule:AssignAvailableCowToPlayer(player)
+	-- Strategy: If there's only one cow, everyone can use it
+	-- If multiple cows, assign unowned ones first, then allow sharing
+
+	local availableCows = {}
+
+	-- First, look for unowned cows
+	for cowId, cowModel in pairs(self.ActiveCows) do
+		if not self.CowOwnership[cowId] and cowModel.Parent then
+			table.insert(availableCows, cowId)
+		end
+	end
+
+	-- If no unowned cows, allow sharing (common for single cow setups)
+	if #availableCows == 0 then
+		for cowId, cowModel in pairs(self.ActiveCows) do
+			if cowModel.Parent then
+				table.insert(availableCows, cowId)
+			end
+		end
+	end
+
+	-- Assign the first available cow
+	if #availableCows > 0 then
+		local cowId = availableCows[1]
+		self:AssignCowToPlayer(player, cowId)
+		return cowId
+	end
+
+	return nil
+end
 
 function CowCreationModule:AssignCowToPlayer(player, cowId)
 	local userId = player.UserId
@@ -139,14 +219,25 @@ function CowCreationModule:AssignCowToPlayer(player, cowId)
 		self.PlayerCows[userId] = {}
 	end
 
-	-- Add cow to player's list
+	-- Add cow to player's list (allow multiple players to share cows)
 	table.insert(self.PlayerCows[userId], cowId)
-	self.CowOwnership[cowId] = userId
 
-	-- Set model attribute
+	-- Set primary ownership (for display purposes)
+	if not self.CowOwnership[cowId] then
+		self.CowOwnership[cowId] = userId
+	end
+
+	-- Set model attributes
 	local cowModel = self.ActiveCows[cowId]
 	if cowModel then
-		cowModel:SetAttribute("Owner", player.Name)
+		-- Update name tag to show assignment
+		local nameTag = cowModel:FindFirstChild("NameTag")
+		if nameTag and nameTag:FindFirstChild("TextLabel") then
+			nameTag.TextLabel.Text = "🐄 " .. player.Name .. "'s Cow"
+		end
+
+		-- Set owner attribute (but allow sharing)
+		cowModel:SetAttribute("PrimaryOwner", player.Name)
 		cowModel:SetAttribute("OwnerUserId", userId)
 	end
 
@@ -178,54 +269,71 @@ function CowCreationModule:AssignCowToPlayer(player, cowId)
 	return true
 end
 
-function CowCreationModule:GiveStarterCow(player)
-	print("CowCreationModule: Giving starter cow to " .. player.Name)
+-- ========== ENHANCED PLAYER HANDLERS ==========
 
-	-- Check if player already has cows
-	local userId = player.UserId
-	if self.PlayerCows[userId] and #self.PlayerCows[userId] > 0 then
-		print("CowCreationModule: Player " .. player.Name .. " already has cows")
-		return false
-	end
+function CowCreationModule:SetupPlayerHandlers()
+	print("CowCreationModule: Setting up enhanced player handlers...")
 
-	-- Find an unowned cow
-	local availableCow = self:FindUnownedCow()
-	if availableCow then
-		self:AssignCowToPlayer(player, availableCow)
+	Players.PlayerAdded:Connect(function(player)
+		print("CowCreationModule: Player " .. player.Name .. " joined, assigning cow...")
 
-		if GameCore then
-			GameCore:SendNotification(player, "🐄 Starter Cow!", 
-				"You've been given a cow! Find it near the milking area.", "success")
+		-- Wait a moment for other systems to initialize
+		spawn(function()
+			wait(2)
+			self:EnsurePlayerHasCow(player)
+
+			-- Send notification if cow assigned
+			if GameCore and GameCore.SendNotification then
+				GameCore:SendNotification(player, "🐄 Cow Assigned!", 
+					"Your cow is ready for milking! Look for the MilkingChair nearby.", "success")
+			end
+		end)
+	end)
+
+	Players.PlayerRemoving:Connect(function(player)
+		-- Clean up player cow assignments if they were the only owner
+		local userId = player.UserId
+		if self.PlayerCows[userId] then
+			for _, cowId in ipairs(self.PlayerCows[userId]) do
+				-- Only remove ownership if this player was the primary owner
+				if self.CowOwnership[cowId] == userId then
+					-- Check if any other players have this cow
+					local hasOtherOwners = false
+					for otherUserId, cowList in pairs(self.PlayerCows) do
+						if otherUserId ~= userId then
+							for _, otherCowId in ipairs(cowList) do
+								if otherCowId == cowId then
+									hasOtherOwners = true
+									-- Transfer primary ownership
+									self.CowOwnership[cowId] = otherUserId
+									break
+								end
+							end
+						end
+						if hasOtherOwners then break end
+					end
+
+					-- If no other owners, remove ownership
+					if not hasOtherOwners then
+						self.CowOwnership[cowId] = nil
+						local cowModel = self.ActiveCows[cowId]
+						if cowModel then
+							local nameTag = cowModel:FindFirstChild("NameTag")
+							if nameTag and nameTag:FindFirstChild("TextLabel") then
+								nameTag.TextLabel.Text = "🐄 Available Cow"
+							end
+						end
+					end
+				end
+			end
+
+			-- Clear player's cow list
+			self.PlayerCows[userId] = nil
 		end
-
-		return true
-	else
-		print("CowCreationModule: No available cows for " .. player.Name)
-		return false
-	end
+	end)
 end
 
-function CowCreationModule:ForceGiveStarterCow(player)
-	-- Force give a cow even if player has one
-	local availableCow = self:FindUnownedCow()
-	if availableCow then
-		self:AssignCowToPlayer(player, availableCow)
-		return true
-	end
-	return false
-end
-
-function CowCreationModule:FindUnownedCow()
-	-- Find a cow that doesn't belong to anyone
-	for cowId, cowModel in pairs(self.ActiveCows) do
-		if not self.CowOwnership[cowId] then
-			return cowId
-		end
-	end
-	return nil
-end
-
--- ========== COW DATA MANAGEMENT ==========
+-- ========== COW ACCESS METHODS ==========
 
 function CowCreationModule:GetActiveCows()
 	return self.ActiveCows
@@ -233,6 +341,27 @@ end
 
 function CowCreationModule:GetCowModel(cowId)
 	return self.ActiveCows[cowId]
+end
+
+function CowCreationModule:GetPlayerCows(player)
+	local userId = player.UserId
+	return self.PlayerCows[userId] or {}
+end
+
+function CowCreationModule:DoesPlayerOwnCow(player, cowId)
+	-- Allow any player to use any cow (for shared cow setups)
+	local userId = player.UserId
+	if not self.PlayerCows[userId] then
+		return false
+	end
+
+	for _, playerCowId in ipairs(self.PlayerCows[userId]) do
+		if playerCowId == cowId then
+			return true
+		end
+	end
+
+	return false
 end
 
 function CowCreationModule:GetCowData(player, cowId)
@@ -246,27 +375,10 @@ function CowCreationModule:GetCowData(player, cowId)
 	return playerData.livestock.cows[cowId]
 end
 
-function CowCreationModule:GetPlayerCows(player)
-	local userId = player.UserId
-	return self.PlayerCows[userId] or {}
-end
-
-function CowCreationModule:GetCowOwner(cowId)
-	local userId = self.CowOwnership[cowId]
-	if userId then
-		return Players:GetPlayerByUserId(userId)
-	end
-	return nil
-end
-
-function CowCreationModule:DoesPlayerOwnCow(player, cowId)
-	return self.CowOwnership[cowId] == player.UserId
-end
-
--- ========== COW MONITORING ==========
+-- ========== MONITORING AND MAINTENANCE ==========
 
 function CowCreationModule:StartCowMonitoring()
-	print("CowCreationModule: Starting cow monitoring...")
+	print("CowCreationModule: Starting enhanced cow monitoring...")
 
 	spawn(function()
 		while true do
@@ -277,6 +389,14 @@ function CowCreationModule:StartCowMonitoring()
 
 			-- Validate existing cows
 			self:ValidateExistingCows()
+
+			-- Ensure all players have cows
+			for _, player in pairs(Players:GetPlayers()) do
+				if not self.PlayerCows[player.UserId] or #self.PlayerCows[player.UserId] == 0 then
+					print("CowCreationModule: Re-assigning cow to " .. player.Name)
+					self:EnsurePlayerHasCow(player)
+				end
+			end
 		end
 	end)
 end
@@ -285,7 +405,15 @@ function CowCreationModule:CheckForNewCows()
 	for _, obj in pairs(workspace:GetChildren()) do
 		if self:IsCowModel(obj) and not obj:GetAttribute("IsSetup") then
 			print("CowCreationModule: Found new cow, setting up...")
-			self:SetupExistingCow(obj)
+			local cowId = self:SetupExistingCow(obj)
+			if cowId then
+				-- Assign to players who don't have cows
+				for _, player in pairs(Players:GetPlayers()) do
+					if not self.PlayerCows[player.UserId] or #self.PlayerCows[player.UserId] == 0 then
+						self:AssignCowToPlayer(player, cowId)
+					end
+				end
+			end
 		end
 	end
 end
@@ -315,11 +443,11 @@ function CowCreationModule:CleanupCow(cowId)
 	local userId = self.CowOwnership[cowId]
 	self.CowOwnership[cowId] = nil
 
-	-- Remove from player's cow list
-	if userId and self.PlayerCows[userId] then
-		for i, playerCowId in ipairs(self.PlayerCows[userId]) do
+	-- Remove from all players' cow lists
+	for playerUserId, cowList in pairs(self.PlayerCows) do
+		for i, playerCowId in ipairs(cowList) do
 			if playerCowId == cowId then
-				table.remove(self.PlayerCows[userId], i)
+				table.remove(cowList, i)
 				break
 			end
 		end
@@ -338,80 +466,56 @@ function CowCreationModule:CleanupCow(cowId)
 	end
 end
 
--- ========== PLAYER HANDLERS ==========
+-- ========== MANUAL ASSIGNMENT METHODS ==========
 
-function CowCreationModule:SetupPlayerHandlers()
-	print("CowCreationModule: Setting up player handlers...")
-
-	Players.PlayerAdded:Connect(function(player)
-		-- Give starter cow after delay
-		spawn(function()
-			wait(5)
-			self:GiveStarterCow(player)
-		end)
-	end)
-
-	Players.PlayerRemoving:Connect(function(player)
-		-- Could implement cow cleanup here if needed
-		-- For now, leave cows in world for other players
-	end)
-end
-
--- ========== UTILITY FUNCTIONS ==========
-
-function CowCreationModule:CountPlayerCows(player)
-	local userId = player.UserId
-	return self.PlayerCows[userId] and #self.PlayerCows[userId] or 0
-end
-
-function CowCreationModule:GetCowPosition(cowId)
-	local cowModel = self.ActiveCows[cowId]
-	if cowModel then
-		return cowModel:GetPivot().Position
+function CowCreationModule:ForceAssignCowToPlayer(player, cowId)
+	-- Force assign a specific cow to a player (for testing/admin use)
+	if self.ActiveCows[cowId] then
+		self:AssignCowToPlayer(player, cowId)
+		return true
 	end
-	return nil
+	return false
 end
 
-function CowCreationModule:FindNearestPlayerCow(player, position, maxDistance)
-	maxDistance = maxDistance or 50
-	local userId = player.UserId
-	local playerCows = self.PlayerCows[userId] or {}
+function CowCreationModule:ReassignAllCows()
+	-- Reassign all cows to current players (for admin use)
+	local allPlayers = Players:GetPlayers()
+	local allCows = {}
 
-	local nearestCow = nil
-	local nearestDistance = math.huge
-
-	for _, cowId in ipairs(playerCows) do
-		local cowModel = self.ActiveCows[cowId]
-		if cowModel then
-			local cowPosition = cowModel:GetPivot().Position
-			local distance = (position - cowPosition).Magnitude
-
-			if distance < nearestDistance and distance <= maxDistance then
-				nearestDistance = distance
-				nearestCow = cowId
-			end
-		end
+	for cowId, _ in pairs(self.ActiveCows) do
+		table.insert(allCows, cowId)
 	end
 
-	return nearestCow, nearestDistance
+	-- Clear existing assignments
+	self.PlayerCows = {}
+	self.CowOwnership = {}
+
+	-- Reassign
+	for i, player in ipairs(allPlayers) do
+		local cowIndex = ((i - 1) % #allCows) + 1
+		local cowId = allCows[cowIndex]
+		self:AssignCowToPlayer(player, cowId)
+	end
+
+	print("CowCreationModule: Reassigned all cows to current players")
 end
 
 -- ========== DEBUG FUNCTIONS ==========
 
 function CowCreationModule:DebugStatus()
-	print("=== COW CREATION MODULE DEBUG ===")
+	print("=== ENHANCED COW CREATION DEBUG ===")
 	print("Active cows: " .. self:CountTable(self.ActiveCows))
 	print("Players with cows: " .. self:CountTable(self.PlayerCows))
 	print("Ownership mappings: " .. self:CountTable(self.CowOwnership))
 
 	print("\nCow details:")
 	for cowId, cowModel in pairs(self.ActiveCows) do
-		local owner = cowModel:GetAttribute("Owner") or "Unowned"
+		local primaryOwner = cowModel:GetAttribute("PrimaryOwner") or "Unowned"
 		local position = cowModel:GetPivot().Position
-		print("  " .. cowId .. " - Owner: " .. owner .. " - Pos: " .. tostring(position))
+		print("  " .. cowId .. " - Primary: " .. primaryOwner .. " - Pos: " .. tostring(position))
 	end
 
-	print("\nPlayer cow ownership:")
+	print("\nPlayer cow assignments:")
 	for userId, cowList in pairs(self.PlayerCows) do
 		local player = Players:GetPlayerByUserId(userId)
 		local playerName = player and player.Name or "Unknown"
@@ -421,7 +525,7 @@ function CowCreationModule:DebugStatus()
 		end
 	end
 
-	print("==================================")
+	print("=====================================")
 end
 
 function CowCreationModule:CountTable(t)
@@ -436,20 +540,33 @@ end
 
 _G.CowCreationModule = CowCreationModule
 
--- Make debug function global
+-- Enhanced debug functions
 _G.DebugCowCreation = function()
 	CowCreationModule:DebugStatus()
 end
 
-print("CowCreationModule: ✅ FIXED MODULE LOADED!")
-print("🐄 FEATURES:")
-print("  📍 Detects existing cow models in workspace")
-print("  👤 Player cow ownership system")
-print("  🔄 Real-time cow monitoring")
-print("  🎁 Starter cow assignment")
-print("  📊 Comprehensive cow data management")
+_G.ReassignAllCows = function()
+	CowCreationModule:ReassignAllCows()
+end
+
+_G.EnsureAllPlayersHaveCows = function()
+	for _, player in pairs(Players:GetPlayers()) do
+		CowCreationModule:EnsurePlayerHasCow(player)
+	end
+	print("✅ Ensured all players have cows")
+end
+
+print("CowCreationModule: ✅ ENHANCED MODULE LOADED!")
+print("🐄 NEW FEATURES:")
+print("  🎯 Auto-assigns workspace cow to joining players")
+print("  🔄 Shared cow system (multiple players can use same cow)")
+print("  📍 Visual name tags show cow ownership")
+print("  🔧 Enhanced monitoring and reassignment")
+print("  📊 Better debugging and admin tools")
 print("")
 print("🔧 Debug Commands:")
 print("  _G.DebugCowCreation() - Show cow system status")
+print("  _G.ReassignAllCows() - Reassign all cows to players")
+print("  _G.EnsureAllPlayersHaveCows() - Make sure everyone has a cow")
 
 return CowCreationModule
