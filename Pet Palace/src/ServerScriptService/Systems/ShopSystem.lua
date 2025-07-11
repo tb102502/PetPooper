@@ -475,19 +475,24 @@ function ShopSystem:HandleGetSellableItems(player)
 		-- Define sellable item types with their locations and properties
 		local sellableItemTypes = {
 			-- Crops
-			{id = "carrot", name = "🥕 Carrot", sellPrice = 8},
-			{id = "corn", name = "🌽 Corn", sellPrice = 725},
-			{id = "strawberry", name = "🍓 Strawberry", sellPrice = 350},
-			{id = "wheat", name = "🌾 Wheat", sellPrice = 600},
-			{id = "potato", name = "🥔 Potato", sellPrice = 40},
-			{id = "tomato", name = "🍅 Tomato", sellPrice = 675},
-			{id = "cabbage", name = "🥬 Cabbage", sellPrice = 75},
-			{id = "radish", name = "🌶️ Radish", sellPrice = 140},
-			{id = "broccoli", name = "🥦 Broccoli", sellPrice = 110},
-
+			{id = "carrot", name = "🥕 Carrot", sellPrice = 10},
+			{id = "potato", name = "🥔 Potato", sellPrice = 15},
+			{id = "cabbage", name = "🥬 Cabbage", sellPrice = 20},
+			{id = "radish", name = "🌶️ Radish", sellPrice = 25},
+			{id = "broccoli", name = "🥦 Broccoli", sellPrice = 30},
+			{id = "tomato", name = "🍅 Tomato", sellPrice = 35},
+			{id = "strawberry", name = "🍓 Strawberry", sellPrice = 40},
+			{id = "wheat", name = "🌾 Wheat", sellPrice = 45},
+			{id = "corn", name = "🌽 Corn", sellPrice = 60},	
+			{id = "broccarrot", name = "🌽 Broccarrot", sellPrice = 150},		
+			{id = "broctato", name = "🌽 Broctato", sellPrice = 200},
+			{id = "craddish", name = "🌽 Craddish", sellPrice = 250},
+			{id = "brocmato", name = "🌽 Brocmato", sellPrice = 300},
+			{id = "cornmato", name = "🌽 Cornmato", sellPrice = 400},
+			
+			
 			-- Animal Products
-			{id = "milk", name = "🥛 Fresh Milk", sellPrice = 75},
-			{id = "fresh_milk", name = "🥛 Fresh Milk", sellPrice = 75},
+			{id = "milk", name = "🥛 Fresh Milk", sellPrice = 2},
 			-- Ores
 			{id = "copper_ore", name = "🟫 Copper Ore", sellPrice = 30},
 			{id = "bronze_ore", name = "🟤 Bronze Ore", sellPrice = 45},
@@ -688,8 +693,7 @@ function ShopSystem:GetItemSellPrice(itemId)
 	-- Other sellable items with fixed prices
 	local sellPrices = {
 		-- Animal products
-		milk = 75,
-		fresh_milk = 75,
+		milk = 2,
 		-- Materials
 		wood = 10,
 		stone = 5
@@ -984,7 +988,7 @@ function ShopSystem:ProcessFarmPlotPurchase(player, playerData, item, quantity)
 				plots = 1,
 				inventory = {
 					carrot_seeds = 5,
-					corn_seeds = 3
+					potato_seeds = 3
 				}
 			}
 		end
@@ -1249,15 +1253,15 @@ function ShopSystem:FixSeedVisibilityIssues()
 				-- Default seed prices based on name complexity
 				local defaultPrices = {
 					carrot_seeds = 5,
-					potato_seeds = 25,
-					cabbage_seeds = 50,
-					radish_seeds = 140,
-					strawberry_seeds = 250,
-					wheat_seeds = 400,
-					corn_seeds = 450,
-					tomato_seeds = 500,
-					broccoli_seeds = 75,
-					golden_seeds = 50,
+					potato_seeds = 10,
+					cabbage_seeds = 15,
+					radish_seeds = 20,
+					broccoli_seeds = 25,
+					tomato_seeds = 30,									
+					strawberry_seeds = 35,
+					wheat_seeds = 40,
+					corn_seeds = 50,
+					golden_seeds = 250,
 					glorious_sunflower_seeds = 999
 				}
 				item.price = defaultPrices[itemId] or 100

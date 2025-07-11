@@ -1740,7 +1740,6 @@ function GameClient:GetCropDisplayName(cropId)
 		broccoli = "🥦 Broccoli",
 		glorious_sunflower = "🌻 Glorious Sunflower",
 		milk = "🥛 Fresh Milk",
-		fresh_milk = "🥛 Fresh Milk",
 		copper_ore = "🟫 Copper Ore",
 		bronze_ore = "🟤 Bronze Ore",
 		silver_ore = "⚪ Silver Ore",
@@ -1782,7 +1781,6 @@ function GameClient:GetItemDisplayName(itemId)
 
 		-- Animal products
 		milk = "Fresh Milk",
-		fresh_milk = "Fresh Milk",
 
 		-- Mining tools
 		basic_pickaxe = "Basic Pickaxe",

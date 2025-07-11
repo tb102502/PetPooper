@@ -190,65 +190,65 @@ ItemConfig.MiningSystem.tools = {
 ItemConfig.Crops = {
 	carrot = { 
 		id = "carrot", name = "🥕 Carrot", type = "crop", category = "crops", 
-		description = "Fresh orange carrot.", sellValue = 8, sellCurrency = "coins", 
-		feedValue = 1, cropPoints = 1, icon = "🥕", rarity = "common" 
-	},
-	corn = { 
-		id = "corn", name = "🌽 Corn", type = "crop", category = "crops", 
-		description = "Sweet yellow corn.", sellValue = 725, sellCurrency = "coins", 
-		feedValue = 3, cropPoints = 3, icon = "🌽", rarity = "uncommon" 
-	},
-	strawberry = { 
-		id = "strawberry", name = "🍓 Strawberry", type = "crop", category = "crops", 
-		description = "Sweet red strawberry.", sellValue = 350, sellCurrency = "coins", 
-		feedValue = 2, cropPoints = 2, icon = "🍓", rarity = "uncommon" 
-	},
-	golden_fruit = { 
-		id = "golden_fruit", name = "✨ Golden Fruit", type = "crop", category = "crops", 
-		description = "Magical golden fruit.", sellValue = 0, sellCurrency = "coins", 
-		feedValue = 10, cropPoints = 10, icon = "✨", rarity = "legendary" 
-	},
-	wheat = { 
-		id = "wheat", name = "🌾 Wheat", type = "crop", category = "crops", 
-		description = "Golden wheat grain.", sellValue = 600, sellCurrency = "coins", 
-		feedValue = 3, cropPoints = 3, icon = "🌾", rarity = "uncommon" 
+		description = "Fresh orange carrot.", sellValue = 10, sellCurrency = "coins", 
+		icon = "🥕", rarity = "common" 
 	},
 	potato = { 
 		id = "potato", name = "🥔 Potato", type = "crop", category = "crops", 
-		description = "Hearty potato.", sellValue = 40, sellCurrency = "coins", 
-		feedValue = 2, cropPoints = 2, icon = "🥔", rarity = "common" 
-	},
-	tomato = { 
-		id = "tomato", name = "🍅 Tomato", type = "crop", category = "crops", 
-		description = "Juicy red tomato.", sellValue = 675, sellCurrency = "coins", 
-		feedValue = 3, cropPoints = 3, icon = "🍅", rarity = "uncommon" 
+		description = "Hearty potato.", sellValue = 15, sellCurrency = "coins", 
+		icon = "🥔", rarity = "common" 
 	},
 	cabbage = { 
 		id = "cabbage", name = "🥬 Cabbage", type = "crop", category = "crops", 
-		description = "Fresh leafy cabbage.", sellValue = 75, sellCurrency = "coins", 
-		feedValue = 1, cropPoints = 1, icon = "🥬", rarity = "common" 
+		description = "Fresh leafy cabbage.", sellValue = 20, sellCurrency = "coins", 
+		icon = "🥬", rarity = "common" 
 	},
 	radish = { 
 		id = "radish", name = "🌶️ Radish", type = "crop", category = "crops", 
-		description = "Spicy radish.", sellValue = 140, sellCurrency = "coins", 
-		feedValue = 2, cropPoints = 2, icon = "🌶️", rarity = "common" 
+		description = "Spicy radish.", sellValue = 25, sellCurrency = "coins", 
+		icon = "🌶️", rarity = "common" 
 	},
+
 	broccoli = { 
 		id = "broccoli", name = "🥦 Broccoli", type = "crop", category = "crops", 
-		description = "Nutritious green broccoli.", sellValue = 110, sellCurrency = "coins", 
-		feedValue = 2, cropPoints = 2, icon = "🥦", rarity = "common" 
+		description = "Nutritious green broccoli.", sellValue = 30, sellCurrency = "coins", 
+		icon = "🥦", rarity = "common" 
+	},
+	tomato = { 
+		id = "tomato", name = "🍅 Tomato", type = "crop", category = "crops", 
+		description = "Juicy red tomato.", sellValue = 35, sellCurrency = "coins", 
+		icon = "🍅", rarity = "uncommon" 
+	},
+	strawberry = { 
+		id = "strawberry", name = "🍓 Strawberry", type = "crop", category = "crops", 
+		description = "Sweet red strawberry.", sellValue = 40, sellCurrency = "coins", 
+		icon = "🍓", rarity = "uncommon" 
+	},
+	wheat = { 
+		id = "wheat", name = "🌾 Wheat", type = "crop", category = "crops", 
+		description = "Golden wheat grain.", sellValue = 45, sellCurrency = "coins", 
+		icon = "🌾", rarity = "uncommon" 
+	},
+	corn = { 
+		id = "corn", name = "🌽 Corn", type = "crop", category = "crops", 
+		description = "Sweet yellow corn.", sellValue = 60, sellCurrency = "coins", 
+		icon = "🌽", rarity = "uncommon" 
+	},
+	golden_fruit = { 
+		id = "golden_fruit", name = "✨ Golden Fruit", type = "crop", category = "crops", 
+		description = "Magical golden fruit.", sellValue = 400, sellCurrency = "coins", 
+		icon = "✨", rarity = "legendary" 
 	},
 	glorious_sunflower = { 
 		id = "glorious_sunflower", name = "🌻 Glorious Sunflower", type = "crop", category = "crops", 
 		description = "🏆 LEGENDARY PREMIUM CROP 🏆", sellValue = 0, sellCurrency = "farmTokens", 
-		feedValue = 0, cropPoints = 0, icon = "🌻", rarity = "divine" 
+		icon = "🌻", rarity = "divine" 
 	},
 	broccarrot = {
 		name = "Broccarrot",
 		description = "A mysterious hybrid of broccoli and carrot with unique properties",
 		sellPrice = 150, -- Higher value than parent crops
 		rarity = "rare",
-		cropPoints = 25, 
 		harvestTime = 0, -- No growing time (only obtained through mutation)
 		category = "mutation",
 		parentCrops = {"broccoli", "carrot"},
@@ -260,35 +260,15 @@ ItemConfig.Crops = {
 			"genetic_stability" -- Can be used as ingredient for advanced mutations
 		}
 	},
-
-	brocmato = {
-		name = "Brocmato",
-		description = "An unusual fusion of broccoli and tomato with vibrant flavors",
-		sellPrice = 180,
-		rarity = "rare", 
-		cropPoints = 30,
-		harvestTime = 0,
-		category = "mutation",
-		parentCrops = {"broccoli", "tomato"},
-		mutationTier = 1,
-		emoji = "🥦🍅",
-		specialProperties = {
-			"flavor_burst", -- Enhanced taste profile
-			"antioxidant_boost", -- Extra health benefits
-			"color_changing" -- Changes appearance based on conditions
-		}
-	},
-
 	broctato = {
 		name = "Broctato",
 		description = "A rare blend of broccoli and potato with earthy complexity",
-		sellPrice = 250, -- Epic tier pricing
+		sellPrice = 200, -- Epic tier pricing
 		rarity = "epic",
-		cropPoints = 40,
 		harvestTime = 0,
 		category = "mutation",
 		parentCrops = {"broccoli", "potato"},
-		mutationTier = 2,
+		mutationTier = 1,
 		emoji = "🥦🥔",
 		specialProperties = {
 			"earth_energy", -- Improves soil quality of adjacent plots
@@ -298,12 +278,46 @@ ItemConfig.Crops = {
 		}
 	},
 
+	craddish = {
+		name = "Craddish",
+		description = "A spicy cross between carrot and radish with fiery kick",
+		sellPrice = 250, -- Uncommon tier pricing
+		rarity = "uncommon",
+		harvestTime = 0,
+		category = "mutation",
+		parentCrops = {"carrot", "radish"},
+		mutationTier = 1,
+		emoji = "🥕🌶️",
+		specialProperties = {
+			"spicy_kick", -- Adds heat resistance to animals
+			"quick_growth", -- Accelerates nearby crop growth
+			"pest_deterrent", -- Natural pest resistance
+			"common_starter" -- Easiest mutation to achieve
+		}				
+	},		
+
+	brocmato = {
+		name = "Brocmato",
+		description = "An unusual fusion of broccoli and tomato with vibrant flavors",
+		sellPrice = 300,
+		rarity = "rare", 
+		harvestTime = 0,
+		category = "mutation",
+		parentCrops = {"broccoli", "tomato"},
+		mutationTier = 2,
+		emoji = "🥦🍅",
+		specialProperties = {
+			"flavor_burst", -- Enhanced taste profile
+			"antioxidant_boost", -- Extra health benefits
+			"color_changing" -- Changes appearance based on conditions
+		}
+	},	
+	
 	cornmato = {
 		name = "Cornmato",
 		description = "A golden hybrid of corn and tomato with explosive flavor",
-		sellPrice = 300, -- Epic tier pricing
+		sellPrice = 350, -- Epic tier pricing
 		rarity = "epic",
-		cropPoints = 45,
 		harvestTime = 0,
 		category = "mutation",
 		parentCrops = {"corn", "tomato"},
@@ -315,25 +329,6 @@ ItemConfig.Crops = {
 			"solar_power", -- Grows faster in sunlight
 			"premium_genetics" -- Unlocks advanced farming techniques
 		}
-	},
-
-	craddish = {
-		name = "Craddish",
-		description = "A spicy cross between carrot and radish with fiery kick",
-		sellPrice = 120, -- Uncommon tier pricing
-		rarity = "uncommon",
-		cropPoints = 20,
-		harvestTime = 0,
-		category = "mutation",
-		parentCrops = {"carrot", "radish"},
-		mutationTier = 1,
-		emoji = "🥕🌶️",
-		specialProperties = {
-			"spicy_kick", -- Adds heat resistance to animals
-			"quick_growth", -- Accelerates nearby crop growth
-			"pest_deterrent", -- Natural pest resistance
-			"common_starter" -- Easiest mutation to achieve
-		}
 	}
 }
 -- ========== FIXED SHOP ITEMS - ALL ITEMS WILL SHOW ==========
@@ -344,16 +339,16 @@ ItemConfig.ShopItems = {
 	carrot_seeds = {
 		id = "carrot_seeds",
 		name = "🥕 Carrot Seeds",
-		description = "Perfect starter crop! Fast-growing and profitable.\n\n⏱️ Grow Time: 10 seconds\n💰 Sell Value: 8 coins each\n\n🎯 BEGINNER FRIENDLY - Start here!",
+		description = "Perfect starter crop! Fast-growing and profitable.\n\n⏱️ Grow Time: 3 seconds\n💰 Sell Value: 10 coins each\n\n🎯 BEGINNER FRIENDLY - Start here!",
 		price = 5,
 		currency = "coins",
 		category = "seeds",
 		icon = "🥕",
-		maxQuantity = 50,
+		maxQuantity = 99,
 		type = "seed",
 		purchaseOrder = 1, -- FIRST seed - perfect for beginners
 		farmingData = {
-			growTime = 10,
+			growTime = 3,
 			yieldAmount = 1,
 			resultCropId = "carrot",
 			stages = {"planted", "sprouting", "growing", "ready"},
@@ -364,16 +359,16 @@ ItemConfig.ShopItems = {
 	potato_seeds = {
 		id = "potato_seeds",
 		name = "🥔 Potato Seeds",
-		description = "Another great starter crop! Quick growth with good value.\n\n⏱️ Grow Time: 20 seconds\n💰 Sell Value: 40 coins each\n\n🌱 Perfect second crop to try!",
-		price = 25,
+		description = "Another great starter crop! Quick growth with good value.\n\n⏱️ Grow Time: 5 seconds\n💰 Sell Value: 15 coins each\n\n🌱 Perfect second crop to try!",
+		price = 10,
 		currency = "coins",
 		category = "seeds",
 		icon = "🥔",
-		maxQuantity = 100,
+		maxQuantity = 99,
 		type = "seed",
 		purchaseOrder = 2, -- Second seed option
 		farmingData = {
-			growTime = 20, 
+			growTime = 5, 
 			yieldAmount = 1,
 			resultCropId = "potato",
 			stages = {"planted", "sprouting", "growing", "ready"},
@@ -384,16 +379,16 @@ ItemConfig.ShopItems = {
 	cabbage_seeds = {
 		id = "cabbage_seeds",
 		name = "🥬 Cabbage Seeds",
-		description = "Step up your farming! Nutritious leafy greens.\n\n⏱️ Grow Time: 30 seconds\n💰 Sell Value: 75 coins each\n\n🥬 Great for learning crop timing!",
-		price = 50,
+		description = "Step up your farming! Nutritious leafy greens.\n\n⏱️ Grow Time: 8 seconds\n💰 Sell Value: 20 coins each\n\n🥬 Great for learning crop timing!",
+		price = 15,
 		currency = "coins",
 		category = "seeds",
 		icon = "🥬",
-		maxQuantity = 100,
+		maxQuantity = 99,
 		type = "seed",
 		purchaseOrder = 3, -- Third progression step
 		farmingData = {
-			growTime = 30,
+			growTime = 8,
 			yieldAmount = 1,
 			resultCropId = "cabbage",
 			stages = {"planted", "sprouting", "growing", "ready"},
@@ -404,18 +399,56 @@ ItemConfig.ShopItems = {
 	radish_seeds = {
 		id = "radish_seeds",
 		name = "🌶️ Radish Seeds",
-		description = "Mid-tier crop with spicy flavor and good profits!\n\n⏱️ Grow Time: 50 seconds\n💰 Sell Value: 140 coins each\n\n🌶️ Ready for intermediate farming!",
-		price = 140,
+		description = "Mid-tier crop with spicy flavor and good profits!\n\n⏱️ Grow Time: 10 seconds\n💰 Sell Value: 25 coins each\n\n🌶️ Ready for intermediate farming!",
+		price = 20,
 		currency = "coins",
 		category = "seeds",
 		icon = "🌶️",
-		maxQuantity = 100,
+		maxQuantity = 99,
 		type = "seed",
 		purchaseOrder = 4, -- Mid-tier option
 		farmingData = {
-			growTime = 50,
-			yieldAmount = 2,
+			growTime = 10,
+			yieldAmount = 1,
 			resultCropId = "radish",
+			stages = {"planted", "sprouting", "growing", "ready"},
+			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
+		}
+	},
+	broccoli_seeds = {
+		id = "broccoli_seeds",
+		name = "🥦 Broccoli Seeds",
+		description = "Nutritious green superfood! Takes patience but worth it.\n\n⏱️ Grow Time: 15 seconds\n💰 Sell Value: 30 coins each\n\n🥦",
+		price = 25,
+		currency = "coins",
+		category = "seeds",
+		icon = "🥦",
+		maxQuantity = 99,
+		type = "seed",
+		purchaseOrder = 5, -- Advanced farming
+		farmingData = {
+			growTime = 15,
+			yieldAmount = 1,
+			resultCropId = "broccoli",
+			stages = {"planted", "sprouting", "growing", "ready"},
+			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
+		}
+	},
+	tomato_seeds = {
+		id = "tomato_seeds",
+		name = "🍅 Tomato Seeds",
+		description = "Juicy cluster-growing tomatoes! Perfect for cooking.\n\n⏱️ Grow Time: 20 seconds\n💰 Sell Value: 35 coins each\n\n🍅 Multiple yield specialty crop!",
+		price = 30,
+		currency = "coins",
+		category = "seeds",
+		icon = "🍅",
+		maxQuantity = 99,
+		type = "seed",
+		purchaseOrder = 6, -- Advanced specialty crop
+		farmingData = {
+			growTime = 20,
+			yieldAmount = 1,
+			resultCropId = "tomato",
 			stages = {"planted", "sprouting", "growing", "ready"},
 			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
 		}
@@ -424,16 +457,16 @@ ItemConfig.ShopItems = {
 	strawberry_seeds = {
 		id = "strawberry_seeds",
 		name = "🍓 Strawberry Seeds",
-		description = "Premium berries with excellent value! Worth the investment.\n\n⏱️ Grow Time: 1 minute\n💰 Sell Value: 350 coins each\n\n🍓 High-value crop for experienced farmers!",
-		price = 250,
+		description = "Premium berries with excellent value! Worth the investment.\n\n⏱️ Grow Time: 25 seconds\n💰 Sell Value: 40 coins each\n\n🍓 High-value crop for experienced farmers!",
+		price = 35,
 		currency = "coins",
 		category = "seeds",
 		icon = "🍓",
-		maxQuantity = 50,
+		maxQuantity = 99,
 		type = "seed",
-		purchaseOrder = 5, -- Higher value option
+		purchaseOrder = 7, -- Higher value option
 		farmingData = {
-			growTime = 60,
+			growTime = 25,
 			yieldAmount = 1,
 			resultCropId = "strawberry",
 			stages = {"planted", "sprouting", "growing", "ready"},
@@ -444,17 +477,17 @@ ItemConfig.ShopItems = {
 	wheat_seeds = {
 		id = "wheat_seeds",
 		name = "🌾 Wheat Seeds",
-		description = "Essential grain crop for advanced farming operations.\n\n⏱️ Grow Time: 1 minute 10 seconds\n💰 Sell Value: 600 coins each\n\n🌾 Multiple yield crop - great efficiency!",
-		price = 400,
+		description = "Essential grain crop for advanced farming operations.\n\n⏱️ Grow Time: 30 seconds\n💰 Sell Value: 45 coins each\n\n🌾 Multiple yield crop - great efficiency!",
+		price = 40,
 		currency = "coins",
 		category = "seeds",
 		icon = "🌾",
-		maxQuantity = 100,
+		maxQuantity = 99,
 		type = "seed",
-		purchaseOrder = 6, -- Advanced farming
+		purchaseOrder = 8, -- Advanced farming
 		farmingData = {
-			growTime = 70,
-			yieldAmount = 3,
+			growTime = 30,
+			yieldAmount = 1,
 			resultCropId = "wheat",
 			stages = {"planted", "sprouting", "growing", "ready"},
 			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
@@ -464,58 +497,18 @@ ItemConfig.ShopItems = {
 	corn_seeds = {
 		id = "corn_seeds",
 		name = "🌽 Corn Seeds",
-		description = "High-value tall crop! Sweet corn that animals love.\n\n⏱️ Grow Time: 1 minute 20 seconds\n💰 Sell Value: 725 coins each\n\n🌽 Premium regular crop with excellent returns!",
-		price = 450,
+		description = "High-value tall crop! Sweet corn that animals love.\n\n⏱️ Grow Time: 35 seconds\n💰 Sell Value: 60 coins each\n\n🌽 Premium regular crop with excellent returns!",
+		price = 50,
 		currency = "coins",
 		category = "seeds",
 		icon = "🌽",
-		maxQuantity = 50,
+		maxQuantity = 99,
 		type = "seed",
-		purchaseOrder = 7, -- Premium regular crop
+		purchaseOrder = 9, -- Premium regular crop
 		farmingData = {
-			growTime = 80,
+			growTime = 35,
 			yieldAmount = 1,
 			resultCropId = "corn",
-			stages = {"planted", "sprouting", "growing", "ready"},
-			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
-		}
-	},
-
-	tomato_seeds = {
-		id = "tomato_seeds",
-		name = "🍅 Tomato Seeds",
-		description = "Juicy cluster-growing tomatoes! Perfect for cooking.\n\n⏱️ Grow Time: 1 minute 40 seconds\n💰 Sell Value: 675 coins each\n\n🍅 Multiple yield specialty crop!",
-		price = 500,
-		currency = "coins",
-		category = "seeds",
-		icon = "🍅",
-		maxQuantity = 100,
-		type = "seed",
-		purchaseOrder = 8, -- Advanced specialty crop
-		farmingData = {
-			growTime = 100,
-			yieldAmount = 3,
-			resultCropId = "tomato",
-			stages = {"planted", "sprouting", "growing", "ready"},
-			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
-		}
-	},
-
-	broccoli_seeds = {
-		id = "broccoli_seeds",
-		name = "🥦 Broccoli Seeds",
-		description = "Nutritious green superfood! Takes patience but worth it.\n\n⏱️ Grow Time: 40 seconds\n💰 Sell Value: 110 coins each\n\n🥦",
-		price = 75,
-		currency = "coins",
-		category = "seeds",
-		icon = "🥦",
-		maxQuantity = 100,
-		type = "seed",
-		purchaseOrder = 9, -- Advanced farming
-		farmingData = {
-			growTime = 40,
-			yieldAmount = 1,
-			resultCropId = "broccoli",
 			stages = {"planted", "sprouting", "growing", "ready"},
 			rarityChances = {common = 0.69, uncommon = 0.25, rare = 0.05, epic = 0.01, legendary = 0.001}
 		}
@@ -524,8 +517,8 @@ ItemConfig.ShopItems = {
 	golden_seeds = {
 		id = "golden_seeds",
 		name = "✨ Golden Seeds",
-		description = "🏆 PREMIUM FARM TOKEN CROP 🏆\nMagical seeds that produce golden fruit!\n\n⏱️ Grow Time: 6 minutes\n💰 Value: SPECIAL\n\n✨ Premium investment for serious farmers!",
-		price = 50,
+		description = "🏆 PREMIUM FARM TOKEN CROP 🏆\nMagical seeds that produce golden fruit!\n\n⏱️ Grow Time: 60 seconds\n💰 Value: SPECIAL\n\n✨ Premium investment for serious farmers!",
+		price = 250,
 		currency = "farmTokens",
 		category = "seeds",
 		icon = "✨",
@@ -533,7 +526,7 @@ ItemConfig.ShopItems = {
 		type = "seed",
 		purchaseOrder = 10, -- Premium farm token crop
 		farmingData = {
-			growTime = 360,
+			growTime = 60,
 			yieldAmount = 1,
 			resultCropId = "golden_fruit",
 			stages = {"planted", "sprouting", "growing", "ready"},
@@ -563,68 +556,73 @@ ItemConfig.ShopItems = {
 	},
 	broccarrot = {
 		id = "broccarrot",
-		name = "Broccarrot",
+		name = "🧬 Broccarrot",
 		description = "A rare mutation crop - cannot be purchased, only created through genetic fusion",
 		price = 999999, -- Extremely high price to discourage purchase
 		currency = "farmTokens",
 		category = "mutation",
+		icon = "🥦🥕",
 		purchasable = false, -- Cannot be bought
 		sellable = true,
 		sellPrice = 150,
-		rarity = "rare"
+		rarity = "uncommon"
 	},
-
-	brocmato = {
-		id = "brocmato", 
-		name = "Brocmato",
-		description = "A rare mutation crop - cannot be purchased, only created through genetic fusion",
-		price = 999999,
-		currency = "farmTokens",
-		category = "mutation", 
-		purchasable = false,
-		sellable = true,
-		sellPrice = 180,
-		rarity = "rare"
-	},
-
+	
 	broctato = {
 		id = "broctato",
-		name = "Broctato", 
+		name = "🧬 Broctato", 
 		description = "An epic mutation crop - cannot be purchased, only created through genetic fusion",
 		price = 999999,
 		currency = "farmTokens",
 		category = "mutation",
+		icon = "🥦🥔",
+		purchasable = false,
+		sellable = true,
+		sellPrice = 200,
+		rarity = "uncommon"
+	},
+	craddish = {
+		id = "craddish",
+		name = "🧬 Craddish",
+		description = "An uncommon mutation crop - cannot be purchased, only created through genetic fusion",
+		price = 999999,
+		currency = "farmTokens", 
+		category = "mutation",
+		icon = "🥕🌶️",
 		purchasable = false,
 		sellable = true,
 		sellPrice = 250,
-		rarity = "epic"
+		rarity = "uncommon"
+	},
+	brocmato = {
+		id = "brocmato", 
+		name = "🧬 Brocmato",
+		description = "A rare mutation crop - cannot be purchased, only created through genetic fusion",
+		price = 999999,
+		currency = "farmTokens",
+		category = "mutation", 
+		icon = "🥦🍅",
+		purchasable = false,
+		sellable = true,
+		sellPrice = 250,
+		rarity = "rare"
 	},
 
 	cornmato = {
 		id = "cornmato",
-		name = "Cornmato",
+		name = "🧬 Cornmato",
 		description = "An epic mutation crop - cannot be purchased, only created through genetic fusion", 
 		price = 999999,
 		currency = "farmTokens",
 		category = "mutation",
+		icon = "🌽🍅",
 		purchasable = false,
 		sellable = true,
 		sellPrice = 300,
 		rarity = "epic"
 	},
 
-	craddish = {
-		id = "craddish",
-		name = "Craddish",
-		description = "An uncommon mutation crop - cannot be purchased, only created through genetic fusion",
-		price = 999999,
-		currency = "farmTokens", 
-		category = "mutation",
-		purchasable = false,
-		sellable = true,
-		sellPrice = 120,
-		rarity = "uncommon"
-	},
+	
 	-- ========== FARM CATEGORY (Core Infrastructure) ==========
 
 	farm_plot_starter = {
@@ -646,28 +644,6 @@ ItemConfig.ShopItems = {
 			}
 		}
 	},
-
-	-- FIXED: Added all cow items to farm category with proper shop data
-	basic_cow = {
-		id = "basic_cow",
-		name = "🐄 Basic Cow",
-		description = "Start your dairy empire with your first cow!\n\n🥛 Production:\n• 1 milk every 5 seconds\n• Steady income source\n• Perfect for beginners\n\n🐄 Your first step into livestock!",
-		price = 0, -- FREE first cow
-		currency = "coins",
-		category = "farm",
-		icon = "🐄",
-		maxQuantity = 1,
-		type = "cow",
-		purchaseOrder = 2, -- After farm plot
-		cowData = {
-			tier = "basic",
-			milkAmount = 1,
-			cooldown = 5,
-			visualEffects = {},
-			maxCows = 1
-		}
-	},
-
 
 	milk_efficiency_1 = {
 		id = "milk_efficiency_1",
@@ -729,7 +705,7 @@ ItemConfig.ShopItems = {
 		currency = "coins",
 		category = "farm",
 		icon = "🥈",
-		maxQuantity = 5,
+		maxQuantity = 1,
 		type = "cow_upgrade",
 		purchaseOrder = 8, -- First upgrade tier
 		cowData = {
@@ -749,7 +725,7 @@ ItemConfig.ShopItems = {
 		currency = "coins",
 		category = "farm",
 		icon = "🥇",
-		maxQuantity = 5,
+		maxQuantity = 1,
 		type = "cow_upgrade",
 		purchaseOrder = 9, -- Second upgrade tier
 		cowData = {
@@ -769,7 +745,7 @@ ItemConfig.ShopItems = {
 		currency = "coins",
 		category = "farm",
 		icon = "💎",
-		maxQuantity = 5,
+		maxQuantity = 1,
 		type = "cow_upgrade",
 		purchaseOrder = 10, -- Third upgrade tier
 		cowData = {
@@ -789,7 +765,7 @@ ItemConfig.ShopItems = {
 		currency = "farmTokens",
 		category = "farm",
 		icon = "🌈",
-		maxQuantity = 5,
+		maxQuantity = 1,
 		type = "cow_upgrade",
 		purchaseOrder = 11, -- Premium upgrade
 		cowData = {
@@ -809,7 +785,7 @@ ItemConfig.ShopItems = {
 		currency = "farmTokens",
 		category = "farm",
 		icon = "🌌",
-		maxQuantity = 3,
+		maxQuantity = 1,
 		type = "cow_upgrade",
 		purchaseOrder = 12, -- Ultimate upgrade
 		cowData = {
@@ -821,28 +797,13 @@ ItemConfig.ShopItems = {
 		}
 	},
 
-	-- FIXED: Added milk as purchasable item (remove notPurchasable flag)
-	fresh_milk = {
-		id = "fresh_milk",
-		name = "🥛 Fresh Milk",
-		description = "Pure, fresh milk from your dairy cows!\n\n💰 Great for:\n• Selling for quick coins\n• Trading and gifts\n• Crafting recipes\n• Emergency milk supply\n\n🥛 Always useful to have on hand!",
-		price = 100,
-		currency = "coins",
-		category = "farm",
-		icon = "🥛",
-		maxQuantity = 999,
-		type = "material",
-		purchaseOrder = 14 -- Material purchase
-	},
-
-
 	-- ========== MINING CATEGORY ==========
 
 	cave_access_pass = {
 		id = "cave_access_pass",
 		name = "🕳️ Cave Access Pass",
 		description = "🎯 UNLOCK MINING! Grants access to Cave 1 (Copper Mine)!\n\n🗻 Mining Access:\n• Cave 1: Copper Mine\n• Copper and bronze ore deposits\n• Mining tutorial area\n• New income source\n\n🕳️ Diversify your empire!",
-		price = 10000,
+		price = 50000,
 		currency = "coins",
 		category = "mining",
 		icon = "🕳️",
@@ -856,7 +817,7 @@ ItemConfig.ShopItems = {
 		id = "wooden_pickaxe",
 		name = "🪓 Wooden Pickaxe",
 		description = "Basic wooden pickaxe for absolute beginners!\n\n⛏️ Basic Mining:\n• Can mine copper ore only\n• 50 durability\n• Very basic tool\n• Cheapest mining option\n\n🪓 Start your mining journey!",
-		price = 100,
+		price = 5000,
 		currency = "coins",
 		category = "mining",
 		icon = "🪓",
@@ -869,7 +830,7 @@ ItemConfig.ShopItems = {
 		id = "basic_pickaxe",
 		name = "⛏️ Basic Pickaxe",
 		description = "Essential mining tool for resource gathering!\n\n⛏️ Mining Power:\n• Can mine copper and bronze ore\n• 100 durability\n• Entry-level mining tool\n• Opens mining gameplay\n\n⛏️ Start digging for treasure!",
-		price = 250,
+		price = 10000,
 		currency = "coins",
 		category = "mining",
 		icon = "⛏️",
@@ -882,7 +843,7 @@ ItemConfig.ShopItems = {
 		id = "stone_pickaxe",
 		name = "🪨 Stone Pickaxe",
 		description = "Improved mining tool with better capabilities!\n\n⛏️ Enhanced Power:\n• Can mine up to silver ore\n• 150 durability\n• Faster mining speed\n• Sturdy construction\n\n🪨 Upgrade your mining game!",
-		price = 1000,
+		price = 15000,
 		currency = "coins",
 		category = "mining",
 		icon = "🪨",
@@ -895,7 +856,7 @@ ItemConfig.ShopItems = {
 		id = "iron_pickaxe",
 		name = "⚒️ Iron Pickaxe",
 		description = "Professional mining tool for serious miners!\n\n⛏️ Professional Grade:\n• Can mine up to gold ore\n• 250 durability\n• Much faster mining speed\n• Professional quality\n\n⚒️ Professional mining power!",
-		price = 5000,
+		price = 20000,
 		currency = "coins",
 		category = "mining",
 		icon = "⚒️",
@@ -921,7 +882,7 @@ ItemConfig.ShopItems = {
 		id = "obsidian_pickaxe",
 		name = "⬛ Obsidian Pickaxe",
 		description = "🏆 LEGENDARY MINING TOOL 🏆\nCan mine the rarest ores including mystical obsidian!\n\n⛏️ Legendary Power:\n• Can mine ALL ore types\n• 1000 durability\n• Extremely fast mining speed\n• Legendary quality\n\n⬛ The ultimate mining tool!",
-		price = 75,
+		price = 50000,
 		currency = "farmTokens",
 		category = "mining",
 		icon = "⬛",
@@ -962,7 +923,7 @@ ItemConfig.ShopItems = {
 		id = "mystical_altar",
 		name = "🔮 Mystical Altar",
 		description = "🏆 LEGENDARY CRAFTING STATION 🏆\nCraft the most powerful and mystical items!\n\n🔮 Mystical Powers:\n• Legendary item creation\n• Mystical equipment\n• Magical enhancements\n• Ultimate recipes\n\n🔮 Transcend normal crafting!",
-		price = 500,
+		price = 500000,
 		currency = "farmTokens",
 		category = "crafting",
 		icon = "🔮",
@@ -977,7 +938,7 @@ ItemConfig.ShopItems = {
 		id = "rarity_booster",
 		name = "✨ Rarity Booster",
 		description = "🏆 PREMIUM ENHANCEMENT 🏆\nGuarantee better crop quality!\n\n✨ Rarity Benefits:\n• Guarantees at least Rare quality\n• Works for next 3 harvests\n• Massive value increase\n• Premium enhancement\n\n✨ Quality over quantity!",
-		price = 25,
+		price = 99,
 		currency = "farmTokens",
 		category = "premium",
 		icon = "✨",
@@ -990,7 +951,7 @@ ItemConfig.ShopItems = {
 		id = "auto_harvester",
 		name = "🤖 Auto Harvester",
 		description = "🏆 ULTIMATE FARMING AUTOMATION 🏆\nNever manually harvest again!\n\n🤖 Automation Features:\n• Harvests all ready crops\n• Works automatically\n• Regular intervals\n• No manual work needed\n\n🤖 The ultimate upgrade!",
-		price = 150,
+		price = 300,
 		currency = "farmTokens",
 		category = "premium",
 		icon = "🤖",
@@ -1117,7 +1078,7 @@ function ItemConfig.IsItemSellable(itemId)
 
 	-- Check if it's milk or other sellable items
 	local sellableItems = {
-		"milk", "fresh_milk", "Broccoli", "Cabbage", "Carrot", "Corn", "Potato", "Radish", "Strawberry", "Tomato", "Wheat",
+		"milk", "fresh_milk", "Broccoli", "Cabbage", "Carrot", "Corn", "Potato", "Radish", "Strawberry", "Tomato", "Wheat", "Broccarrot", "Broctato", "Craddish", "Brocmato", "Cornmato",
 		"copper_ore", "bronze_ore", "silver_ore", "gold_ore", "platinum_ore", "obsidian_ore"
 	}
 
@@ -1140,8 +1101,7 @@ function ItemConfig.GetItemSellPrice(itemId)
 	-- Other item sell prices
 	local sellPrices = {
 		-- Animal products
-		milk = 1,
-		fresh_milk = 5,
+		milk = 2,
 
 		-- Ores
 		copper_ore = 30,
@@ -1323,8 +1283,8 @@ ItemConfig.MutationAchievements = {
 
 	epic_breeder = {
 		name = "Epic Breeder",
-		description = "Create an epic-tier mutation (Broctato or Cornmato)",
-		reward = 5000,
+		description = "Create an epic-tier mutation (Cornmato)",
+		reward = 15000,
 		icon = "💜"
 	},
 
@@ -1338,7 +1298,7 @@ ItemConfig.MutationAchievements = {
 	genetic_luck = {
 		name = "Genetic Luck",
 		description = "Successfully create a mutation on your first try",
-		reward = 500,
+		reward = 7500,
 		icon = "🍀"
 	}
 }
@@ -1567,7 +1527,7 @@ ItemConfig.DebugHiddenItems()
 print("✅ FIXED ItemConfig loaded - ALL ITEMS SHOW IN SHOP!")
 print("📦 Total shop items: " .. (function() local count = 0; for _ in pairs(ItemConfig.ShopItems) do count = count + 1 end return count end)())
 print("🌾 Seeds: 11 items (carrot to glorious sunflower)")
-print("🚜 Farm: 15 items (plot + cows + milk + tools)")
+print("🚜 Farm: 15 items (plot + milk + tools)")
 print("🛡️ Defense: 13 items (pests + chickens + protection)")
 print("⛏️ Mining: 7 items (access + all pickaxes)")
 print("🔨 Crafting: 3 items (workbench + forge + altar)")
@@ -1576,8 +1536,7 @@ print("")
 print("🔧 FIXES APPLIED:")
 print("  ✅ Removed notPurchasable = true from milk item")
 print("  ✅ Added wooden_pickaxe as separate purchasable item")
-print("  ✅ Added fresh_milk as purchasable alternative")
-print("  ✅ Fixed all cow items to show in farm category")
+print("  ✅ Fixed all cow upgrades to show in farm category")
 print("  ✅ Removed requiresPurchase dependencies that hide items")
 print("  ✅ Ensured all items have required shop properties")
 print("  ✅ Made all defense items show without farm requirements")
