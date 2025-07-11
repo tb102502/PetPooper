@@ -52,16 +52,16 @@ ChairMilkingGUI.Config = {
 	-- Responsive positioning
 	positioning = {
 		Mobile = {
-			proximity = {size = UDim2.new(0.8, 0, 0.2, 0), position = UDim2.new(0.1, 0, 0.75, 0)},
-			milking = {size = UDim2.new(0.9, 0, 0.35, 0), position = UDim2.new(0.05, 0, 0.1, 0)}
+			proximity = {size = UDim2.new(0.7, 0, 0.15, 0), position = UDim2.new(0.15, 0, 0.8, 0)},
+			milking = {size = UDim2.new(0.85, 0, 0.25, 0), position = UDim2.new(0.075, 0, 0.001, 0)} -- Very top edge
 		},
 		Tablet = {
-			proximity = {size = UDim2.new(0.6, 0, 0.18, 0), position = UDim2.new(0.2, 0, 0.78, 0)},
-			milking = {size = UDim2.new(0.7, 0, 0.3, 0), position = UDim2.new(0.15, 0, 0.12, 0)}
+			proximity = {size = UDim2.new(0.5, 0, 0.12, 0), position = UDim2.new(0.25, 0, 0.82, 0)},
+			milking = {size = UDim2.new(0.6, 0, 0.2, 0), position = UDim2.new(0.2, 0, 0.001, 0)} -- Very top edge
 		},
 		Desktop = {
-			proximity = {size = UDim2.new(0.35, 0, 0.15, 0), position = UDim2.new(0.325, 0, 0.8, 0)},
-			milking = {size = UDim2.new(0.45, 0, 0.25, 0), position = UDim2.new(0.275, 0, 0.15, 0)}
+			proximity = {size = UDim2.new(0.3, 0, 0.1, 0), position = UDim2.new(0.35, 0, 0.85, 0)},
+			milking = {size = UDim2.new(0.4, 0, 0.15, 0), position = UDim2.new(0.3, 0, 0.001, 0)} -- Very top edge
 		}
 	}
 }
@@ -322,8 +322,8 @@ function ChairMilkingGUI:CreateResponsiveMilkingGUI(data)
 	container.Name = "Container"
 	container.Size = config.size
 	container.Position = config.position
-	container.BackgroundColor3 = Color3.fromRGB(50, 70, 50)
-	container.BackgroundTransparency = 0.1
+	container.BackgroundColor3 = Color3.fromRGB(20, 30, 20) -- Darker
+	container.BackgroundTransparency = 0.4 -- Much more transparent (was 0.1)
 	container.BorderSizePixel = 0
 	container.Parent = gui
 
@@ -335,17 +335,21 @@ function ChairMilkingGUI:CreateResponsiveMilkingGUI(data)
 	-- Gradient background
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new{
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(70, 100, 70)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(50, 70, 50))
+		ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 50, 30)),
+		ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 30, 20))
 	}
 	gradient.Rotation = 90
+	gradient.Transparency = NumberSequence.new{
+		NumberSequenceKeypoint.new(0, 0.4), -- More transparent gradient
+		NumberSequenceKeypoint.new(1, 0.6)
+	}
 	gradient.Parent = container
 
 	-- Border glow effect
 	local glow = Instance.new("UIStroke")
 	glow.Color = Color3.fromRGB(100, 255, 100)
-	glow.Thickness = math.max(1, 2 * scaleFactor)
-	glow.Transparency = 0.5
+	glow.Thickness = math.max(1, 1 * scaleFactor) -- Thinner border
+	glow.Transparency = 0.7 -- More transparent border (was 0.5)
 	glow.Parent = container
 
 	-- Title bar (responsive)
@@ -353,7 +357,8 @@ function ChairMilkingGUI:CreateResponsiveMilkingGUI(data)
 	titleBar.Name = "TitleBar"
 	titleBar.Size = UDim2.new(1, 0, 0.18, 0)
 	titleBar.Position = UDim2.new(0, 0, 0, 0)
-	titleBar.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
+	titleBar.BackgroundColor3 = Color3.fromRGB(25, 40, 25) -- Darker
+	titleBar.BackgroundTransparency = 0.3 -- More transparent (was 0)
 	titleBar.BorderSizePixel = 0
 	titleBar.Parent = container
 
@@ -428,9 +433,10 @@ function ChairMilkingGUI:CreateResponsiveMilkingGUI(data)
 	-- Progress bar background
 	local progressBarBG = Instance.new("Frame")
 	progressBarBG.Name = "ProgressBarBG"
-	progressBarBG.Size = UDim2.new(1, 0, 0.3, 0)
+	progressBarBG.Size = UDim2.new(1, 0, 0.25, 0) -- Slightly thinner progress bar
 	progressBarBG.Position = UDim2.new(0, 0, 0.35, 0)
-	progressBarBG.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	progressBarBG.BackgroundColor3 = Color3.fromRGB(15, 15, 15) -- Much darker
+	progressBarBG.BackgroundTransparency = 0.3 -- More transparent (was 0)
 	progressBarBG.BorderSizePixel = 0
 	progressBarBG.Parent = progressSection
 
@@ -694,20 +700,37 @@ function ChairMilkingGUI:CreateMilkCompletionEffect()
 	)
 	textCelebrate:Play()
 
-	-- Clean up after animation
+	-- Clean up after animation - FIX: Fade out individual elements instead of ScreenGui
 	spawn(function()
 		wait(1.5)
-		local fadeOut = TweenService:Create(celebrationGui,
+
+		-- Fade out the milk icon
+		local fadeOutIcon = TweenService:Create(milkIcon,
 			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{Size = UDim2.new(0, 0, 0, 0)}
+			{
+				TextTransparency = 1
+			}
 		)
-		fadeOut:Play()
-		fadeOut.Completed:Connect(function()
+
+		-- Fade out the celebration text
+		local fadeOutText = TweenService:Create(celebrationText,
+			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				TextTransparency = 1,
+				TextStrokeTransparency = 1
+			}
+		)
+
+		-- Play both fade animations
+		fadeOutIcon:Play()
+		fadeOutText:Play()
+
+		-- Clean up when icon fade completes
+		fadeOutIcon.Completed:Connect(function()
 			celebrationGui:Destroy()
 		end)
 	end)
 end
-
 -- ========== DEVICE-SPECIFIC TEXT ==========
 
 function ChairMilkingGUI:GetDeviceSpecificInstruction()

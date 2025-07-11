@@ -349,8 +349,14 @@ function CreateProgressFeedback(data)
 	fillCorner.CornerRadius = UDim.new(0.5, 0)
 	fillCorner.Parent = progressFill
 
-	-- Animate and clean up
-	local fadeOut = TweenService:Create(progressGui,
+	-- Animate and clean up - FIX: Tween the progressFrame instead of progressGui
+	local fadeOut = TweenService:Create(progressFrame,
+		TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{BackgroundTransparency = 1}
+	)
+
+	-- Also fade out the fill
+	local fillFadeOut = TweenService:Create(progressFill,
 		TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{BackgroundTransparency = 1}
 	)
@@ -358,6 +364,7 @@ function CreateProgressFeedback(data)
 	spawn(function()
 		wait(1.5)
 		fadeOut:Play()
+		fillFadeOut:Play()
 		fadeOut.Completed:Connect(function()
 			progressGui:Destroy()
 		end)
@@ -402,20 +409,37 @@ function CreateMilkCompletionEffect()
 	)
 	bounce:Play()
 
-	-- Clean up after celebration
+	-- Clean up after celebration - FIX: Tween the individual elements instead of ScreenGui
 	spawn(function()
 		wait(2)
-		local fadeOut = TweenService:Create(celebrationGui,
+
+		-- Fade out the milk icon
+		local fadeOutIcon = TweenService:Create(milkIcon,
 			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-			{BackgroundTransparency = 1}
+			{
+				TextTransparency = 1
+			}
 		)
-		fadeOut:Play()
-		fadeOut.Completed:Connect(function()
+
+		-- Fade out the celebration text
+		local fadeOutText = TweenService:Create(celebrationText,
+			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				TextTransparency = 1,
+				TextStrokeTransparency = 1
+			}
+		)
+
+		-- Play both fade animations
+		fadeOutIcon:Play()
+		fadeOutText:Play()
+
+		-- Clean up when icon fade completes
+		fadeOutIcon.Completed:Connect(function()
 			celebrationGui:Destroy()
 		end)
 	end)
 end
-
 -- ========== SYSTEM INTEGRATION ==========
 
 local function IntegrateWithExistingSystems()
