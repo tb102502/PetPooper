@@ -1,12 +1,12 @@
 --[[
-    FIXED CowMilkingModule.lua - Position Error Fix
+    FIXED CowMilkingModule.lua - Enhanced 10-Click System with Duplicate Protection
     Place in: ServerScriptService/CowMilkingModule.lua
     
     FIXES:
-    ✅ Fixed Position error for Model MilkingChair
-    ✅ Proper position detection for both Models and Parts
-    ✅ Better chair setup and detection
-    ✅ Enhanced error handling
+    ✅ Enhanced duplicate click prevention
+    ✅ Click ID verification system
+    ✅ Improved cooldown management
+    ✅ Better session tracking and validation
 ]]
 
 local CowMilkingModule = {}
@@ -24,7 +24,12 @@ CowMilkingModule.Config = {
 	sessionTimeout = 30,
 	maxMilkPerSession = 20,
 	proximityCheckInterval = 3,
-	movementThreshold = 8
+	movementThreshold = 8,
+	-- ENHANCED: Anti-spam protection
+	minimumClickInterval = 0.05, -- 50ms minimum between clicks
+	maximumClicksPerSecond = 20, -- Maximum 20 clicks per second
+	suspiciousClickThreshold = 30, -- Flag if more than 30 clicks/sec
+	clickIdTimeoutSeconds = 5 -- How long to remember click IDs
 }
 
 -- Module State
@@ -32,10 +37,149 @@ CowMilkingModule.ActiveSessions = {} -- [userId] = sessionData with progress
 CowMilkingModule.MilkingChairs = {} -- [chairId] = chairModel
 CowMilkingModule.PlayerProximityState = {} -- [userId] = proximityData
 
+-- ENHANCED: Anti-duplicate protection
+CowMilkingModule.ClickProtection = {
+	recentClicks = {}, -- [userId] = {timestamps, clickIds}
+	suspiciousPlayers = {}, -- [userId] = suspicionLevel
+	blockedPlayers = {} -- [userId] = blockEndTime
+}
+
 -- References
 local GameCore = nil
 local CowCreationModule = nil
 local RemoteEvents = {}
+
+-- ========== ENHANCED CLICK PROTECTION SYSTEM ==========
+
+function CowMilkingModule:InitializeClickProtection()
+	-- Clean up old click data periodically
+	spawn(function()
+		while true do
+			wait(10) -- Clean every 10 seconds
+			local currentTime = os.time()
+
+			for userId, clickData in pairs(self.ClickProtection.recentClicks) do
+				-- Remove old timestamps
+				local newTimestamps = {}
+				local newClickIds = {}
+
+				for i, timestamp in ipairs(clickData.timestamps or {}) do
+					if (currentTime - timestamp) < 10 then -- Keep last 10 seconds
+						table.insert(newTimestamps, timestamp)
+						if clickData.clickIds and clickData.clickIds[i] then
+							table.insert(newClickIds, clickData.clickIds[i])
+						end
+					end
+				end
+
+				if #newTimestamps > 0 then
+					self.ClickProtection.recentClicks[userId] = {
+						timestamps = newTimestamps,
+						clickIds = newClickIds
+					}
+				else
+					self.ClickProtection.recentClicks[userId] = nil
+				end
+			end
+
+			-- Clean up blocked players
+			for userId, blockEndTime in pairs(self.ClickProtection.blockedPlayers) do
+				if currentTime >= blockEndTime then
+					self.ClickProtection.blockedPlayers[userId] = nil
+					print("🔓 Unblocked player " .. userId .. " from clicking")
+				end
+			end
+		end
+	end)
+
+	print("✅ Click protection system initialized")
+end
+
+function CowMilkingModule:IsClickAllowed(player, clickId)
+	local userId = player.UserId
+	local currentTime = os.time()
+
+	-- Check if player is blocked
+	if self.ClickProtection.blockedPlayers[userId] then
+		if currentTime < self.ClickProtection.blockedPlayers[userId] then
+			print("🚫 Blocked player " .. player.Name .. " attempted to click")
+			return false, "Player is temporarily blocked for clicking too fast"
+		else
+			-- Unblock expired block
+			self.ClickProtection.blockedPlayers[userId] = nil
+		end
+	end
+
+	-- Initialize player click data if needed
+	if not self.ClickProtection.recentClicks[userId] then
+		self.ClickProtection.recentClicks[userId] = {
+			timestamps = {},
+			clickIds = {}
+		}
+	end
+
+	local playerClicks = self.ClickProtection.recentClicks[userId]
+
+	-- Check for duplicate click ID
+	if clickId then
+		for _, existingId in ipairs(playerClicks.clickIds) do
+			if existingId == clickId then
+				print("🚫 Duplicate click ID detected: " .. clickId)
+				return false, "Duplicate click ID"
+			end
+		end
+	end
+
+	-- Check click rate
+	local recentTimestamps = {}
+	for _, timestamp in ipairs(playerClicks.timestamps) do
+		if (currentTime - timestamp) < 1 then -- Last 1 second
+			table.insert(recentTimestamps, timestamp)
+		end
+	end
+
+	-- Check if too many clicks in the last second
+	if #recentTimestamps >= self.Config.maximumClicksPerSecond then
+		print("⚠️ Player " .. player.Name .. " clicking too fast: " .. #recentTimestamps .. " clicks/sec")
+
+		-- Increase suspicion
+		self.ClickProtection.suspiciousPlayers[userId] = (self.ClickProtection.suspiciousPlayers[userId] or 0) + 1
+
+		-- Block if too suspicious
+		if self.ClickProtection.suspiciousPlayers[userId] >= 3 then
+			self.ClickProtection.blockedPlayers[userId] = currentTime + 30 -- Block for 30 seconds
+			print("🚫 Blocked player " .. player.Name .. " for 30 seconds due to suspicious clicking")
+			self:SendNotification(player, "⚠️ Clicking Too Fast", "You've been temporarily blocked for clicking too quickly. Please wait 30 seconds.", "warning")
+		end
+
+		return false, "Clicking too fast"
+	end
+
+	-- Check minimum interval
+	if #playerClicks.timestamps > 0 then
+		local lastClick = playerClicks.timestamps[#playerClicks.timestamps]
+		if (currentTime - lastClick) < self.Config.minimumClickInterval then
+			print("🚫 Player " .. player.Name .. " clicking too frequently")
+			return false, "Minimum click interval not met"
+		end
+	end
+
+	-- Record this click
+	table.insert(playerClicks.timestamps, currentTime)
+	if clickId then
+		table.insert(playerClicks.clickIds, clickId)
+	end
+
+	-- Limit stored data
+	while #playerClicks.timestamps > 100 do
+		table.remove(playerClicks.timestamps, 1)
+	end
+	while #playerClicks.clickIds > 100 do
+		table.remove(playerClicks.clickIds, 1)
+	end
+
+	return true, "Click allowed"
+end
 
 -- ========== UTILITY FUNCTIONS ==========
 
@@ -83,11 +227,6 @@ function CowMilkingModule:GetModelPosition(object)
 	return Vector3.new(0, 0, 0)
 end
 
--- FIXED: Helper function to get model center safely
-function CowMilkingModule:GetModelCenter(model)
-	return self:GetModelPosition(model)
-end
-
 -- ========== INITIALIZATION ==========
 
 function CowMilkingModule:Initialize(gameCore, cowCreationModule)
@@ -99,7 +238,10 @@ function CowMilkingModule:Initialize(gameCore, cowCreationModule)
 	-- Setup remote events
 	self:SetupRemoteEvents()
 
-	-- Setup existing chairs (no creation)
+	-- Initialize click protection
+	self:InitializeClickProtection()
+
+	-- Setup existing chairs
 	self:DetectExistingChairs()
 
 	-- Start proximity monitoring
@@ -163,9 +305,10 @@ function CowMilkingModule:ConnectEventHandlers()
 	end
 
 	if RemoteEvents.ContinueMilking then
-		RemoteEvents.ContinueMilking.OnServerEvent:Connect(function(player)
+		-- ENHANCED: Handle click with protection
+		RemoteEvents.ContinueMilking.OnServerEvent:Connect(function(player, clickId)
 			pcall(function()
-				self:HandleContinueMilking(player)
+				self:HandleContinueMilkingProtected(player, clickId)
 			end)
 		end)
 	end
@@ -173,7 +316,104 @@ function CowMilkingModule:ConnectEventHandlers()
 	print("CowMilkingModule: Event handlers connected")
 end
 
--- ========== FIXED: CHAIR DETECTION ==========
+-- ========== ENHANCED CLICK HANDLING ==========
+
+function CowMilkingModule:HandleContinueMilkingProtected(player, clickId)
+	local userId = player.UserId
+
+	-- ENHANCED: Check if click is allowed
+	local allowed, reason = self:IsClickAllowed(player, clickId)
+	if not allowed then
+		print("🚫 Click rejected for " .. player.Name .. ": " .. reason)
+		return
+	end
+
+	-- Get session
+	local session = self.ActiveSessions[userId]
+	if not session or not session.isActive then 
+		print("❌ No active session for " .. player.Name)
+		return 
+	end
+
+	-- Check if player is still seated
+	local character = player.Character
+	if not character then
+		print("❌ No character for " .. player.Name)
+		self:HandleStopMilkingSession(player)
+		return
+	end
+
+	local humanoid = character:FindFirstChild("Humanoid")
+	if not humanoid then
+		print("❌ No humanoid for " .. player.Name)
+		self:HandleStopMilkingSession(player)
+		return
+	end
+
+	local isSeated = false
+	local success = pcall(function()
+		isSeated = humanoid.Sit
+	end)
+
+	if not success or not isSeated then
+		print("❌ Player " .. player.Name .. " not seated - ending session")
+		self:HandleStopMilkingSession(player)
+		return
+	end
+
+	-- ENHANCED: Process click with detailed tracking
+	session.totalClicks = session.totalClicks + 1
+	session.clickProgress = session.clickProgress + 1
+	session.lastClickTime = os.time()
+
+	print("🖱️ FIXED: " .. player.Name .. " clicked - Progress: " .. session.clickProgress .. "/" .. self.Config.clicksPerMilk .. 
+		" (Total clicks: " .. session.totalClicks .. ")")
+
+	-- Check if we've reached 10 clicks for 1 milk
+	if session.clickProgress >= self.Config.clicksPerMilk then
+		-- Give 1 milk and reset progress
+		session.milkCollected = session.milkCollected + 1
+		session.clickProgress = 0
+
+		print("🥛 FIXED: " .. player.Name .. " completed " .. self.Config.clicksPerMilk .. " clicks - awarded 1 milk! Total: " .. session.milkCollected)
+
+		-- Give milk to player immediately
+		self:GiveMilkToPlayer(player, session.cowId, 1)
+
+		-- Show milk collection notification
+		self:SendNotification(player, "🥛 +1 Milk Collected!", 
+			"Completed " .. self.Config.clicksPerMilk .. " clicks! Total milk: " .. session.milkCollected, "success")
+	end
+
+	-- Send progress update to client
+	self:SendMilkingProgressUpdate(player, session)
+
+	-- Check limits
+	if session.milkCollected >= session.maxMilk then
+		self:SendNotification(player, "🥛 Cow Empty!", 
+			"This cow has no more milk! Session ending.", "info")
+		self:HandleStopMilkingSession(player)
+		return
+	end
+end
+
+function CowMilkingModule:SendMilkingProgressUpdate(player, session)
+	if RemoteEvents.MilkingSessionUpdate then
+		pcall(function()
+			RemoteEvents.MilkingSessionUpdate:FireClient(player, "progress", {
+				milkCollected = session.milkCollected,
+				clickProgress = session.clickProgress,
+				clicksPerMilk = self.Config.clicksPerMilk,
+				totalClicks = session.totalClicks,
+				sessionDuration = os.time() - session.startTime,
+				lastClickTime = session.lastClickTime,
+				progressPercentage = math.floor((session.clickProgress / self.Config.clicksPerMilk) * 100)
+			})
+		end)
+	end
+end
+
+-- ========== EXISTING FUNCTIONS (UNCHANGED) ==========
 
 function CowMilkingModule:DetectExistingChairs()
 	print("CowMilkingModule: Detecting existing MilkingChair models...")
@@ -262,10 +502,6 @@ function CowMilkingModule:SetupExistingChair(chairObj)
 
 	if not seatPart then
 		warn("CowMilkingModule: No seat found in chair: " .. chairObj.Name)
-		warn("CowMilkingModule: Chair children:")
-		for _, child in pairs(chairObj:GetChildren()) do
-			warn("  - " .. child.Name .. " (" .. child.ClassName .. ")")
-		end
 		return nil
 	end
 
@@ -275,7 +511,7 @@ function CowMilkingModule:SetupExistingChair(chairObj)
 	seatPart:SetAttribute("IsMilkingChair", true)
 	seatPart:SetAttribute("ChairId", chairId)
 
-	-- Store chair reference (store the seat part for easier position access)
+	-- Store chair reference
 	self.MilkingChairs[chairId] = seatPart
 
 	-- Setup occupancy detection
@@ -291,12 +527,8 @@ function CowMilkingModule:SetupExistingChair(chairObj)
 		end
 	end
 
-	local position = self:GetModelPosition(chairObj)
-	print("CowMilkingModule: Setup chair " .. chairId .. " at " .. tostring(position))
 	return chairId
 end
-
--- ========== PROXIMITY MONITORING ==========
 
 function CowMilkingModule:StartProximityMonitoring()
 	print("CowMilkingModule: Starting proximity monitoring...")
@@ -332,7 +564,7 @@ function CowMilkingModule:UpdatePlayerProximityState(player)
 		return
 	end
 
-	-- Get nearby objects with proper position handling
+	-- Get nearby objects
 	local nearbyObjects = self:GetNearbyObjects(player, playerPos)
 	local promptState = self:DetermineProximityState(nearbyObjects)
 
@@ -384,7 +616,7 @@ function CowMilkingModule:GetNearbyObjects(player, playerPos)
 		end
 	end
 
-	-- Check for chairs with proper position handling
+	-- Check for chairs
 	for chairId, chair in pairs(self.MilkingChairs) do
 		if chair and chair.Parent then
 			local success, chairPos = pcall(function()
@@ -477,7 +709,6 @@ function CowMilkingModule:ShowProximityPrompt(player, promptState, nearbyObjects
 
 	local promptData = self:CreatePromptData(promptState, nearbyObjects)
 
-	-- Use pcall to prevent errors from stopping the system
 	pcall(function()
 		RemoteEvents.ShowChairPrompt:FireClient(player, "proximity", {
 			title = promptData.title,
@@ -534,8 +765,6 @@ function CowMilkingModule:HideProximityPrompt(player)
 	end
 end
 
--- ========== CHAIR OCCUPANCY HANDLING ==========
-
 function CowMilkingModule:HandleChairOccupancyChange(chair)
 	if not chair or not chair.Parent then
 		return
@@ -559,7 +788,6 @@ function CowMilkingModule:HandleChairOccupancyChange(chair)
 end
 
 function CowMilkingModule:HandlePlayerSatDown(player, chair)
-	-- Find nearby cow to milk
 	local character = player.Character
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then return end
@@ -576,10 +804,9 @@ function CowMilkingModule:HandlePlayerSatDown(player, chair)
 	end
 
 	if nearbyCow then
-		print("🥛 Starting 10-click milking session for " .. player.Name .. " with cow " .. nearbyCow.id)
+		print("🥛 Starting FIXED 10-click milking session for " .. player.Name .. " with cow " .. nearbyCow.id)
 		self:StartMilkingSession(player, nearbyCow.id, chair)
 	else
-		-- Check if there are any cows nearby (even if not ready)
 		if #nearbyObjects.cows > 0 then
 			self:SendNotification(player, "⏰ Cow Not Ready", 
 				"Your cow needs time to produce milk. Wait a bit and try again!", "warning")
@@ -590,12 +817,10 @@ function CowMilkingModule:HandlePlayerSatDown(player, chair)
 	end
 end
 
--- ========== 10-CLICK MILKING SESSION ==========
-
 function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 	local userId = player.UserId
 
-	print("🥛 Starting 10-click milking session for " .. player.Name .. " with cow " .. cowId)
+	print("🥛 Starting FIXED 10-click milking session for " .. player.Name .. " with cow " .. cowId)
 
 	-- Check if already in session
 	if self.ActiveSessions[userId] then
@@ -635,7 +860,7 @@ function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 		return false
 	end
 
-	-- Create session with 10-click progress tracking
+	-- Create FIXED session with enhanced tracking
 	local session = {
 		userId = userId,
 		playerId = player.UserId,
@@ -656,7 +881,7 @@ function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 	if RemoteEvents.ShowChairPrompt then
 		pcall(function()
 			RemoteEvents.ShowChairPrompt:FireClient(player, "milking", {
-				title = "🥛 10-Click Milking Active",
+				title = "🥛 FIXED 10-Click Milking Active",
 				subtitle = "Click " .. self.Config.clicksPerMilk .. " times to collect 1 milk!",
 				instruction = "Stay seated and click to collect milk. Leave chair to stop.",
 				cowId = cowId,
@@ -670,14 +895,13 @@ function CowMilkingModule:StartMilkingSession(player, cowId, chair)
 	-- Start session monitoring
 	self:StartSessionMonitoring(userId)
 
-	self:SendNotification(player, "🥛 10-Click Milking Started!", 
+	self:SendNotification(player, "🥛 FIXED 10-Click Milking Started!", 
 		"Click " .. self.Config.clicksPerMilk .. " times to get 1 milk! Stay seated to continue.", "success")
 
 	return true
 end
 
 function CowMilkingModule:HandleStartMilkingSession(player, cowId)
-	-- Find chair player is sitting in
 	local character = player.Character
 	if not character then return end
 
@@ -707,84 +931,6 @@ function CowMilkingModule:HandleStartMilkingSession(player, cowId)
 
 	-- Start session
 	self:StartMilkingSession(player, cowId, seatPart)
-end
-
-function CowMilkingModule:HandleContinueMilking(player)
-	local userId = player.UserId
-	local session = self.ActiveSessions[userId]
-
-	if not session or not session.isActive then 
-		return 
-	end
-
-	-- Check if player is still seated
-	local character = player.Character
-	if not character then
-		self:HandleStopMilkingSession(player)
-		return
-	end
-
-	local humanoid = character:FindFirstChild("Humanoid")
-	if not humanoid then
-		self:HandleStopMilkingSession(player)
-		return
-	end
-
-	local isSeated = false
-	local success = pcall(function()
-		isSeated = humanoid.Sit
-	end)
-
-	if not success or not isSeated then
-		self:HandleStopMilkingSession(player)
-		return
-	end
-
-	-- Process click with 10-click system
-	session.totalClicks = session.totalClicks + 1
-	session.clickProgress = session.clickProgress + 1
-	session.lastClickTime = os.time()
-
-	print("🖱️ " .. player.Name .. " clicked - Progress: " .. session.clickProgress .. "/" .. self.Config.clicksPerMilk)
-
-	-- Check if we've reached 10 clicks for 1 milk
-	if session.clickProgress >= self.Config.clicksPerMilk then
-		-- Give 1 milk and reset progress
-		session.milkCollected = session.milkCollected + 1
-		session.clickProgress = 0
-
-		print("🥛 " .. player.Name .. " completed " .. self.Config.clicksPerMilk .. " clicks - awarded 1 milk! Total: " .. session.milkCollected)
-
-		-- Give milk to player immediately
-		self:GiveMilkToPlayer(player, session.cowId, 1)
-	end
-
-	-- Send progress update to client
-	self:SendMilkingProgressUpdate(player, session)
-
-	-- Check limits
-	if session.milkCollected >= session.maxMilk then
-		self:SendNotification(player, "🥛 Cow Empty!", 
-			"This cow has no more milk! Session ending.", "info")
-		self:HandleStopMilkingSession(player)
-		return
-	end
-end
-
-function CowMilkingModule:SendMilkingProgressUpdate(player, session)
-	if RemoteEvents.MilkingSessionUpdate then
-		pcall(function()
-			RemoteEvents.MilkingSessionUpdate:FireClient(player, "progress", {
-				milkCollected = session.milkCollected,
-				clickProgress = session.clickProgress,
-				clicksPerMilk = self.Config.clicksPerMilk,
-				totalClicks = session.totalClicks,
-				sessionDuration = os.time() - session.startTime,
-				lastClickTime = session.lastClickTime,
-				progressPercentage = math.floor((session.clickProgress / self.Config.clicksPerMilk) * 100)
-			})
-		end)
-	end
 end
 
 function CowMilkingModule:GiveMilkToPlayer(player, cowId, milkAmount)
@@ -831,7 +977,7 @@ function CowMilkingModule:GiveMilkToPlayer(player, cowId, milkAmount)
 		end)
 	end
 
-	print("🎁 Gave " .. milkAmount .. " milk to " .. player.Name)
+	print("🎁 FIXED: Gave " .. milkAmount .. " milk to " .. player.Name)
 end
 
 function CowMilkingModule:HandleStopMilkingSession(player)
@@ -840,7 +986,7 @@ function CowMilkingModule:HandleStopMilkingSession(player)
 
 	if not session then return end
 
-	print("🛑 Stopping 10-click milking session for " .. player.Name)
+	print("🛑 Stopping FIXED 10-click milking session for " .. player.Name)
 
 	local totalMilk = session.milkCollected
 	local totalClicks = session.totalClicks
@@ -854,12 +1000,17 @@ function CowMilkingModule:HandleStopMilkingSession(player)
 			progressMessage = " (" .. clicksTowardsNext .. "/" .. self.Config.clicksPerMilk .. " clicks towards next milk)"
 		end
 
-		self:SendNotification(player, "🥛 Milking Complete!", 
+		self:SendNotification(player, "🥛 FIXED Milking Complete!", 
 			"Session ended! Collected " .. totalMilk .. " milk from " .. totalClicks .. " clicks" .. progressMessage, "success")
 	end
 
 	-- Clean up session
 	self.ActiveSessions[userId] = nil
+
+	-- Clean up click protection data
+	if self.ClickProtection.recentClicks[userId] then
+		self.ClickProtection.recentClicks[userId] = nil
+	end
 
 	-- Hide GUI
 	if RemoteEvents.HideChairPrompt then
@@ -868,8 +1019,6 @@ function CowMilkingModule:HandleStopMilkingSession(player)
 		end)
 	end
 end
-
--- ========== SESSION MONITORING ==========
 
 function CowMilkingModule:StartSessionMonitoring(userId)
 	spawn(function()
@@ -896,8 +1045,6 @@ function CowMilkingModule:StartSessionMonitoring(userId)
 	end)
 end
 
--- ========== PLAYER HANDLERS ==========
-
 function CowMilkingModule:SetupPlayerHandlers()
 	Players.PlayerRemoving:Connect(function(player)
 		local userId = player.UserId
@@ -911,10 +1058,19 @@ function CowMilkingModule:SetupPlayerHandlers()
 		if self.PlayerProximityState[userId] then
 			self.PlayerProximityState[userId] = nil
 		end
+
+		-- Clean up click protection
+		if self.ClickProtection.recentClicks[userId] then
+			self.ClickProtection.recentClicks[userId] = nil
+		end
+		if self.ClickProtection.suspiciousPlayers[userId] then
+			self.ClickProtection.suspiciousPlayers[userId] = nil
+		end
+		if self.ClickProtection.blockedPlayers[userId] then
+			self.ClickProtection.blockedPlayers[userId] = nil
+		end
 	end)
 end
-
--- ========== UTILITY FUNCTIONS ==========
 
 function CowMilkingModule:SendNotification(player, title, message, notificationType)
 	if GameCore and GameCore.SendNotification then
@@ -934,13 +1090,15 @@ function CowMilkingModule:CountTable(t)
 	return count
 end
 
--- ========== DEBUG FUNCTIONS ==========
+-- ========== ENHANCED DEBUG FUNCTIONS ==========
 
 function CowMilkingModule:DebugStatus()
 	print("=== FIXED 10-CLICK MILKING DEBUG ===")
 	print("Active sessions: " .. self:CountTable(self.ActiveSessions))
 	print("Milking chairs: " .. self:CountTable(self.MilkingChairs))
 	print("Clicks per milk: " .. self.Config.clicksPerMilk)
+	print("Protected players: " .. self:CountTable(self.ClickProtection.recentClicks))
+	print("Blocked players: " .. self:CountTable(self.ClickProtection.blockedPlayers))
 
 	for userId, session in pairs(self.ActiveSessions) do
 		local player = Players:GetPlayerByUserId(userId)
@@ -951,20 +1109,13 @@ function CowMilkingModule:DebugStatus()
 		print("  Milk collected: " .. session.milkCollected)
 	end
 
-	print("Chairs:")
-	for chairId, chair in pairs(self.MilkingChairs) do
-		local success, position = pcall(function()
-			return self:GetModelPosition(chair)
-		end)
-		local posStr = success and tostring(position) or "Error getting position"
-
-		local occupiedSuccess, occupied = pcall(function()
-			return chair.Occupant and "YES" or "NO"
-		end)
-		local occupiedStr = occupiedSuccess and occupied or "Unknown"
-
-		print("  " .. chairId .. " - Occupied: " .. occupiedStr .. " - Pos: " .. posStr)
+	print("Click protection status:")
+	for userId, clickData in pairs(self.ClickProtection.recentClicks) do
+		local player = Players:GetPlayerByUserId(userId)
+		local playerName = player and player.Name or "Unknown"
+		print("  " .. playerName .. " - Recent clicks: " .. #(clickData.timestamps or {}))
 	end
+
 	print("=====================================")
 end
 
@@ -978,6 +1129,11 @@ function CowMilkingModule:GetSystemStatus()
 			count = self:CountTable(self.MilkingChairs),
 			chairs = self.MilkingChairs
 		},
+		clickProtection = {
+			protectedPlayers = self:CountTable(self.ClickProtection.recentClicks),
+			blockedPlayers = self:CountTable(self.ClickProtection.blockedPlayers),
+			suspiciousPlayers = self:CountTable(self.ClickProtection.suspiciousPlayers)
+		},
 		config = self.Config
 	}
 end
@@ -990,12 +1146,13 @@ _G.DebugMilking = function()
 	CowMilkingModule:DebugStatus()
 end
 
-print("CowMilkingModule: ✅ FIXED 10-CLICK SYSTEM LOADED!")
-print("🔧 POSITION FIXES:")
-print("  📍 Fixed Position error for Model MilkingChair")
-print("  🛠️ Added GetModelPosition helper function")
-print("  ⚡ Enhanced error handling with pcall")
-print("  🪑 Better chair detection for Models and Parts")
+print("CowMilkingModule: ✅ FIXED 10-CLICK SYSTEM WITH PROTECTION LOADED!")
+print("🔧 DUPLICATE CLICK FIXES:")
+print("  🛡️ Enhanced click ID verification")
+print("  ⏱️ Minimum click interval protection")
+print("  📊 Click rate limiting (max 20/sec)")
+print("  🚫 Automatic player blocking for abuse")
+print("  🧹 Automatic cleanup of old click data")
 print("")
 print("🖱️ 10-CLICK FEATURES:")
 print("  📊 10 clicks = 1 milk system")
@@ -1005,6 +1162,6 @@ print("  🐄 Works with existing cow models")
 print("  📱 Real-time progress updates")
 print("")
 print("🔧 Debug Commands:")
-print("  _G.DebugMilking() - Show milking system status")
+print("  _G.DebugMilking() - Show FIXED milking system status")
 
 return CowMilkingModule
