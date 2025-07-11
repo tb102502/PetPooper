@@ -1,25 +1,28 @@
 --[[
-    FIXED SystemInitializer.server.lua - Proper System Coordination
+    ENHANCED SystemInitializer.server.lua - Enhanced Inventory Integration
     Place in: ServerScriptService/SystemInitializer.server.lua
     
-    FIXES:
-    ✅ Proper initialization order
-    ✅ Avoids duplicate module loading
-    ✅ Better error handling and recovery
-    ✅ Coordinates all systems properly
+    ENHANCEMENTS:
+    ✅ Added enhanced inventory system integration
+    ✅ Enhanced remote event setup for inventory
+    ✅ Updated GameCore initialization with inventory support
+    ✅ Added inventory debug commands
+    ✅ Better coordination with enhanced systems
 ]]
 
 local ServerScriptService = game:GetService("ServerScriptService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-print("🚀 === Pet Palace FIXED System Coordinator Starting ===")
+print("🚀 === Pet Palace ENHANCED System Coordinator Starting ===")
 
--- System state tracking
+-- Enhanced system state tracking
 local SystemState = {
 	GameCoreLoaded = false,
+	ShopSystemLoaded = false,
 	ModulesInitialized = false,
 	RemoteEventsReady = false,
+	InventorySystemReady = false,
 	SystemsConnected = false
 }
 
@@ -44,10 +47,10 @@ local function SafeRequire(moduleScript, moduleName)
 	end
 end
 
--- ========== STEP 1: LOAD GAMECORE ==========
+-- ========== STEP 1: LOAD GAMECORE WITH ENHANCED FEATURES ==========
 
-local function LoadGameCore()
-	print("🎮 Loading GameCore...")
+local function LoadEnhancedGameCore()
+	print("🎮 Loading Enhanced GameCore...")
 
 	-- Check if GameCore is already loaded
 	if _G.GameCore then
@@ -76,22 +79,268 @@ local function LoadGameCore()
 	end
 end
 
--- ========== STEP 2: VERIFY MODULES EXIST ==========
+-- ========== STEP 2: ENHANCED REMOTE EVENT SETUP ==========
 
-local function VerifyModulesExist()
-	print("🔍 Verifying module availability...")
+local function SetupEnhancedRemoteEvents()
+	print("📡 Setting up enhanced remote events with inventory support...")
+
+	local remotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+	if not remotes then
+		remotes = Instance.new("Folder")
+		remotes.Name = "GameRemotes"
+		remotes.Parent = ReplicatedStorage
+		print("Created GameRemotes folder")
+	end
+
+	-- ENHANCED: Remote events with inventory support
+	local enhancedRemoteEvents = {
+		-- Core events
+		"PlayerDataUpdated", "ShowNotification",
+		-- Farm events
+		"PlantSeed", "HarvestCrop", "HarvestAllCrops",
+		-- ADDED: Enhanced inventory events
+		"InventoryUpdated", "ItemSold", "ItemPurchased",
+		-- Shop events
+		"PurchaseItem", "SellItem", "OpenShop", "CloseShop",
+		-- Cow milking events
+		"ShowChairPrompt", "HideChairPrompt", 
+		"StartMilkingSession", "StopMilkingSession", 
+		"ContinueMilking", "MilkingSessionUpdate"
+	}
+
+	-- ENHANCED: Remote functions with inventory support
+	local enhancedRemoteFunctions = {
+		-- Core functions
+		"GetPlayerData", "GetFarmingData",
+		-- ADDED: Enhanced inventory functions
+		"GetInventoryData", "GetMiningData", "GetCraftingData", "SellInventoryItem",
+		-- Shop functions
+		"GetShopItems", "GetShopItemsByCategory", 
+		"GetShopCategories", "GetSellableItems"
+	}
+
+	-- Create remote events
+	local eventsCreated = 0
+	for _, eventName in ipairs(enhancedRemoteEvents) do
+		if not remotes:FindFirstChild(eventName) then
+			local newEvent = Instance.new("RemoteEvent")
+			newEvent.Name = eventName
+			newEvent.Parent = remotes
+			eventsCreated = eventsCreated + 1
+			print("Created RemoteEvent: " .. eventName)
+		else
+			print("Found existing RemoteEvent: " .. eventName)
+		end
+	end
+
+	-- Create remote functions
+	local functionsCreated = 0
+	for _, funcName in ipairs(enhancedRemoteFunctions) do
+		if not remotes:FindFirstChild(funcName) then
+			local newFunc = Instance.new("RemoteFunction")
+			newFunc.Name = funcName
+			newFunc.Parent = remotes
+			functionsCreated = functionsCreated + 1
+			print("Created RemoteFunction: " .. funcName)
+		else
+			print("Found existing RemoteFunction: " .. funcName)
+		end
+	end
+
+	print("📡 Enhanced remote setup complete:")
+	print("  Events: " .. #enhancedRemoteEvents .. " (" .. eventsCreated .. " created)")
+	print("  Functions: " .. #enhancedRemoteFunctions .. " (" .. functionsCreated .. " created)")
+
+	SystemState.RemoteEventsReady = true
+	return true
+end
+
+-- ========== STEP 3: INITIALIZE ENHANCED GAMECORE ==========
+
+local function InitializeEnhancedGameCore(GameCore)
+	print("🔧 Initializing Enhanced GameCore with inventory support...")
+
+	if not GameCore.Initialize then
+		error("❌ GameCore.Initialize method not found")
+	end
+
+	-- Initialize GameCore with enhanced features
+	local success, result = pcall(function()
+		return GameCore:Initialize()
+	end)
+
+	if success and result then
+		print("✅ Enhanced GameCore initialized successfully")
+		_G.GameCore = GameCore  -- Set global reference
+
+		-- ADDED: Setup enhanced inventory handlers
+		local remotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+		if remotes and GameCore.RemoteFunctions then
+
+			-- Enhanced inventory remote functions
+			if GameCore.RemoteFunctions.GetInventoryData then
+				GameCore.RemoteFunctions.GetInventoryData.OnServerInvoke = function(player, inventoryType)
+					return GameCore:GetInventoryData(player, inventoryType)
+				end
+				print("✅ Connected GetInventoryData handler")
+			end
+
+			if GameCore.RemoteFunctions.GetMiningData then
+				GameCore.RemoteFunctions.GetMiningData.OnServerInvoke = function(player)
+					local playerData = GameCore:GetPlayerData(player)
+					return playerData and playerData.mining or {
+						inventory = {},
+						tools = {},
+						level = 1
+					}
+				end
+				print("✅ Connected GetMiningData handler")
+			end
+
+			if GameCore.RemoteFunctions.GetCraftingData then
+				GameCore.RemoteFunctions.GetCraftingData.OnServerInvoke = function(player)
+					local playerData = GameCore:GetPlayerData(player)
+					return playerData and playerData.crafting or {
+						inventory = {},
+						recipes = {},
+						stations = {}
+					}
+				end
+				print("✅ Connected GetCraftingData handler")
+			end
+
+			if GameCore.RemoteFunctions.SellInventoryItem then
+				GameCore.RemoteFunctions.SellInventoryItem.OnServerInvoke = function(player, itemId, quantity)
+					return GameCore:SellInventoryItem(player, itemId, quantity)
+				end
+				print("✅ Connected SellInventoryItem handler")
+			end
+
+			-- Enhanced inventory events
+			if GameCore.RemoteEvents.SellItem then
+				GameCore.RemoteEvents.SellItem.OnServerEvent:Connect(function(player, itemId, quantity)
+					pcall(function()
+						GameCore:SellInventoryItem(player, itemId, quantity or 1)
+					end)
+				end)
+				print("✅ Connected SellItem event handler")
+			end
+		end
+
+		SystemState.InventorySystemReady = true
+		return true
+	else
+		error("❌ Enhanced GameCore initialization failed: " .. tostring(result))
+	end
+end
+
+-- ========== STEP 4: LOAD AND INITIALIZE SHOP SYSTEM ==========
+
+local function LoadAndInitializeShopSystem(GameCore)
+	print("🛒 Loading and initializing ShopSystem...")
+
+	local ShopSystem = nil
+	local systemsFolder = ServerScriptService:FindFirstChild("Systems")
+	if systemsFolder then
+		local shopSystemModule = systemsFolder:FindFirstChild("ShopSystem")
+		if shopSystemModule then
+			local shopSuccess, shopResult = pcall(function()
+				return require(shopSystemModule)
+			end)
+			if shopSuccess then
+				ShopSystem = shopResult
+				print("✅ ShopSystem loaded successfully")
+			else
+				warn("❌ ShopSystem failed to load: " .. tostring(shopResult))
+				return false
+			end
+		else
+			warn("❌ ShopSystem module not found in Systems folder")
+			return false
+		end
+	else
+		warn("❌ Systems folder not found")
+		return false
+	end
+
+	-- Initialize ShopSystem
+	if ShopSystem then
+		print("🛒 Initializing ShopSystem...")
+		local shopInitSuccess, shopInitError = pcall(function()
+			return ShopSystem:Initialize(GameCore)
+		end)
+
+		if shopInitSuccess then
+			print("✅ ShopSystem initialized successfully")
+			_G.ShopSystem = ShopSystem
+
+			-- Connect ShopSystem remote handlers
+			if GameCore.RemoteFunctions then
+				-- Shop data functions
+				if GameCore.RemoteFunctions.GetShopItems then
+					GameCore.RemoteFunctions.GetShopItems.OnServerInvoke = function(player)
+						return ShopSystem:HandleGetShopItems(player)
+					end
+					print("✅ Connected GetShopItems handler")
+				end
+
+				if GameCore.RemoteFunctions.GetShopItemsByCategory then
+					GameCore.RemoteFunctions.GetShopItemsByCategory.OnServerInvoke = function(player, category)
+						return ShopSystem:HandleGetShopItemsByCategory(player, category)
+					end
+					print("✅ Connected GetShopItemsByCategory handler")
+				end
+
+				if GameCore.RemoteFunctions.GetShopCategories then
+					GameCore.RemoteFunctions.GetShopCategories.OnServerInvoke = function(player)
+						return ShopSystem:HandleGetShopCategories(player)
+					end
+					print("✅ Connected GetShopCategories handler")
+				end
+
+				if GameCore.RemoteFunctions.GetSellableItems then
+					GameCore.RemoteFunctions.GetSellableItems.OnServerInvoke = function(player)
+						return ShopSystem:HandleGetSellableItems(player)
+					end
+					print("✅ Connected GetSellableItems handler")
+				end
+			end
+
+			-- Connect shop events
+			if GameCore.RemoteEvents then
+				if GameCore.RemoteEvents.PurchaseItem then
+					GameCore.RemoteEvents.PurchaseItem.OnServerEvent:Connect(function(player, itemId, quantity)
+						ShopSystem:HandlePurchase(player, itemId, quantity or 1)
+					end)
+					print("✅ Connected PurchaseItem handler")
+				end
+			end
+
+			SystemState.ShopSystemLoaded = true
+			return true
+		else
+			warn("❌ ShopSystem initialization failed: " .. tostring(shopInitError))
+			return false
+		end
+	end
+
+	return false
+end
+
+-- ========== STEP 5: VERIFY MODULES AND SETUP ==========
+
+local function VerifyEnhancedModules()
+	print("🔍 Verifying enhanced module availability...")
 
 	local modulesFound = {}
 	local modulesAvailable = 0
 
-	-- Check for cow modules in root ServerScriptService
+	-- Check for cow modules
 	local cowCreationModule = ServerScriptService:FindFirstChild("CowCreationModule")
 	if cowCreationModule then
 		modulesFound.CowCreationModule = true
 		modulesAvailable = modulesAvailable + 1
 		print("✅ CowCreationModule found")
-	else
-		print("⚠️ CowCreationModule not found")
 	end
 
 	local cowMilkingModule = ServerScriptService:FindFirstChild("CowMilkingModule")
@@ -99,14 +348,17 @@ local function VerifyModulesExist()
 		modulesFound.CowMilkingModule = true
 		modulesAvailable = modulesAvailable + 1
 		print("✅ CowMilkingModule found")
-	else
-		print("⚠️ CowMilkingModule not found")
 	end
 
-	-- Check for crop modules in Modules folder (optional)
+	-- Check for crop modules
 	local modulesFolder = ServerScriptService:FindFirstChild("Modules")
 	if modulesFolder then
-		print("✅ Modules folder found, checking for crop modules...")
+		local farmPlot = modulesFolder:FindFirstChild("FarmPlot")
+		if farmPlot then
+			modulesFound.FarmPlot = true
+			modulesAvailable = modulesAvailable + 1
+			print("✅ FarmPlot found")
+		end
 
 		local cropCreation = modulesFolder:FindFirstChild("CropCreation")
 		if cropCreation then
@@ -114,15 +366,6 @@ local function VerifyModulesExist()
 			modulesAvailable = modulesAvailable + 1
 			print("✅ CropCreation found")
 		end
-
-		local farmPlot = modulesFolder:FindFirstChild("FarmPlot") 
-		if farmPlot then
-			modulesFound.FarmPlot = true
-			modulesAvailable = modulesAvailable + 1
-			print("✅ FarmPlot found")
-		end
-	else
-		print("ℹ️ No Modules folder found (optional)")
 	end
 
 	print("📦 Total modules available: " .. modulesAvailable)
@@ -130,83 +373,23 @@ local function VerifyModulesExist()
 	return modulesFound, modulesAvailable
 end
 
--- ========== STEP 3: VERIFY WORKSPACE MODELS ==========
+-- ========== STEP 6: WAIT FOR MODULE CONNECTIONS ==========
 
-local function VerifyWorkspaceModels()
-	print("🔍 Verifying workspace models...")
-
-	local cowsFound = 0
-	local chairsFound = 0
-
-	-- Search for cows and chairs
-	for _, obj in pairs(workspace:GetChildren()) do
-		local name = obj.Name:lower()
-
-		if name == "cow" or name:find("cow") then
-			cowsFound = cowsFound + 1
-			print("📍 Found cow: " .. obj.Name)
-		end
-
-		if name == "milkingchair" or name:find("chair") then
-			chairsFound = chairsFound + 1
-			print("📍 Found chair: " .. obj.Name)
-		end
-	end
-
-	print("🐄 Total cows found: " .. cowsFound)
-	print("🪑 Total chairs found: " .. chairsFound)
-
-	if cowsFound == 0 then
-		warn("⚠️ No cow models found! Add a model named 'cow' to workspace")
-	end
-
-	if chairsFound == 0 then
-		warn("⚠️ No chair models found! Add a model named 'MilkingChair' to workspace")
-	end
-
-	return cowsFound > 0 and chairsFound > 0
-end
-
--- ========== STEP 4: INITIALIZE GAMECORE ==========
-
-local function InitializeGameCore(GameCore)
-	print("🔧 Initializing GameCore...")
-
-	if not GameCore.Initialize then
-		error("❌ GameCore.Initialize method not found")
-	end
-
-	local success, result = pcall(function()
-		return GameCore:Initialize()
-	end)
-
-	if success and result then
-		print("✅ GameCore initialized successfully")
-		_G.GameCore = GameCore  -- Set global reference
-		return true
-	else
-		error("❌ GameCore initialization failed: " .. tostring(result))
-	end
-end
-
--- ========== STEP 5: WAIT FOR MODULES TO CONNECT ==========
-
-local function WaitForModuleConnections(timeout)
+local function WaitForEnhancedConnections(timeout)
 	timeout = timeout or 30
 	local startTime = tick()
 
-	print("⏳ Waiting for modules to connect to GameCore...")
+	print("⏳ Waiting for enhanced modules to connect...")
 
 	while (tick() - startTime) < timeout do
 		local cowCreationReady = _G.CowCreationModule ~= nil
 		local cowMilkingReady = _G.CowMilkingModule ~= nil
+		local farmPlotReady = _G.FarmPlot ~= nil
 
 		if cowCreationReady and cowMilkingReady then
-			print("✅ All cow modules connected successfully")
+			print("✅ All essential modules connected successfully")
 			SystemState.SystemsConnected = true
 			return true
-		elseif cowCreationReady or cowMilkingReady then
-			print("⏳ Some modules connected, waiting for all...")
 		end
 
 		wait(1)
@@ -215,100 +398,164 @@ local function WaitForModuleConnections(timeout)
 	-- Check what we have after timeout
 	local cowCreationReady = _G.CowCreationModule ~= nil
 	local cowMilkingReady = _G.CowMilkingModule ~= nil
+	local farmPlotReady = _G.FarmPlot ~= nil
+
+	print("⚠️ Connection status after timeout:")
+	print("  CowCreationModule: " .. (cowCreationReady and "✅" or "❌"))
+	print("  CowMilkingModule: " .. (cowMilkingReady and "✅" or "❌"))
+	print("  FarmPlot: " .. (farmPlotReady and "✅" or "❌"))
 
 	if cowCreationReady or cowMilkingReady then
-		print("⚠️ Partial module connection after timeout")
-		print("  CowCreationModule: " .. (cowCreationReady and "✅" or "❌"))
-		print("  CowMilkingModule: " .. (cowMilkingReady and "✅" or "❌"))
 		SystemState.SystemsConnected = true
 		return true
-	else
-		warn("❌ No modules connected after " .. timeout .. " seconds")
-		return false
 	end
+
+	return false
 end
 
--- ========== STEP 6: VERIFY REMOTE EVENTS ==========
+-- ========== STEP 7: ENHANCED DEBUG COMMANDS ==========
 
-local function VerifyRemoteEvents()
-	print("📡 Verifying remote events...")
-
-	local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
-	if not gameRemotes then
-		warn("❌ GameRemotes folder not found")
-		return false
-	end
-
-	local requiredEvents = {
-		"ShowChairPrompt", "HideChairPrompt",
-		"StartMilkingSession", "StopMilkingSession", 
-		"ContinueMilking", "MilkingSessionUpdate",
-		"PlayerDataUpdated", "ShowNotification"
-	}
-
-	local eventsFound = 0
-	for _, eventName in ipairs(requiredEvents) do
-		local event = gameRemotes:FindFirstChild(eventName)
-		if event then
-			eventsFound = eventsFound + 1
-			print("✅ Found event: " .. eventName)
-		else
-			print("⚠️ Missing event: " .. eventName)
-		end
-	end
-
-	print("📡 Remote events ready: " .. eventsFound .. "/" .. #requiredEvents)
-	SystemState.RemoteEventsReady = eventsFound >= (#requiredEvents - 2) -- Allow some missing
-	return SystemState.RemoteEventsReady
-end
-
--- ========== STEP 7: SETUP DEBUG COMMANDS ==========
-
-local function SetupSystemDebugCommands()
-	print("🔧 Setting up system debug commands...")
+local function SetupEnhancedDebugCommands()
+	print("🔧 Setting up enhanced debug commands...")
 
 	Players.PlayerAdded:Connect(function(player)
 		player.Chatted:Connect(function(message)
 			if player.Name == "TommySalami311" then -- Change to your username
 				local command = message:lower()
 
-				if command == "/systemstatus" then
-					print("=== FIXED SYSTEM STATUS ===")
+				if command == "/enhancedsystemstatus" then
+					print("=== ENHANCED SYSTEM STATUS ===")
+					print("GameCore: " .. (SystemState.GameCoreLoaded and "✅" or "❌"))
+					print("ShopSystem: " .. (SystemState.ShopSystemLoaded and "✅" or "❌"))
+					print("Modules: " .. (SystemState.ModulesInitialized and "✅" or "❌"))
+					print("Remote Events: " .. (SystemState.RemoteEventsReady and "✅" or "❌"))
+					print("Inventory System: " .. (SystemState.InventorySystemReady and "✅" or "❌"))
+					print("Systems Connected: " .. (SystemState.SystemsConnected and "✅" or "❌"))
+					print("")
+					print("Global references:")
+					print("  _G.GameCore: " .. (_G.GameCore and "✅" or "❌"))
+					print("  _G.ShopSystem: " .. (_G.ShopSystem and "✅" or "❌"))
+					print("  _G.CowCreationModule: " .. (_G.CowCreationModule and "✅" or "❌"))
+					print("  _G.CowMilkingModule: " .. (_G.CowMilkingModule and "✅" or "❌"))
+					print("  _G.FarmPlot: " .. (_G.FarmPlot and "✅" or "❌"))
+					print("")
+
+					-- Enhanced debug info
+					if _G.GameCore and _G.GameCore.DebugEnhancedStatus then
+						_G.GameCore:DebugEnhancedStatus()
+					end
+					print("===============================")
+
+				elseif command == "/testinventory" then
+					print("🧪 Testing enhanced inventory system...")
+
+					if _G.GameCore then
+						-- Add test items to player
+						local success1 = _G.GameCore:AddItemToInventory(player, "farming", "carrot_seeds", 5)
+						local success2 = _G.GameCore:AddItemToInventory(player, "farming", "carrot", 3)
+						local success3 = _G.GameCore:AddOreToInventory(player, "copper_ore", 4)
+						local success4 = _G.GameCore:CollectMilk(player, 6)
+
+						print("Inventory test results:")
+						print("  Carrot seeds: " .. (success1 and "✅" or "❌"))
+						print("  Carrots: " .. (success2 and "✅" or "❌"))
+						print("  Copper ore: " .. (success3 and "✅" or "❌"))
+						print("  Milk: " .. (success4 and "✅" or "❌"))
+
+						-- Test selling
+						wait(1)
+						local sellSuccess = _G.GameCore:SellInventoryItem(player, "carrot", 1)
+						print("  Sell test: " .. (sellSuccess and "✅" or "❌"))
+					else
+						print("❌ GameCore not available")
+					end
+
+				elseif command == "/testenhancedshop" then
+					print("🛒 Testing enhanced shop system...")
+
+					if _G.ShopSystem then
+						-- Test shop functions
+						local items = _G.ShopSystem:HandleGetShopItems(player)
+						print("Shop items available: " .. (items and #items or 0))
+
+						local categories = _G.ShopSystem:HandleGetShopCategories(player)
+						print("Shop categories: " .. (categories and #categories or 0))
+
+						local sellableItems = _G.ShopSystem:HandleGetSellableItems(player)
+						print("Sellable items: " .. (sellableItems and #sellableItems or 0))
+					else
+						print("❌ ShopSystem not available")
+					end
+
+				elseif command == "/playerinventory" then
+					if _G.GameCore then
+						local playerData = _G.GameCore:GetPlayerData(player)
+						if playerData then
+							print("=== " .. player.Name .. "'S INVENTORY ===")
+							print("Coins: " .. (playerData.coins or 0))
+							print("Farm Tokens: " .. (playerData.farmTokens or 0))
+							print("Milk: " .. (playerData.milk or 0))
+
+							if playerData.farming and playerData.farming.inventory then
+								print("Farming items:")
+								for itemId, quantity in pairs(playerData.farming.inventory) do
+									print("  " .. itemId .. ": " .. quantity)
+								end
+							end
+
+							if playerData.mining and playerData.mining.inventory then
+								print("Mining items:")
+								for itemId, quantity in pairs(playerData.mining.inventory) do
+									print("  " .. itemId .. ": " .. quantity)
+								end
+							end
+
+							if playerData.crafting and playerData.crafting.inventory then
+								print("Crafting items:")
+								for itemId, quantity in pairs(playerData.crafting.inventory) do
+									print("  " .. itemId .. ": " .. quantity)
+								end
+							end
+							print("===============================")
+						else
+							print("❌ Player data not found")
+						end
+					else
+						print("❌ GameCore not available")
+					end
+
+				elseif command == "/clearinventory" then
+					if _G.GameCore then
+						local playerData = _G.GameCore:GetPlayerData(player)
+						if playerData then
+							-- Clear inventories
+							if playerData.farming then
+								playerData.farming.inventory = {}
+							end
+							if playerData.mining then
+								playerData.mining.inventory = {}
+							end
+							if playerData.crafting then
+								playerData.crafting.inventory = {}
+							end
+							playerData.milk = 0
+
+							_G.GameCore:UpdatePlayerData(player, playerData)
+							print("✅ " .. player.Name .. "'s inventory cleared")
+						end
+					else
+						print("❌ GameCore not available")
+					end
+
+					-- Include existing commands
+				elseif command == "/systemstatus" then
+					print("=== BASIC SYSTEM STATUS ===")
 					print("GameCore loaded: " .. (SystemState.GameCoreLoaded and "✅" or "❌"))
 					print("Modules initialized: " .. (SystemState.ModulesInitialized and "✅" or "❌"))
 					print("Remote events ready: " .. (SystemState.RemoteEventsReady and "✅" or "❌"))
 					print("Systems connected: " .. (SystemState.SystemsConnected and "✅" or "❌"))
-					print("")
-					print("Global references:")
-					print("  _G.GameCore: " .. (_G.GameCore and "✅" or "❌"))
-					print("  _G.CowCreationModule: " .. (_G.CowCreationModule and "✅" or "❌"))
-					print("  _G.CowMilkingModule: " .. (_G.CowMilkingModule and "✅" or "❌"))
-					print("")
 					print("Active players: " .. #Players:GetPlayers())
-
-					-- Check workspace models
-					local cowCount, chairCount = 0, 0
-					for _, obj in pairs(workspace:GetChildren()) do
-						if obj.Name:lower():find("cow") then cowCount = cowCount + 1 end
-						if obj.Name:lower():find("chair") then chairCount = chairCount + 1 end
-					end
-					print("Workspace: " .. cowCount .. " cows, " .. chairCount .. " chairs")
 					print("============================")
-
-				elseif command == "/reconnect" then
-					print("🔄 Attempting system reconnection...")
-
-					-- Re-verify and reconnect
-					local success = pcall(function()
-						VerifyRemoteEvents()
-						WaitForModuleConnections(10)
-					end)
-
-					if success then
-						print("✅ Reconnection attempt complete")
-					else
-						print("❌ Reconnection failed")
-					end
 
 				elseif command == "/testcow" then
 					if _G.CowCreationModule and _G.CowCreationModule.GiveStarterCow then
@@ -324,318 +571,90 @@ local function SetupSystemDebugCommands()
 					else
 						print("❌ CowMilkingModule not available")
 					end
-				elseif command == "/debugshop" then
-					print("=== SHOP SYSTEM DEBUG ===")
-					print("ShopSystem loaded: " .. (_G.ShopSystem and "✅" or "❌"))
-					print("GameCore loaded: " .. (_G.GameCore and "✅" or "❌"))
-
-					-- Check remote functions
-					local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
-					if gameRemotes then
-						print("GameRemotes folder: ✅")
-
-						local shopRemotes = {
-							"GetShopItems", "GetShopItemsByCategory", 
-							"GetShopCategories", "GetSellableItems"
-						}
-
-						print("Shop Remote Functions:")
-						for _, remoteName in ipairs(shopRemotes) do
-							local remote = gameRemotes:FindFirstChild(remoteName)
-							print("  " .. remoteName .. ": " .. (remote and "✅" or "❌"))
-						end
-
-						local shopEvents = {
-							"PurchaseItem", "ItemPurchased", "SellItem", 
-							"ItemSold", "OpenShop", "CloseShop"
-						}
-
-						print("Shop Remote Events:")
-						for _, eventName in ipairs(shopEvents) do
-							local event = gameRemotes:FindFirstChild(eventName)
-							print("  " .. eventName .. ": " .. (event and "✅" or "❌"))
-						end
-					else
-						print("GameRemotes folder: ❌")
-					end
-
-					-- Test ShopSystem functionality
-					if _G.ShopSystem then
-						print("Testing ShopSystem methods:")
-						local hasGetShopItems = _G.ShopSystem.HandleGetShopItems ~= nil
-						local hasGetCategories = _G.ShopSystem.HandleGetShopCategories ~= nil
-						print("  HandleGetShopItems: " .. (hasGetShopItems and "✅" or "❌"))
-						print("  HandleGetShopCategories: " .. (hasGetCategories and "✅" or "❌"))
-
-						-- Test getting shop items
-						local success, result = pcall(function()
-							return _G.ShopSystem:HandleGetShopItems(player)
-						end)
-						print("  GetShopItems test: " .. (success and ("✅ (" .. #result .. " items)") or ("❌ " .. tostring(result))))
-					end
-
-					print("========================")
-
-				elseif command == "/testshopremotes" then
-					print("🧪 Testing shop remote functions...")
-
-					local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
-					if not gameRemotes then
-						print("❌ GameRemotes not found")
-						return
-					end
-
-					-- Test GetShopItems
-					local getShopItems = gameRemotes:FindFirstChild("GetShopItems")
-					if getShopItems and getShopItems:IsA("RemoteFunction") then
-						local success, result = pcall(function()
-							return getShopItems:InvokeServer()
-						end)
-						print("GetShopItems: " .. (success and ("✅ " .. #result .. " items") or ("❌ " .. tostring(result))))
-					else
-						print("GetShopItems: ❌ Not found or wrong type")
-					end
-
-					-- Test GetShopItemsByCategory
-					local getByCategory = gameRemotes:FindFirstChild("GetShopItemsByCategory")
-					if getByCategory and getByCategory:IsA("RemoteFunction") then
-						local success, result = pcall(function()
-							return getByCategory:InvokeServer("seeds")
-						end)
-						print("GetShopItemsByCategory: " .. (success and ("✅ " .. #result .. " seeds") or ("❌ " .. tostring(result))))
-					else
-						print("GetShopItemsByCategory: ❌ Not found or wrong type")
-					end
-
-					print("Remote function testing complete!")
-
-				elseif command == "/forcecreateshop" then
-					print("🔧 Force creating shop remotes...")
-
-					local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
-					if not gameRemotes then
-						gameRemotes = Instance.new("Folder")
-						gameRemotes.Name = "GameRemotes"
-						gameRemotes.Parent = game:GetService("ReplicatedStorage")
-						print("Created GameRemotes folder")
-					end
-
-					local shopRemotes = {
-						{name = "GetShopItems", type = "RemoteFunction"},
-						{name = "GetShopItemsByCategory", type = "RemoteFunction"},
-						{name = "GetShopCategories", type = "RemoteFunction"},
-						{name = "GetSellableItems", type = "RemoteFunction"},
-						{name = "PurchaseItem", type = "RemoteEvent"},
-						{name = "SellItem", type = "RemoteEvent"}
-					}
-
-					for _, remote in ipairs(shopRemotes) do
-						if not gameRemotes:FindFirstChild(remote.name) then
-							local newRemote = Instance.new(remote.type)
-							newRemote.Name = remote.name
-							newRemote.Parent = gameRemotes
-							print("Created " .. remote.type .. ": " .. remote.name)
-						else
-							print("Already exists: " .. remote.name)
-						end
-					end
-
-					print("✅ Shop remotes created/verified!")
-				
-				elseif command == "/forcerescan" then
-					print("🔄 Force rescanning systems...")
-
-					if _G.CowCreationModule and _G.CowCreationModule.DetectExistingCows then
-						_G.CowCreationModule:DetectExistingCows()
-					end
-
-					if _G.CowMilkingModule and _G.CowMilkingModule.DetectExistingChairs then
-						_G.CowMilkingModule:DetectExistingChairs()
-					end
-
-					print("✅ Rescan complete")
 				end
 			end
 		end)
 	end)
 
-	print("✅ System debug commands ready")
+	print("✅ Enhanced debug commands ready")
 end
 
--- ========== MAIN COORDINATION FUNCTION ==========
--- REPLACE the CoordinateSystemInitialization function in your SystemInitializer.server.lua
+-- ========== MAIN ENHANCED COORDINATION FUNCTION ==========
 
-local function CoordinateSystemInitialization()
-	print("🎯 Starting system coordination...")
+local function CoordinateEnhancedSystemInitialization()
+	print("🎯 Starting enhanced system coordination...")
 
 	local success, errorMessage = pcall(function()
-		-- Step 1: Load GameCore
-		local GameCore = LoadGameCore()
+		-- Step 1: Setup enhanced remote events first
+		SetupEnhancedRemoteEvents()
 
-		-- Step 2: Load ShopSystem (ADDED THIS)
-		print("🛒 Loading ShopSystem...")
-		local ShopSystem = nil
-		local systemsFolder = ServerScriptService:FindFirstChild("Systems")
-		if systemsFolder then
-			local shopSystemModule = systemsFolder:FindFirstChild("ShopSystem")
-			if shopSystemModule then
-				local shopSuccess, shopResult = pcall(function()
-					return require(shopSystemModule)
-				end)
-				if shopSuccess then
-					ShopSystem = shopResult
-					print("✅ ShopSystem loaded successfully")
-				else
-					warn("❌ ShopSystem failed to load: " .. tostring(shopResult))
-				end
-			else
-				warn("❌ ShopSystem module not found in Systems folder")
-			end
-		else
-			warn("❌ Systems folder not found")
-		end
+		-- Step 2: Load enhanced GameCore
+		local GameCore = LoadEnhancedGameCore()
 
 		-- Step 3: Verify modules exist
-		local modulesFound, moduleCount = VerifyModulesExist()
+		local modulesFound, moduleCount = VerifyEnhancedModules()
 
-		-- Step 4: Verify workspace models
-		local modelsExist = VerifyWorkspaceModels()
+		-- Step 4: Initialize enhanced GameCore with inventory support
+		InitializeEnhancedGameCore(GameCore)
 
-		-- Step 5: Initialize GameCore (this will load and initialize modules)
-		InitializeGameCore(GameCore)
+		-- Step 5: Load and initialize ShopSystem
+		LoadAndInitializeShopSystem(GameCore)
 
-		-- Step 6: Initialize ShopSystem (ADDED THIS)
-		if ShopSystem then
-			print("🛒 Initializing ShopSystem...")
-			local shopInitSuccess, shopInitError = pcall(function()
-				return ShopSystem:Initialize(GameCore)
-			end)
+		-- Step 6: Wait for modules to connect
+		WaitForEnhancedConnections(15)
 
-			if shopInitSuccess then
-				print("✅ ShopSystem initialized successfully")
-				_G.ShopSystem = ShopSystem
-
-				-- Connect ShopSystem remote handlers (IMPORTANT!)
-				if GameCore.RemoteFunctions then
-					-- Connect shop remote functions to ShopSystem handlers
-					if GameCore.RemoteFunctions.GetShopItems then
-						GameCore.RemoteFunctions.GetShopItems.OnServerInvoke = function(player)
-							return ShopSystem:HandleGetShopItems(player)
-						end
-						print("✅ Connected GetShopItems handler")
-					end
-
-					if GameCore.RemoteFunctions.GetShopItemsByCategory then
-						GameCore.RemoteFunctions.GetShopItemsByCategory.OnServerInvoke = function(player, category)
-							return ShopSystem:HandleGetShopItemsByCategory(player, category)
-						end
-						print("✅ Connected GetShopItemsByCategory handler")
-					end
-
-					if GameCore.RemoteFunctions.GetShopCategories then
-						GameCore.RemoteFunctions.GetShopCategories.OnServerInvoke = function(player)
-							return ShopSystem:HandleGetShopCategories(player)
-						end
-						print("✅ Connected GetShopCategories handler")
-					end
-
-					if GameCore.RemoteFunctions.GetSellableItems then
-						GameCore.RemoteFunctions.GetSellableItems.OnServerInvoke = function(player)
-							return ShopSystem:HandleGetSellableItems(player)
-						end
-						print("✅ Connected GetSellableItems handler")
-					end
-				end
-
-				-- Connect shop events
-				if GameCore.RemoteEvents then
-					if GameCore.RemoteEvents.PurchaseItem then
-						GameCore.RemoteEvents.PurchaseItem.OnServerEvent:Connect(function(player, itemId, quantity)
-							ShopSystem:HandlePurchase(player, itemId, quantity or 1)
-						end)
-						print("✅ Connected PurchaseItem handler")
-					end
-
-					if GameCore.RemoteEvents.SellItem then
-						GameCore.RemoteEvents.SellItem.OnServerEvent:Connect(function(player, itemId, quantity)
-							ShopSystem:HandleSell(player, itemId, quantity or 1)
-						end)
-						print("✅ Connected SellItem handler")
-					end
-				end
-
-			else
-				warn("❌ ShopSystem initialization failed: " .. tostring(shopInitError))
-			end
-		else
-			warn("⚠️ ShopSystem not available - shop functionality will be limited")
-		end
-
-		-- Step 7: Wait for modules to connect
-		WaitForModuleConnections(15)
-
-		-- Step 8: Verify remote events are ready
-		VerifyRemoteEvents()
-
-		-- Step 9: Setup debug commands
-		SetupSystemDebugCommands()
+		-- Step 7: Setup enhanced debug commands
+		SetupEnhancedDebugCommands()
 
 		return true
 	end)
 
 	if success then
-		print("🎉 System coordination completed successfully!")
+		print("🎉 Enhanced system coordination completed successfully!")
 		print("")
-		print("🔧 COORDINATION RESULTS:")
+		print("🔧 ENHANCED COORDINATION RESULTS:")
 		print("  🎮 GameCore: " .. (SystemState.GameCoreLoaded and "✅" or "❌"))
-		print("  🛒 ShopSystem: " .. (_G.ShopSystem and "✅" or "❌"))
+		print("  🛒 ShopSystem: " .. (SystemState.ShopSystemLoaded and "✅" or "❌"))
 		print("  📦 Modules: " .. (SystemState.ModulesInitialized and "✅" or "❌"))  
 		print("  📡 Remote Events: " .. (SystemState.RemoteEventsReady and "✅" or "❌"))
+		print("  📦 Inventory System: " .. (SystemState.InventorySystemReady and "✅" or "❌"))
 		print("  🔗 Systems Connected: " .. (SystemState.SystemsConnected and "✅" or "❌"))
 		print("")
-		print("🎮 Debug Commands:")
-		print("  /systemstatus - Show system status")
-		print("  /reconnect - Attempt reconnection") 
+		print("🎮 Enhanced Debug Commands:")
+		print("  /enhancedsystemstatus - Show enhanced system status")
+		print("  /testinventory - Test enhanced inventory system")
+		print("  /testenhancedshop - Test enhanced shop system")
+		print("  /playerinventory - Show player's inventory")
+		print("  /clearinventory - Clear player's inventory")
 		print("  /testcow - Test cow assignment")
 		print("  /testmilking - Test milking system")
-		print("  /forcerescan - Force rescan models")
-		print("  /debugshop - Debug shop system")
 		return true
 	else
-		warn("💥 System coordination failed: " .. tostring(errorMessage))
-		print("🔄 Attempting minimal fallback...")
-
-		-- Try minimal fallback
-		pcall(function()
-			local GameCore = LoadGameCore()
-			if GameCore then
-				InitializeGameCore(GameCore)
-				print("⚠️ Running in minimal mode - only GameCore loaded")
-			end
-		end)
+		warn("💥 Enhanced system coordination failed: " .. tostring(errorMessage))
 		return false
 	end
 end
--- ========== EXECUTE COORDINATION ==========
+
+-- ========== EXECUTE ENHANCED COORDINATION ==========
 
 spawn(function()
 	wait(2) -- Give scripts time to load
 
-	print("🔧 Starting coordinated initialization in 2 seconds...")
+	print("🔧 Starting enhanced coordinated initialization in 2 seconds...")
 
-	local success = CoordinateSystemInitialization()
+	local success = CoordinateEnhancedSystemInitialization()
 
 	if success then
-		print("✅ All systems coordinated and ready!")
+		print("✅ All enhanced systems coordinated and ready!")
 	else
-		warn("❌ System coordination incomplete - check debug commands")
+		warn("❌ Enhanced system coordination incomplete - check debug commands")
 	end
 end)
 
 -- ========== SHUTDOWN HANDLER ==========
 
 game:BindToClose(function()
-	print("🔄 Server shutting down, saving all player data...")
+	print("🔄 Server shutting down, saving all enhanced player data...")
 
 	if _G.GameCore and _G.GameCore.SavePlayerData then
 		for _, player in ipairs(Players:GetPlayers()) do
@@ -646,7 +665,7 @@ game:BindToClose(function()
 	end
 
 	wait(3)
-	print("✅ Shutdown complete")
+	print("✅ Enhanced shutdown complete")
 end)
 
-print("🔧 System Coordinator loaded - coordination will begin in 2 seconds...")
+print("🔧 Enhanced System Coordinator loaded - coordination will begin in 2 seconds...")

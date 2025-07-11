@@ -1,15 +1,16 @@
 --[[
-    FIXED ClientLoader.client.lua - Proper Client System Coordination
+    ENHANCED ClientLoader.client.lua - Enhanced Inventory Integration
     Place in: StarterPlayer/StarterPlayerScripts/ClientLoader.client.lua
     
-    FIXES:
-    ✅ Proper module loading and initialization order
-    ✅ Better error handling and retry logic
-    ✅ Eliminates duplicate milking click handlers
-    ✅ Coordinates all client systems properly
+    ENHANCEMENTS:
+    ✅ Enhanced UIManager with inventory menus integration
+    ✅ Enhanced GameClient with inventory features
+    ✅ Enhanced remote event handling for inventory
+    ✅ Added inventory debug commands
+    ✅ Better coordination with enhanced systems
 ]]
 
-print("🚀 ClientLoader: Starting FIXED client coordination...")
+print("🚀 ClientLoader: Starting ENHANCED client coordination with inventory support...")
 
 -- Services
 local Players = game:GetService("Players")
@@ -20,12 +21,13 @@ local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
--- Client system state
+-- Enhanced client system state
 local ClientState = {
 	UIManagerLoaded = false,
 	GameClientLoaded = false,
 	SystemsConnected = false,
 	MilkingSystemReady = false,
+	InventorySystemReady = false,
 	RemoteEventsReady = false,
 	RetryCount = 0,
 	MaxRetries = 5
@@ -71,10 +73,10 @@ local function SafeRequireModule(moduleScript, moduleName)
 	end
 end
 
--- ========== STEP 1: WAIT FOR REMOTE EVENTS ==========
+-- ========== STEP 1: WAIT FOR ENHANCED REMOTE EVENTS ==========
 
-local function WaitForRemoteEvents()
-	print("📡 Waiting for remote events...")
+local function WaitForEnhancedRemoteEvents()
+	print("📡 Waiting for enhanced remote events with inventory support...")
 
 	local gameRemotes = ReplicatedStorage:WaitForChild("GameRemotes", 30)
 	if not gameRemotes then
@@ -82,16 +84,22 @@ local function WaitForRemoteEvents()
 		return false
 	end
 
-	-- Essential remote events for client
-	local essentialEvents = {
+	-- Enhanced remote events for inventory system
+	local enhancedEvents = {
+		-- Core events
+		"PlayerDataUpdated", "ShowNotification",
+		-- Inventory events
+		"InventoryUpdated", "ItemSold", "ItemPurchased",
+		-- Shop events
+		"OpenShop", "CloseShop",
+		-- Milking events
 		"ShowChairPrompt", "HideChairPrompt",
 		"StartMilkingSession", "StopMilkingSession", 
-		"ContinueMilking", "MilkingSessionUpdate",
-		"PlayerDataUpdated", "ShowNotification"
+		"ContinueMilking", "MilkingSessionUpdate"
 	}
 
 	local eventsReady = 0
-	for _, eventName in ipairs(essentialEvents) do
+	for _, eventName in ipairs(enhancedEvents) do
 		local event = gameRemotes:WaitForChild(eventName, 10)
 		if event then
 			eventsReady = eventsReady + 1
@@ -101,30 +109,30 @@ local function WaitForRemoteEvents()
 		end
 	end
 
-	ClientState.RemoteEventsReady = eventsReady >= (math.ceil(#essentialEvents * 0.75)) -- 75% must be ready
-	print("📡 Remote events status: " .. eventsReady .. "/" .. #essentialEvents .. " ready")
+	ClientState.RemoteEventsReady = eventsReady >= (math.ceil(#enhancedEvents * 0.75)) -- 75% must be ready
+	print("📡 Enhanced remote events status: " .. eventsReady .. "/" .. #enhancedEvents .. " ready")
 	return ClientState.RemoteEventsReady
 end
 
--- ========== STEP 2: LOAD CORE MODULES ==========
+-- ========== STEP 2: LOAD ENHANCED MODULES ==========
 
-local function LoadCoreModules()
-	print("📱 Loading core client modules...")
+local function LoadEnhancedModules()
+	print("📱 Loading enhanced client modules with inventory support...")
 
-	-- Load UIManager
+	-- Load Enhanced UIManager
 	local uiManagerModule = SafeWaitForModule("UIManager", ReplicatedStorage, 15)
-	local UIManager = SafeRequireModule(uiManagerModule, "UIManager")
+	local UIManager = SafeRequireModule(uiManagerModule, "Enhanced UIManager")
 
 	if not UIManager then
-		error("❌ UIManager is required but failed to load")
+		error("❌ Enhanced UIManager is required but failed to load")
 	end
 
-	-- Load GameClient
+	-- Load Enhanced GameClient
 	local gameClientModule = SafeWaitForModule("GameClient", ReplicatedStorage, 15)
-	local GameClient = SafeRequireModule(gameClientModule, "GameClient")
+	local GameClient = SafeRequireModule(gameClientModule, "Enhanced GameClient")
 
 	if not GameClient then
-		error("❌ GameClient is required but failed to load")
+		error("❌ Enhanced GameClient is required but failed to load")
 	end
 
 	ClientState.UIManagerLoaded = UIManager ~= nil
@@ -133,49 +141,50 @@ local function LoadCoreModules()
 	return UIManager, GameClient
 end
 
--- ========== STEP 3: INITIALIZE SYSTEMS ==========
+-- ========== STEP 3: INITIALIZE ENHANCED SYSTEMS ==========
 
-local function InitializeCoreSystemsInOrder(UIManager, GameClient)
-	print("🔧 Initializing client systems in proper order...")
+local function InitializeEnhancedSystemsInOrder(UIManager, GameClient)
+	print("🔧 Initializing enhanced client systems with inventory support...")
 
-	-- Step 3a: Initialize UIManager first
-	print("🔧 Initializing UIManager...")
+	-- Step 3a: Initialize Enhanced UIManager first
+	print("🔧 Initializing Enhanced UIManager...")
 	local uiSuccess, uiError = pcall(function()
 		return UIManager:Initialize()
 	end)
 
 	if not uiSuccess then
-		error("❌ UIManager initialization failed: " .. tostring(uiError))
+		error("❌ Enhanced UIManager initialization failed: " .. tostring(uiError))
 	end
-	print("✅ UIManager initialized")
+	print("✅ Enhanced UIManager initialized with inventory menus")
 
-	-- Step 3b: Initialize GameClient with UIManager reference
-	print("🔧 Initializing GameClient...")
+	-- Step 3b: Initialize Enhanced GameClient with UIManager reference
+	print("🔧 Initializing Enhanced GameClient...")
 	local clientSuccess, clientError = pcall(function()
 		return GameClient:Initialize(UIManager)
 	end)
 
 	if not clientSuccess then
-		error("❌ GameClient initialization failed: " .. tostring(clientError))
+		error("❌ Enhanced GameClient initialization failed: " .. tostring(clientError))
 	end
-	print("✅ GameClient initialized")
+	print("✅ Enhanced GameClient initialized with inventory integration")
 
-	-- Step 3c: Cross-link the systems
+	-- Step 3c: Cross-link the enhanced systems
 	UIManager:SetGameClient(GameClient)
-	print("🔗 Systems cross-linked")
+	print("🔗 Enhanced systems cross-linked")
 
 	-- Step 3d: Set global references for other scripts
 	_G.UIManager = UIManager
 	_G.GameClient = GameClient
 
 	ClientState.SystemsConnected = true
+	ClientState.InventorySystemReady = true
 	return true
 end
 
--- ========== STEP 4: SETUP MILKING SYSTEM INTEGRATION ==========
+-- ========== STEP 4: SETUP ENHANCED MILKING SYSTEM ==========
 
-local function SetupMilkingSystemIntegration()
-	print("🥛 Setting up milking system integration...")
+local function SetupEnhancedMilkingSystem()
+	print("🥛 Setting up enhanced milking system integration...")
 
 	-- Wait for ChairMilkingGUI to be available
 	local chairGUIReady = false
@@ -198,14 +207,14 @@ local function SetupMilkingSystemIntegration()
 	end
 
 	-- Setup unified click handling (prevents conflicts)
-	local function SetupUnifiedClickHandling()
-		print("🖱️ Setting up unified click handling...")
+	local function SetupEnhancedClickHandling()
+		print("🖱️ Setting up enhanced unified click handling...")
 
 		local isInMilkingSession = false
 		local lastClickTime = 0
 		local clickCooldown = 0.05
 
-		-- Single click handler for milking
+		-- Enhanced click handler for milking with inventory integration
 		UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			if gameProcessed then return end
 
@@ -243,91 +252,269 @@ local function SetupMilkingSystemIntegration()
 						local continueMilking = gameRemotes:FindFirstChild("ContinueMilking")
 						if continueMilking then
 							continueMilking:FireServer()
-							print("🖱️ Click sent to server")
+							print("🖱️ Enhanced click sent to server")
 						end
 					end
 				end
 			end
 		end)
 
-		print("✅ Unified click handling setup")
+		print("✅ Enhanced unified click handling setup")
 	end
 
-	SetupUnifiedClickHandling()
+	SetupEnhancedClickHandling()
 	ClientState.MilkingSystemReady = true
 	return true
 end
 
--- ========== STEP 5: VERIFICATION AND DIAGNOSTICS ==========
+-- ========== STEP 5: SETUP INVENTORY EVENT HANDLERS ==========
 
-local function VerifySystemIntegration()
-	print("🔍 Verifying system integration...")
+local function SetupInventoryEventHandlers()
+	print("📦 Setting up enhanced inventory event handlers...")
 
-	-- Check UI elements exist
+	local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+	if not gameRemotes then
+		warn("❌ GameRemotes not found for inventory handlers")
+		return false
+	end
+
+	-- Enhanced inventory event handlers
+	local inventoryEvents = {
+		InventoryUpdated = function(inventoryType, newInventory)
+			print("📦 Inventory updated: " .. inventoryType)
+			if _G.GameClient and _G.GameClient.HandleInventoryUpdate then
+				_G.GameClient:HandleInventoryUpdate(inventoryType, newInventory)
+			end
+		end,
+
+		ItemSold = function(itemId, quantity, totalValue)
+			print("💰 Item sold: " .. itemId .. " x" .. quantity .. " for " .. totalValue)
+			if _G.GameClient and _G.GameClient.HandleItemSold then
+				_G.GameClient:HandleItemSold(itemId, quantity, totalValue)
+			end
+		end,
+
+		ItemPurchased = function(itemId, quantity, cost, currency)
+			print("🛒 Item purchased: " .. itemId .. " x" .. quantity)
+			if _G.GameClient and _G.GameClient.HandleItemPurchased then
+				_G.GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
+			end
+		end,
+
+		PlayerDataUpdated = function(newData)
+			print("📊 Player data updated with enhanced inventory")
+			if _G.GameClient and _G.GameClient.HandlePlayerDataUpdate then
+				_G.GameClient:HandlePlayerDataUpdate(newData)
+			end
+		end
+	}
+
+	-- Connect inventory event handlers
+	local handlersConnected = 0
+	for eventName, handler in pairs(inventoryEvents) do
+		local event = gameRemotes:FindFirstChild(eventName)
+		if event and event:IsA("RemoteEvent") then
+			event.OnClientEvent:Connect(handler)
+			handlersConnected = handlersConnected + 1
+			print("✅ Connected " .. eventName .. " inventory handler")
+		else
+			print("⚠️ " .. eventName .. " not found or wrong type")
+		end
+	end
+
+	print("📦 Inventory handlers connected: " .. handlersConnected .. "/" .. #inventoryEvents)
+	return handlersConnected > 0
+end
+
+-- ========== STEP 6: ENHANCED VERIFICATION ==========
+
+local function VerifyEnhancedSystemIntegration()
+	print("🔍 Verifying enhanced system integration...")
+
+	-- Check enhanced UI elements exist
 	local mainUI = PlayerGui:FindFirstChild("MainGameUI")
 	local topMenuUI = PlayerGui:FindFirstChild("TopMenuUI")
 
-	print("UI Elements:")
+	print("Enhanced UI Elements:")
 	print("  Main UI: " .. (mainUI and "✅" or "❌"))
 	print("  Top Menu UI: " .. (topMenuUI and "✅" or "❌"))
 
-	-- Check global references
-	print("Global References:")
+	-- Check for currency display with milk
+	if mainUI then
+		local currencyDisplay = mainUI:FindFirstChild("CurrencyDisplay")
+		if currencyDisplay then
+			local milkLabel = currencyDisplay:FindFirstChild("MilkLabel")
+			print("  Currency with Milk: " .. (milkLabel and "✅" or "❌"))
+		end
+	end
+
+	-- Check enhanced global references
+	print("Enhanced Global References:")
 	print("  _G.UIManager: " .. (_G.UIManager and "✅" or "❌"))
 	print("  _G.GameClient: " .. (_G.GameClient and "✅" or "❌"))
 	print("  _G.ChairMilkingGUI: " .. (_G.ChairMilkingGUI and "✅" or "❌"))
 
-	-- Check remote connections
+	-- Check enhanced methods
+	local hasInventoryMethods = false
+	if _G.GameClient then
+		hasInventoryMethods = (_G.GameClient.GetInventoryData ~= nil) and
+			(_G.GameClient.GetFarmingData ~= nil) and
+			(_G.GameClient.GetMiningData ~= nil) and
+			(_G.GameClient.GetCraftingData ~= nil)
+	end
+	print("  Enhanced Inventory Methods: " .. (hasInventoryMethods and "✅" or "❌"))
+
+	-- Check enhanced remote connections
 	local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
 	if gameRemotes then
-		local openShop = gameRemotes:FindFirstChild("OpenShop")
-		local continueMilking = gameRemotes:FindFirstChild("ContinueMilking")
+		local inventoryRemotes = {
+			"InventoryUpdated", "ItemSold", "ItemPurchased",
+			"GetInventoryData", "GetMiningData", "GetCraftingData", "SellInventoryItem"
+		}
 
-		print("Remote Connections:")
-		print("  OpenShop: " .. (openShop and "✅" or "❌"))
-		print("  ContinueMilking: " .. (continueMilking and "✅" or "❌"))
+		local remoteCount = 0
+		for _, remoteName in ipairs(inventoryRemotes) do
+			if gameRemotes:FindFirstChild(remoteName) then
+				remoteCount = remoteCount + 1
+			end
+		end
+
+		print("Enhanced Remote Connections: " .. remoteCount .. "/" .. #inventoryRemotes .. " (" .. 
+			(remoteCount >= math.ceil(#inventoryRemotes * 0.75) and "✅" or "❌") .. ")")
 	else
 		print("❌ GameRemotes not found")
 	end
 
-	-- Test basic functionality
-	local basicFunctionsWork = true
+	-- Test enhanced functionality
+	local enhancedFunctionsWork = true
 
 	if _G.UIManager and _G.UIManager.ShowNotification then
 		pcall(function()
-			_G.UIManager:ShowNotification("System Test", "Client systems loaded successfully!", "success")
+			_G.UIManager:ShowNotification("Enhanced System Test", "Enhanced client systems with inventory loaded successfully!", "success")
 		end)
 	else
-		basicFunctionsWork = false
+		enhancedFunctionsWork = false
 	end
 
-	print("Basic Functions: " .. (basicFunctionsWork and "✅" or "❌"))
-	return basicFunctionsWork
+	print("Enhanced Functions: " .. (enhancedFunctionsWork and "✅" or "❌"))
+	return enhancedFunctionsWork
 end
 
--- ========== STEP 6: SETUP DEBUG COMMANDS ==========
+-- ========== STEP 7: ENHANCED DEBUG COMMANDS ==========
 
-local function SetupClientDebugCommands()
-	print("🔧 Setting up client debug commands...")
+local function SetupEnhancedClientDebugCommands()
+	print("🔧 Setting up enhanced client debug commands...")
 
 	LocalPlayer.Chatted:Connect(function(message)
 		local command = message:lower()
 
-		if command == "/clientstatus" then
-			print("=== CLIENT SYSTEM STATUS ===")
+		if command == "/enhancedclientstatus" then
+			print("=== ENHANCED CLIENT SYSTEM STATUS ===")
+			print("UIManager loaded: " .. (ClientState.UIManagerLoaded and "✅" or "❌"))
+			print("GameClient loaded: " .. (ClientState.GameClientLoaded and "✅" or "❌"))
+			print("Systems connected: " .. (ClientState.SystemsConnected and "✅" or "❌"))
+			print("Inventory system ready: " .. (ClientState.InventorySystemReady and "✅" or "❌"))
+			print("Milking system ready: " .. (ClientState.MilkingSystemReady and "✅" or "❌"))
+			print("Remote events ready: " .. (ClientState.RemoteEventsReady and "✅" or "❌"))
+			print("Retry count: " .. ClientState.RetryCount)
+			print("")
+			VerifyEnhancedSystemIntegration()
+			print("=========================================")
+
+		elseif command == "/testinventoryui" then
+			if _G.UIManager then
+				print("Testing enhanced inventory UI...")
+				_G.UIManager:ShowNotification("Inventory Test", "Enhanced inventory system is working!", "success")
+
+				-- Try opening inventory menus
+				spawn(function()
+					wait(1)
+					print("Opening Farm menu...")
+					_G.UIManager:OpenMenu("Farm")
+					wait(3)
+					print("Opening Mining menu...")
+					_G.UIManager:OpenMenu("Mining")
+					wait(3)
+					print("Opening Crafting menu...")
+					_G.UIManager:OpenMenu("Crafting")
+					wait(2)
+					_G.UIManager:CloseActiveMenus()
+				end)
+			else
+				print("❌ Enhanced UIManager not available")
+			end
+
+		elseif command == "/testinventorydata" then
+			if _G.GameClient then
+				print("Testing enhanced inventory data...")
+
+				local farmingData = _G.GameClient:GetFarmingData()
+				local miningData = _G.GameClient:GetMiningData()
+				local craftingData = _G.GameClient:GetCraftingData()
+
+				print("Farming inventory items: " .. (farmingData.inventory and #farmingData.inventory or 0))
+				print("Mining inventory items: " .. (miningData.inventory and #miningData.inventory or 0))
+				print("Crafting inventory items: " .. (craftingData.inventory and #craftingData.inventory or 0))
+
+				-- Test getting player data
+				local playerData = _G.GameClient:GetPlayerData()
+				if playerData then
+					print("Player coins: " .. (playerData.coins or 0))
+					print("Player milk: " .. (playerData.milk or 0))
+				end
+			else
+				print("❌ Enhanced GameClient not available")
+			end
+
+		elseif command == "/testinventorysell" then
+			print("Testing inventory sell functionality...")
+
+			local gameRemotes = ReplicatedStorage:FindFirstChild("GameRemotes")
+			if gameRemotes then
+				local sellEvent = gameRemotes:FindFirstChild("SellItem")
+				if sellEvent then
+					-- Try to sell a test item
+					sellEvent:FireServer("carrot", 1)
+					print("✅ Test sell request sent")
+				else
+					print("❌ SellItem remote not found")
+				end
+			else
+				print("❌ GameRemotes not found")
+			end
+
+		elseif command == "/currencytest" then
+			if _G.UIManager and _G.GameClient then
+				print("Testing enhanced currency display...")
+
+				local playerData = _G.GameClient:GetPlayerData()
+				if playerData then
+					print("Current currency:")
+					print("  Coins: " .. (playerData.coins or 0))
+					print("  Farm Tokens: " .. (playerData.farmTokens or 0))
+					print("  Milk: " .. (playerData.milk or 0))
+
+					-- Force update currency display
+					_G.UIManager:UpdateCurrencyDisplay(playerData)
+					print("✅ Currency display updated")
+				end
+			else
+				print("❌ Enhanced systems not available")
+			end
+
+			-- Include existing debug commands
+		elseif command == "/clientstatus" then
+			print("=== BASIC CLIENT SYSTEM STATUS ===")
 			print("UIManager loaded: " .. (ClientState.UIManagerLoaded and "✅" or "❌"))
 			print("GameClient loaded: " .. (ClientState.GameClientLoaded and "✅" or "❌"))
 			print("Systems connected: " .. (ClientState.SystemsConnected and "✅" or "❌"))
 			print("Milking system ready: " .. (ClientState.MilkingSystemReady and "✅" or "❌"))
 			print("Remote events ready: " .. (ClientState.RemoteEventsReady and "✅" or "❌"))
-			print("Retry count: " .. ClientState.RetryCount)
-			print("")
-			VerifySystemIntegration()
-			print("============================")
+			print("===================================")
 
 		elseif command == "/testui" then
 			if _G.UIManager then
-				print("Testing UI system...")
+				print("Testing basic UI system...")
 				_G.UIManager:ShowNotification("UI Test", "UI system is working!", "success")
 
 				-- Try opening shop
@@ -355,15 +542,15 @@ local function SetupClientDebugCommands()
 			end
 
 		elseif command == "/recreateclient" then
-			print("🔄 Recreating client systems...")
+			print("🔄 Recreating enhanced client systems...")
 
 			ClientState.RetryCount = 0
-			local success = AttemptClientInitialization()
+			local success = AttemptEnhancedClientInitialization()
 
 			if success then
-				print("✅ Client systems recreated")
+				print("✅ Enhanced client systems recreated")
 			else
-				print("❌ Client recreation failed")
+				print("❌ Enhanced client recreation failed")
 			end
 
 		elseif command == "/clearguis" then
@@ -381,89 +568,122 @@ local function SetupClientDebugCommands()
 					print("🗑️ Removed " .. guiName)
 				end
 			end
+
+		elseif command == "/inventoryhelp" then
+			print("🎮 ENHANCED INVENTORY COMMANDS:")
+			print("  /enhancedclientstatus - Show enhanced system status")
+			print("  /testinventoryui - Test inventory UI menus")
+			print("  /testinventorydata - Test inventory data access")
+			print("  /testinventorysell - Test inventory sell functionality")
+			print("  /currencytest - Test enhanced currency display")
+			print("  /clientstatus - Show basic system status")
+			print("  /testui - Test basic UI system")
+			print("  /testmilkclick - Test milking click")
+			print("  /recreateclient - Recreate client systems")
+			print("  /clearguis - Clean up old GUIs")
+			print("")
+			print("🎯 ENHANCED HOTKEYS:")
+			print("  F = Farm Menu (Seeds, Crops, Livestock, Upgrades)")
+			print("  M = Mining Menu (Ores, Tools, Progress)")
+			print("  C = Crafting Menu (Stations, Materials, Recipes)")
+			print("  H = Harvest All / Shop")
+			print("  I = Toggle Inventory")
+			print("  ESC = Close all menus")
 		end
 	end)
 
-	print("✅ Client debug commands ready")
+	print("✅ Enhanced client debug commands ready")
 end
 
--- ========== MAIN CLIENT INITIALIZATION ==========
+-- ========== MAIN ENHANCED CLIENT INITIALIZATION ==========
 
-function AttemptClientInitialization()
-	print("🔧 Attempting client initialization (Attempt " .. (ClientState.RetryCount + 1) .. ")...")
+function AttemptEnhancedClientInitialization()
+	print("🔧 Attempting enhanced client initialization (Attempt " .. (ClientState.RetryCount + 1) .. ")...")
 
 	ClientState.RetryCount = ClientState.RetryCount + 1
 
 	local success, errorMessage = pcall(function()
-		-- Step 1: Wait for remote events
-		if not WaitForRemoteEvents() then
-			warn("⚠️ Some remote events missing - continuing anyway")
+		-- Step 1: Wait for enhanced remote events
+		if not WaitForEnhancedRemoteEvents() then
+			warn("⚠️ Some enhanced remote events missing - continuing anyway")
 		end
 
-		-- Step 2: Load core modules
-		local UIManager, GameClient = LoadCoreModules()
+		-- Step 2: Load enhanced modules
+		local UIManager, GameClient = LoadEnhancedModules()
 
-		-- Step 3: Initialize systems in order
-		InitializeCoreSystemsInOrder(UIManager, GameClient)
+		-- Step 3: Initialize enhanced systems in order
+		InitializeEnhancedSystemsInOrder(UIManager, GameClient)
 
-		-- Step 4: Setup milking integration
-		SetupMilkingSystemIntegration()
+		-- Step 4: Setup enhanced milking integration
+		SetupEnhancedMilkingSystem()
 
-		-- Step 5: Verify everything works
-		VerifySystemIntegration()
+		-- Step 5: Setup inventory event handlers
+		SetupInventoryEventHandlers()
 
-		-- Step 6: Setup debug commands
-		SetupClientDebugCommands()
+		-- Step 6: Verify enhanced integration
+		VerifyEnhancedSystemIntegration()
+
+		-- Step 7: Setup enhanced debug commands
+		SetupEnhancedClientDebugCommands()
 
 		return true
 	end)
 
 	if success then
-		print("🎉 Client initialization successful!")
+		print("🎉 Enhanced client initialization successful!")
 		print("")
-		print("🎮 CLIENT SYSTEMS READY:")
-		print("  📱 UIManager: " .. (ClientState.UIManagerLoaded and "✅" or "❌"))
-		print("  🎮 GameClient: " .. (ClientState.GameClientLoaded and "✅" or "❌"))
-		print("  🔗 Connected: " .. (ClientState.SystemsConnected and "✅" or "❌"))
-		print("  🥛 Milking: " .. (ClientState.MilkingSystemReady and "✅" or "❌"))
+		print("🎮 ENHANCED CLIENT SYSTEMS READY:")
+		print("  📱 Enhanced UIManager: " .. (ClientState.UIManagerLoaded and "✅" or "❌"))
+		print("  🎮 Enhanced GameClient: " .. (ClientState.GameClientLoaded and "✅" or "❌"))
+		print("  🔗 Systems Connected: " .. (ClientState.SystemsConnected and "✅" or "❌"))
+		print("  📦 Inventory System: " .. (ClientState.InventorySystemReady and "✅" or "❌"))
+		print("  🥛 Milking System: " .. (ClientState.MilkingSystemReady and "✅" or "❌"))
 		print("")
-		print("🎮 Debug Commands:")
-		print("  /clientstatus - Show client status")
-		print("  /testui - Test UI system")
-		print("  /testmilkclick - Test milking click")
-		print("  /recreateclient - Recreate client systems")
-		print("  /clearguis - Clean up old GUIs")
+		print("🎮 Enhanced Debug Commands:")
+		print("  /enhancedclientstatus - Enhanced system status")
+		print("  /testinventoryui - Test inventory menus")
+		print("  /testinventorydata - Test inventory data")
+		print("  /inventoryhelp - Show all inventory commands")
+		print("")
+		print("🎯 ENHANCED FEATURES READY:")
+		print("  💰 Currency with milk count")
+		print("  🌾 Farm menu with real inventory")
+		print("  ⛏️ Mining menu with ores and tools")
+		print("  🔨 Crafting menu with materials")
+		print("  🌱 Plant seeds from inventory")
+		print("  💰 Sell items from inventory")
+		print("  🔄 Real-time inventory updates")
 		return true
 	else
-		warn("💥 Client initialization failed: " .. tostring(errorMessage))
+		warn("💥 Enhanced client initialization failed: " .. tostring(errorMessage))
 
 		if ClientState.RetryCount < ClientState.MaxRetries then
-			print("🔄 Retrying in 3 seconds...")
+			print("🔄 Retrying enhanced initialization in 3 seconds...")
 			wait(3)
-			return AttemptClientInitialization()
+			return AttemptEnhancedClientInitialization()
 		else
-			warn("❌ Client initialization failed after " .. ClientState.MaxRetries .. " attempts")
+			warn("❌ Enhanced client initialization failed after " .. ClientState.MaxRetries .. " attempts")
 			-- Still setup debug commands for troubleshooting
-			SetupClientDebugCommands()
+			SetupEnhancedClientDebugCommands()
 			return false
 		end
 	end
 end
 
--- ========== EXECUTE CLIENT INITIALIZATION ==========
+-- ========== EXECUTE ENHANCED CLIENT INITIALIZATION ==========
 
 spawn(function()
 	wait(2) -- Give ReplicatedStorage time to populate
 
-	print("🚀 Starting FIXED client initialization...")
+	print("🚀 Starting ENHANCED client initialization with inventory support...")
 
-	local success = AttemptClientInitialization()
+	local success = AttemptEnhancedClientInitialization()
 
 	if success then
-		print("✅ All client systems ready!")
+		print("✅ All enhanced client systems with inventory support ready!")
 	else
-		warn("❌ Client initialization incomplete - debug commands available")
+		warn("❌ Enhanced client initialization incomplete - debug commands available")
 	end
 end)
 
-print("🔧 Fixed ClientLoader ready - initialization starting in 2 seconds...")
+print("🔧 Enhanced ClientLoader ready - initialization starting in 2 seconds...")

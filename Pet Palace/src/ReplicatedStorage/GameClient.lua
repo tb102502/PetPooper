@@ -1,20 +1,13 @@
 --[[
-    CLEANED GameClient.lua - Removed Redundant Shop Code
+    ENHANCED GameClient.lua - Enhanced Inventory Integration
+    Place in: ReplicatedStorage/GameClient.lua
     
-    REMOVED:
-    ❌ GetShopItems() - Server handles this
-    ❌ GetShopItemsByCategory() - Server handles this  
-    ❌ GetSellableItems() - Server handles this
-    ❌ PurchaseItem() - Server handles this
-    ❌ Shop caching logic - Not needed on client
-    ❌ Category helper functions - ItemConfig handles this
-    ❌ Shop validation logic - Server handles this
-    
-    KEPT:
-    ✅ Shop opening/closing for UI
-    ✅ Purchase confirmation handlers for UI updates
-    ✅ Currency update handlers
-    ✅ Basic shop state management for UI
+    ENHANCEMENTS:
+    ✅ Added inventory data methods for UIManager
+    ✅ Enhanced player data structure handling
+    ✅ Added milk tracking and updates
+    ✅ Improved data refresh for inventory menus
+    ✅ Added planting mode integration
 ]]
 
 local GameClient = {}
@@ -48,7 +41,7 @@ GameClient.ActiveConnections = {}
 -- References to UIManager (injected during initialization)
 GameClient.UIManager = nil
 
--- Game State
+-- ENHANCED: Game State with inventory tracking
 GameClient.FarmingState = {
 	selectedSeed = nil,
 	isPlantingMode = false,
@@ -58,16 +51,18 @@ GameClient.FarmingState = {
 	rarityPreview = nil
 }
 
--- SIMPLIFIED: Much smaller cache - just for UI state
+-- ENHANCED: Cache with inventory data
 GameClient.Cache = {
 	CowCooldown = 0,
-	LastDataUpdate = 0
+	LastDataUpdate = 0,
+	LastInventoryUpdate = 0,
+	InventoryHash = ""
 }
 
 -- ========== INITIALIZATION ==========
 
 function GameClient:Initialize(uiManager)
-	print("GameClient: Starting CLEANED initialization...")
+	print("GameClient: Starting ENHANCED initialization...")
 
 	self.UIManager = uiManager
 
@@ -135,14 +130,17 @@ function GameClient:Initialize(uiManager)
 	end
 	print("GameClient: ✅ InitialData initialized")
 
-	print("GameClient: 🎉 CLEANED initialization complete!")
+	-- ENHANCED: Setup periodic inventory refresh
+	self:SetupInventoryRefresh()
+
+	print("GameClient: 🎉 ENHANCED initialization complete!")
 	return true
 end
 
--- ========== REMOTE CONNECTIONS (SIMPLIFIED) ==========
+-- ========== REMOTE CONNECTIONS ==========
 
 function GameClient:SetupRemoteConnections()
-	print("GameClient: Setting up SIMPLIFIED remote connections...")
+	print("GameClient: Setting up ENHANCED remote connections...")
 
 	local remotes = ReplicatedStorage:WaitForChild("GameRemotes", 10)
 	if not remotes then
@@ -152,20 +150,23 @@ function GameClient:SetupRemoteConnections()
 	self.RemoteEvents = {}
 	self.RemoteFunctions = {}
 
-	-- SIMPLIFIED: Only core game events (no shop events - those are handled by UIManager)
+	-- ENHANCED: Core game events with inventory support
 	local requiredRemoteEvents = {
 		-- Core game events
 		"PlayerDataUpdated", "ShowNotification",
+		-- Farming events
 		"PlantSeed", "HarvestCrop", "HarvestAllCrops",
+		-- Inventory events
+		"InventoryUpdated", "ItemSold", "ItemPurchased",
 		-- Milking events
 		"StartMilkingSession", "StopMilkingSession", "ContinueMilking", "MilkingSessionUpdate",
 		-- Proximity events
 		"OpenShop", "CloseShop"
 	}
 
-	-- SIMPLIFIED: Only core functions
+	-- ENHANCED: Functions with inventory support
 	local requiredRemoteFunctions = {
-		"GetPlayerData", "GetFarmingData"
+		"GetPlayerData", "GetFarmingData", "GetInventoryData", "GetMiningData", "GetCraftingData"
 	}
 
 	-- Load remote events
@@ -192,13 +193,13 @@ function GameClient:SetupRemoteConnections()
 
 	self:SetupEventHandlers()
 
-	print("GameClient: SIMPLIFIED remote connections established")
+	print("GameClient: ENHANCED remote connections established")
 	print("  RemoteEvents: " .. self:CountTable(self.RemoteEvents))
 	print("  RemoteFunctions: " .. self:CountTable(self.RemoteFunctions))
 end
 
 function GameClient:SetupEventHandlers()
-	print("GameClient: Setting up SIMPLIFIED event handlers...")
+	print("GameClient: Setting up ENHANCED event handlers...")
 
 	if self.ActiveConnections then
 		for _, connection in pairs(self.ActiveConnections) do
@@ -210,9 +211,31 @@ function GameClient:SetupEventHandlers()
 	self.ActiveConnections = {}
 
 	local eventHandlers = {
-		-- Player Data Updates
+		-- ENHANCED: Player Data Updates with inventory refresh
 		PlayerDataUpdated = function(newData)
-			pcall(function() self:HandlePlayerDataUpdate(newData) end)
+			pcall(function() 
+				self:HandlePlayerDataUpdate(newData)
+				self:RefreshInventoryDisplays()
+			end)
+		end,
+
+		-- ENHANCED: Inventory-specific updates
+		InventoryUpdated = function(inventoryType, newInventory)
+			pcall(function()
+				self:HandleInventoryUpdate(inventoryType, newInventory)
+			end)
+		end,
+
+		ItemSold = function(itemId, quantity, totalValue)
+			pcall(function()
+				self:HandleItemSold(itemId, quantity, totalValue)
+			end)
+		end,
+
+		ItemPurchased = function(itemId, quantity, cost, currency)
+			pcall(function()
+				self:HandleItemPurchased(itemId, quantity, cost, currency)
+			end)
 		end,
 
 		-- Farming System
@@ -226,6 +249,9 @@ function GameClient:SetupEventHandlers()
 		-- Notification Handler
 		ShowNotification = function(title, message, notificationType)
 			pcall(function() 
+				if self.UIManager then
+					self.UIManager:ShowNotification(title, message, notificationType)
+				end
 			end)
 		end,
 	}
@@ -239,6 +265,308 @@ function GameClient:SetupEventHandlers()
 		else
 			warn("GameClient: ❌ Missing remote event: " .. eventName)
 		end
+	end
+end
+
+-- ========== ENHANCED DATA MANAGEMENT ==========
+
+function GameClient:GetPlayerData()
+	return self.PlayerData
+end
+
+-- ADDED: Get specific inventory data for UI
+function GameClient:GetInventoryData(inventoryType)
+	if not self.PlayerData then return {} end
+
+	if inventoryType == "farming" then
+		return self.PlayerData.farming and self.PlayerData.farming.inventory or {}
+	elseif inventoryType == "mining" then
+		return self.PlayerData.mining and self.PlayerData.mining.inventory or {}
+	elseif inventoryType == "crafting" then
+		return self.PlayerData.crafting and self.PlayerData.crafting.inventory or {}
+	elseif inventoryType == "livestock" then
+		return self.PlayerData.livestock or {}
+	elseif inventoryType == "upgrades" then
+		return self.PlayerData.upgrades or {}
+	end
+
+	return {}
+end
+
+-- ADDED: Get farming-specific data
+function GameClient:GetFarmingData()
+	return self.PlayerData.farming or {
+		plots = 0,
+		inventory = {},
+		level = 1
+	}
+end
+
+-- ADDED: Get mining-specific data
+function GameClient:GetMiningData()
+	return self.PlayerData.mining or {
+		inventory = {},
+		tools = {},
+		level = 1
+	}
+end
+
+-- ADDED: Get crafting-specific data
+function GameClient:GetCraftingData()
+	return self.PlayerData.crafting or {
+		inventory = {},
+		recipes = {},
+		stations = {}
+	}
+end
+
+-- ADDED: Get livestock data
+function GameClient:GetLivestockData()
+	return self.PlayerData.livestock or {
+		cows = {}
+	}
+end
+
+-- ========== ENHANCED EVENT HANDLERS ==========
+
+function GameClient:HandlePlayerDataUpdate(newData)
+	if not newData then return end
+
+	local oldData = self.PlayerData
+	self.PlayerData = newData
+
+	-- Update currency display through UIManager (including milk)
+	if self.UIManager then
+		self.UIManager:UpdateCurrencyDisplay(newData)
+	end
+
+	-- ENHANCED: Check for inventory changes
+	local inventoryChanged = self:CheckInventoryChanges(oldData, newData)
+	if inventoryChanged then
+		self:RefreshInventoryDisplays()
+	end
+
+	-- Update current page if needed
+	local currentPage = self.UIManager and self.UIManager:GetCurrentPage()
+	if currentPage == "Shop" then
+		-- Refresh the active shop tab if shop is open
+		if self.UIManager then 
+			self.UIManager:RefreshMenuContent("Shop") 
+		end
+	elseif currentPage == "Farm" then
+		if self.UIManager then self.UIManager:RefreshMenuContent("Farm") end
+	elseif currentPage == "Mining" then
+		if self.UIManager then self.UIManager:RefreshMenuContent("Mining") end
+	elseif currentPage == "Crafting" then
+		if self.UIManager then self.UIManager:RefreshMenuContent("Crafting") end
+	end
+
+	-- Handle planting mode seed check
+	if self.FarmingState.isPlantingMode and self.FarmingState.selectedSeed then
+		local currentSeeds = newData.farming and newData.farming.inventory or {}
+		local newSeedCount = currentSeeds[self.FarmingState.selectedSeed] or 0
+
+		local oldSeeds = oldData and oldData.farming and oldData.farming.inventory or {}
+		local oldSeedCount = oldSeeds[self.FarmingState.selectedSeed] or 0
+
+		if newSeedCount <= 0 then
+			if oldSeedCount <= 0 then
+				self:ExitPlantingMode()
+				if self.UIManager then
+					self.UIManager:ShowNotification("Out of Seeds", 
+						"You don't have any " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. " to plant!", "warning")
+				end
+			else
+				self:ExitPlantingMode()
+				if self.UIManager then
+					self.UIManager:ShowNotification("Last Seed Planted", 
+						"You planted your last " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. "! Buy more seeds to continue planting.", "info")
+				end
+			end
+		end
+	end
+end
+
+-- ADDED: Handle inventory-specific updates
+function GameClient:HandleInventoryUpdate(inventoryType, newInventory)
+	print("GameClient: Handling inventory update for " .. inventoryType)
+
+	if inventoryType == "farming" then
+		if self.PlayerData.farming then
+			self.PlayerData.farming.inventory = newInventory
+		end
+	elseif inventoryType == "mining" then
+		if self.PlayerData.mining then
+			self.PlayerData.mining.inventory = newInventory
+		end
+	elseif inventoryType == "crafting" then
+		if self.PlayerData.crafting then
+			self.PlayerData.crafting.inventory = newInventory
+		end
+	end
+
+	-- Update currency if this affects it
+	if self.UIManager then
+		self.UIManager:UpdateCurrencyDisplay(self.PlayerData)
+	end
+
+	-- Refresh inventory displays
+	self:RefreshInventoryDisplays()
+end
+
+-- ADDED: Handle item sold notification
+function GameClient:HandleItemSold(itemId, quantity, totalValue)
+	print("GameClient: Item sold - " .. itemId .. " x" .. quantity .. " for " .. totalValue)
+
+	if self.UIManager then
+		local itemName = ItemConfig.ShopItems[itemId] and ItemConfig.ShopItems[itemId].name or itemId
+		self.UIManager:ShowNotification("💰 Item Sold", 
+			"Sold " .. quantity .. "x " .. itemName:gsub("🥕 ", ""):gsub("🌱 ", "") .. " for " .. totalValue .. " coins!", "success")
+	end
+
+	-- Refresh inventory displays
+	self:RefreshInventoryDisplays()
+end
+
+-- ADDED: Handle item purchased notification
+function GameClient:HandleItemPurchased(itemId, quantity, cost, currency)
+	print("GameClient: Item purchased - " .. itemId .. " x" .. quantity .. " for " .. cost .. " " .. currency)
+
+	if self.UIManager then
+		local itemName = ItemConfig.ShopItems[itemId] and ItemConfig.ShopItems[itemId].name or itemId
+		local currencyName = currency == "farmTokens" and "Farm Tokens" or "Coins"
+		self.UIManager:ShowNotification("🛒 Purchase Complete", 
+			"Bought " .. quantity .. "x " .. itemName:gsub("🥕 ", ""):gsub("🌱 ", "") .. "!", "success")
+	end
+
+	-- Refresh inventory displays
+	self:RefreshInventoryDisplays()
+end
+
+-- ADDED: Check if inventory has changed
+function GameClient:CheckInventoryChanges(oldData, newData)
+	if not oldData or not newData then return true end
+
+	-- Simple hash-based change detection
+	local oldHash = self:GenerateInventoryHash(oldData)
+	local newHash = self:GenerateInventoryHash(newData)
+
+	if oldHash ~= newHash then
+		self.Cache.InventoryHash = newHash
+		self.Cache.LastInventoryUpdate = tick()
+		return true
+	end
+
+	return false
+end
+
+-- ADDED: Generate inventory hash for change detection
+function GameClient:GenerateInventoryHash(data)
+	local hashString = ""
+
+	-- Include relevant inventory data
+	if data.farming and data.farming.inventory then
+		for k, v in pairs(data.farming.inventory) do
+			hashString = hashString .. k .. ":" .. v .. ";"
+		end
+	end
+
+	if data.mining and data.mining.inventory then
+		for k, v in pairs(data.mining.inventory) do
+			hashString = hashString .. k .. ":" .. v .. ";"
+		end
+	end
+
+	if data.crafting and data.crafting.inventory then
+		for k, v in pairs(data.crafting.inventory) do
+			hashString = hashString .. k .. ":" .. v .. ";"
+		end
+	end
+
+	-- Include milk count
+	hashString = hashString .. "milk:" .. (data.milk or 0) .. ";"
+
+	-- Include currency
+	hashString = hashString .. "coins:" .. (data.coins or 0) .. ";"
+	hashString = hashString .. "farmTokens:" .. (data.farmTokens or 0) .. ";"
+
+	return hashString
+end
+
+-- ADDED: Refresh inventory displays in UI
+function GameClient:RefreshInventoryDisplays()
+	if not self.UIManager then return end
+
+	local currentPage = self.UIManager:GetCurrentPage()
+	if currentPage == "Farm" or currentPage == "Mining" or currentPage == "Crafting" then
+		-- Add small delay to ensure data is fully updated
+		spawn(function()
+			wait(0.1)
+			self.UIManager:RefreshMenuContent(currentPage)
+		end)
+	end
+end
+
+-- ========== ENHANCED INVENTORY REFRESH SYSTEM ==========
+
+function GameClient:SetupInventoryRefresh()
+	print("GameClient: Setting up periodic inventory refresh...")
+
+	-- Refresh inventory data every 30 seconds to ensure sync
+	spawn(function()
+		while true do
+			wait(30)
+			if self.RemoteFunctions.GetPlayerData then
+				local success, data = pcall(function()
+					return self.RemoteFunctions.GetPlayerData:InvokeServer()
+				end)
+
+				if success and data then
+					-- Check if data has changed
+					if self:CheckInventoryChanges(self.PlayerData, data) then
+						print("GameClient: Periodic inventory sync - changes detected")
+						self:HandlePlayerDataUpdate(data)
+					end
+				end
+			end
+		end
+	end)
+end
+
+-- ========== ENHANCED PLANTING SYSTEM ==========
+
+function GameClient:StartPlantingMode(seedId)
+	print("GameClient: Starting ENHANCED planting mode with seed:", seedId)
+
+	-- Verify player has seeds
+	local seedInventory = self:GetInventoryData("farming")
+	local seedCount = seedInventory[seedId] or 0
+
+	if seedCount <= 0 then
+		if self.UIManager then
+			self.UIManager:ShowNotification("No Seeds", "You don't have any " .. seedId:gsub("_", " ") .. " to plant!", "warning")
+		end
+		return false
+	end
+
+	self.FarmingState.selectedSeed = seedId
+	self.FarmingState.isPlantingMode = true
+
+	if self.UIManager then
+		local seedName = ItemConfig.ShopItems[seedId] and ItemConfig.ShopItems[seedId].name or seedId
+		self.UIManager:ShowNotification("🌱 Planting Mode", 
+			"Selected " .. seedName:gsub("🌱 ", "") .. "! Go to your farm and click on empty plots to plant.", "success")
+	end
+
+	return true
+end
+
+function GameClient:ExitPlantingMode()
+	print("GameClient: Exiting planting mode")
+	self.FarmingState.selectedSeed = nil
+	self.FarmingState.isPlantingMode = false
+	if self.UIManager then
+		self.UIManager:ShowNotification("🌱 Planting Mode", "Planting mode deactivated", "info")
 	end
 end
 
@@ -260,11 +588,19 @@ function GameClient:SetupInputHandling()
 			self:OpenMenu("Crafting")
 		elseif input.KeyCode == Enum.KeyCode.H then
 			self:RequestHarvestAll()
+		elseif input.KeyCode == Enum.KeyCode.I then
+			-- ADDED: Inventory shortcut
+			local currentPage = self.UIManager and self.UIManager:GetCurrentPage()
+			if currentPage == "None" then
+				self:OpenMenu("Farm") -- Default to farm for inventory
+			else
+				self.UIManager:CloseActiveMenus()
+			end
 		end
 	end)
 
-	print("GameClient: Input handling setup complete")
-	print("  Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All, ESC=Close")
+	print("GameClient: Enhanced input handling setup complete")
+	print("  Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All, I=Inventory, ESC=Close")
 	print("  Shop access: Proximity only via ShopTouchPart")
 end
 
@@ -338,60 +674,6 @@ function GameClient:OpenShopProximity()
 	return false
 end
 
--- ========== EVENT HANDLERS ==========
-
-function GameClient:HandlePlayerDataUpdate(newData)
-	if not newData then return end
-
-	local oldData = self.PlayerData
-	self.PlayerData = newData
-
-	-- Update currency display through UIManager
-	if self.UIManager then
-		self.UIManager:UpdateCurrencyDisplay(newData)
-	end
-
-	-- Update current page if needed
-	local currentPage = self.UIManager and self.UIManager:GetCurrentPage()
-	if currentPage == "Shop" then
-		-- Refresh the active shop tab if shop is open
-		if self.UIManager then 
-			self.UIManager:RefreshMenuContent("Shop") 
-		end
-	elseif currentPage == "Farm" then
-		if self.UIManager then self.UIManager:RefreshMenuContent("Farm") end
-	elseif currentPage == "Mining" then
-		if self.UIManager then self.UIManager:RefreshMenuContent("Mining") end
-	elseif currentPage == "Crafting" then
-		if self.UIManager then self.UIManager:RefreshMenuContent("Crafting") end
-	end
-
-	-- Handle planting mode seed check
-	if self.FarmingState.isPlantingMode and self.FarmingState.selectedSeed then
-		local currentSeeds = newData.farming and newData.farming.inventory or {}
-		local newSeedCount = currentSeeds[self.FarmingState.selectedSeed] or 0
-
-		local oldSeeds = oldData and oldData.farming and oldData.farming.inventory or {}
-		local oldSeedCount = oldSeeds[self.FarmingState.selectedSeed] or 0
-
-		if newSeedCount <= 0 then
-			if oldSeedCount <= 0 then
-				self:ExitPlantingMode()
-				if self.UIManager then
-					self.UIManager:ShowNotification("Out of Seeds", 
-						"You don't have any " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. " to plant!", "warning")
-				end
-			else
-				self:ExitPlantingMode()
-				if self.UIManager then
-					self.UIManager:ShowNotification("Last Seed Planted", 
-						"You planted your last " .. (self.FarmingState.selectedSeed or ""):gsub("_", " ") .. "! Buy more seeds to continue planting.", "info")
-				end
-			end
-		end
-	end
-end
-
 -- ========== FARMING SYSTEM LOGIC ==========
 
 function GameClient:SetupFarmingSystemLogic()
@@ -404,25 +686,7 @@ function GameClient:SetupFarmingSystemLogic()
 		rarityPreview = nil
 	}
 
-	print("GameClient: Farming system logic setup complete")
-end
-
-function GameClient:StartPlantingMode(seedId)
-	print("GameClient: Starting planting mode with seed:", seedId)
-	self.FarmingState.selectedSeed = seedId
-	self.FarmingState.isPlantingMode = true
-	if self.UIManager then
-		self.UIManager:ShowNotification("🌱 Planting Mode", "Go to your farm and click on plots to plant seeds!", "success")
-	end
-end
-
-function GameClient:ExitPlantingMode()
-	print("GameClient: Exiting planting mode")
-	self.FarmingState.selectedSeed = nil
-	self.FarmingState.isPlantingMode = false
-	if self.UIManager then
-		self.UIManager:ShowNotification("🌱 Planting Mode", "Planting mode deactivated", "info")
-	end
+	print("GameClient: Enhanced farming system logic setup complete")
 end
 
 function GameClient:ShowSeedSelectionForPlot(plotModel)
@@ -555,11 +819,25 @@ function GameClient:RequestInitialData()
 				self:HandlePlayerDataUpdate({
 					coins = 0,
 					farmTokens = 0,
+					milk = 0, -- ADDED
 					upgrades = {},
 					purchaseHistory = {},
 					farming = {
 						plots = 0,
 						inventory = {}
+					},
+					mining = {
+						inventory = {},
+						tools = {},
+						level = 1
+					},
+					crafting = {
+						inventory = {},
+						recipes = {},
+						stations = {}
+					},
+					livestock = {
+						cows = {}
 					}
 				})
 			end
@@ -567,10 +845,6 @@ function GameClient:RequestInitialData()
 	else
 		warn("GameClient: GetPlayerData remote function not available")
 	end
-end
-
-function GameClient:GetPlayerData()
-	return self.PlayerData
 end
 
 -- ========== UTILITY FUNCTIONS ==========
@@ -583,15 +857,32 @@ function GameClient:CountTable(t)
 	return count
 end
 
--- ========== DEBUG FUNCTIONS ==========
+-- ========== ENHANCED DEBUG FUNCTIONS ==========
 
 function GameClient:DebugStatus()
-	print("=== CLEANED GAMECLIENT DEBUG STATUS ===")
+	print("=== ENHANCED GAMECLIENT DEBUG STATUS ===")
 	print("PlayerData exists:", self.PlayerData ~= nil)
 	if self.PlayerData then
 		print("  Coins:", self.PlayerData.coins or "N/A")
 		print("  Farm Tokens:", self.PlayerData.farmTokens or "N/A") 
+		print("  Milk:", self.PlayerData.milk or "N/A") -- ADDED
 		print("  Farming data exists:", self.PlayerData.farming ~= nil)
+		if self.PlayerData.farming then
+			print("    Seeds:", self:CountTable(self.PlayerData.farming.inventory or {}))
+		end
+		print("  Mining data exists:", self.PlayerData.mining ~= nil)
+		if self.PlayerData.mining then
+			print("    Ores:", self:CountTable(self.PlayerData.mining.inventory or {}))
+			print("    Tools:", self:CountTable(self.PlayerData.mining.tools or {}))
+		end
+		print("  Crafting data exists:", self.PlayerData.crafting ~= nil)
+		if self.PlayerData.crafting then
+			print("    Materials:", self:CountTable(self.PlayerData.crafting.inventory or {}))
+		end
+		print("  Livestock data exists:", self.PlayerData.livestock ~= nil)
+		if self.PlayerData.livestock then
+			print("    Cows:", #(self.PlayerData.livestock.cows or {}))
+		end
 	end
 	print("UIManager exists:", self.UIManager ~= nil)
 	if self.UIManager then
@@ -600,8 +891,13 @@ function GameClient:DebugStatus()
 	print("RemoteEvents count:", self.RemoteEvents and self:CountTable(self.RemoteEvents) or 0)
 	print("RemoteFunctions count:", self.RemoteFunctions and self:CountTable(self.RemoteFunctions) or 0)
 	print("Shop access: PROXIMITY ONLY")
-	print("Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All")
-	print("=====================================")
+	print("Available hotkeys: F=Farm, M=Mining, C=Crafting, H=Harvest All, I=Inventory")
+	print("Planting mode active:", self.FarmingState.isPlantingMode)
+	if self.FarmingState.isPlantingMode then
+		print("  Selected seed:", self.FarmingState.selectedSeed)
+	end
+	print("Last inventory update:", self.Cache.LastInventoryUpdate)
+	print("=========================================")
 end
 
 -- ========== CLEANUP ==========
@@ -631,10 +927,12 @@ function GameClient:Cleanup()
 	}
 	self.Cache = {
 		CowCooldown = 0,
-		LastDataUpdate = 0
+		LastDataUpdate = 0,
+		LastInventoryUpdate = 0,
+		InventoryHash = ""
 	}
 
-	print("GameClient: Cleaned up")
+	print("GameClient: Enhanced cleanup completed")
 end
 
 -- ========== GLOBAL REGISTRATION ==========
@@ -651,18 +949,22 @@ _G.DebugGameClient = function()
 	end
 end
 
-print("GameClient: ✅ CLEANED VERSION LOADED!")
-print("🧹 REMOVED REDUNDANT CODE:")
-print("  ❌ Shop item fetching (handled by ShopSystem)")
-print("  ❌ Shop purchase processing (handled by ShopSystem)")
-print("  ❌ Shop caching logic (not needed on client)")
-print("  ❌ Category helper functions (handled by ItemConfig)")
-print("  ❌ Shop validation logic (handled by server)")
+print("GameClient: ✅ ENHANCED VERSION LOADED!")
+print("🎯 NEW FEATURES:")
+print("  ✅ Enhanced inventory data handling")
+print("  ✅ Milk tracking integration")
+print("  ✅ Real-time inventory refresh")
+print("  ✅ Improved planting mode with inventory checks")
+print("  ✅ Mining and crafting data support")
+print("  ✅ Periodic inventory sync")
+print("  ✅ Enhanced notification system")
 print("")
-print("✅ KEPT ESSENTIAL CODE:")
-print("  🎯 Shop opening/closing for UI")
-print("  💰 Currency updates from server")
-print("  🌾 Farming system integration")
-print("  📡 Core remote event handling")
+print("🔧 Enhanced hotkeys:")
+print("  F = Farm Menu (Seeds, Crops, Livestock, Upgrades)")
+print("  M = Mining Menu (Ores, Tools, Progress)")
+print("  C = Crafting Menu (Stations, Materials, Recipes)")
+print("  H = Harvest All Crops")
+print("  I = Toggle Inventory (Farm menu)")
+print("  ESC = Close all menus")
 
 return GameClient
