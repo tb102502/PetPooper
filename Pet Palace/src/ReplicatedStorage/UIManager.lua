@@ -115,7 +115,56 @@ UIManager.InventoryItemConfig = {
 		ActionSize = 18
 	}
 }
-
+UIManager.ExtraLargeItemConfig = {
+	ItemFrame = {
+		HeightPercent = 0.33,        -- 33% height (EXTRA LARGE)
+		SpacingPercent = 0.04,       -- 4% spacing
+		BackgroundColor = Color3.fromRGB(60, 60, 60),
+		CornerRadius = UDim.new(0.02, 0)
+	},
+	Elements = {
+		CategoryIndicator = {
+			Size = UDim2.new(0.015, 0, 1, 0),
+			Position = UDim2.new(0, 0, 0, 0)
+		},
+		ItemIcon = {
+			Size = UDim2.new(0.225, 0, 0.9, 0),    -- MASSIVE icon
+			Position = UDim2.new(0.02, 0, 0.05, 0)
+		},
+		ItemName = {
+			Size = UDim2.new(0.32, 0, 0.525, 0),
+			Position = UDim2.new(0.265, 0, 0.05, 0)
+		},
+		ItemDescription = {
+			Size = UDim2.new(0.32, 0, 0.375, 0),
+			Position = UDim2.new(0.265, 0, 0.575, 0)
+		},
+		PriceArea = {
+			Size = UDim2.new(0.18, 0, 0.9, 0),
+			Position = UDim2.new(0.6, 0, 0.05, 0)
+		},
+		ButtonArea = {
+			Size = UDim2.new(0.19, 0, 0.9, 0),
+			Position = UDim2.new(0.79, 0, 0.05, 0)
+		},
+		Badge = {
+			Size = UDim2.new(0.12, 0, 0.42, 0),
+			Position = UDim2.new(0.86, 0, 0.05, 0)
+		}
+	},
+	TextScaling = {
+		IconSize = 42,      -- HUGE text
+		NameSize = 33,      -- Large name
+		DescriptionSize = 27, -- Large description
+		PriceSize = 30,     -- Large price
+		ButtonSize = 24,    -- Large button text
+		BadgeSize = 21      -- Large badge
+	},
+	Padding = {
+		TopPercent = 0.02,
+		BottomPercent = 0.04
+	}
+}
 -- ========== INITIALIZATION ==========
 
 function UIManager:Initialize()
@@ -1165,7 +1214,7 @@ function UIManager:CreateInventoryItem(item, index, categoryColor, itemType, con
 	local yPositionPixels = topPaddingPixels + ((index - 1) * (itemHeightPixels + itemSpacingPixels))
 
 	-- Main frame
-	local ItemFrame = Instance.new("ItemFrame")
+	local ItemFrame = Instance.new("Frame")
 	ItemFrame.Name = itemType .. "Item_" .. index
 	ItemFrame.Size = UDim2.new(0.96, 0, 0, itemHeightPixels)
 	ItemFrame.Position = UDim2.new(0.02, 0, 0, yPositionPixels)
@@ -1840,7 +1889,7 @@ end
 
 function UIManager:CreateExtraLargeShopItem(item, index, categoryColor, itemType, containerHeight, playerData)
 	print("UIManager: Creating EXTRA LARGE item: " .. (item.name or item.id) .. " - Index: " .. index)
-	local ItemFrame = Instance.new("ItemFrame")
+	local ItemFrame = Instance.new("Frame")
 	local config = self.ExtraLargeItemConfig
 
 	-- Get purchase status
