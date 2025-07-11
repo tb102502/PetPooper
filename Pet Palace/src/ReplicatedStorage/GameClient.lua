@@ -1025,7 +1025,7 @@ function GameClient:SetupRemoteConnections()
 		"GetPlayerData", "GetFarmingData",
 
 		-- Shop functions (enhanced for tabbed system)
-		"GetShopItems", "GetShopItemsByCategory", "GetSellableItems" -- ADD GetSellableItems HERE
+		"GetShopItems", "GetShopItemsByCategory", "GetSellableItems", "GetShopItems" -- ADD GetSellableItems HERE
 	}
 
 

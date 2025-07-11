@@ -420,6 +420,8 @@ end
 
 -- ========== REMOTE EVENT SETUP ==========
 
+-- REPLACE the SetupRemoteConnections method in your GameCore.lua with this fixed version:
+
 function GameCore:SetupRemoteConnections()
 	print("GameCore: Setting up remote connections...")
 
@@ -434,7 +436,7 @@ function GameCore:SetupRemoteConnections()
 	self.RemoteEvents = {}
 	self.RemoteFunctions = {}
 
-	-- UPDATED: Essential remote events for all systems
+	-- FIXED: Complete list of remote events including shop system
 	local requiredRemoteEvents = {
 		-- Core events
 		"PlayerDataUpdated", "ShowNotification",
@@ -444,12 +446,17 @@ function GameCore:SetupRemoteConnections()
 		"ShowChairPrompt", "HideChairPrompt", 
 		"StartMilkingSession", "StopMilkingSession", 
 		"ContinueMilking", "MilkingSessionUpdate",
-		-- Shop events
-		"PurchaseItem", "ItemPurchased", "OpenShop", "CloseShop"
+		-- Shop events (ADDED THESE)
+		"PurchaseItem", "ItemPurchased", "SellItem", "ItemSold", 
+		"CurrencyUpdated", "OpenShop", "CloseShop"
 	}
 
+	-- FIXED: Complete list of remote functions including all shop functions
 	local requiredRemoteFunctions = {
-		"GetPlayerData", "GetFarmingData", "GetShopItems", "GetSellableItems"
+		-- Core functions
+		"GetPlayerData", "GetFarmingData",
+		-- Shop functions (ADDED THESE MISSING ONES)
+		"GetShopItems", "GetShopItemsByCategory", "GetShopCategories", "GetSellableItems"
 	}
 
 	-- Create/connect remote events
@@ -477,6 +484,8 @@ function GameCore:SetupRemoteConnections()
 	end
 
 	print("GameCore: ✅ Remote connections established")
+	print("  RemoteEvents: " .. #requiredRemoteEvents)
+	print("  RemoteFunctions: " .. #requiredRemoteFunctions)
 end
 
 function GameCore:SetupEventHandlers()

@@ -324,7 +324,124 @@ local function SetupSystemDebugCommands()
 					else
 						print("❌ CowMilkingModule not available")
 					end
+				elseif command == "/debugshop" then
+					print("=== SHOP SYSTEM DEBUG ===")
+					print("ShopSystem loaded: " .. (_G.ShopSystem and "✅" or "❌"))
+					print("GameCore loaded: " .. (_G.GameCore and "✅" or "❌"))
 
+					-- Check remote functions
+					local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+					if gameRemotes then
+						print("GameRemotes folder: ✅")
+
+						local shopRemotes = {
+							"GetShopItems", "GetShopItemsByCategory", 
+							"GetShopCategories", "GetSellableItems"
+						}
+
+						print("Shop Remote Functions:")
+						for _, remoteName in ipairs(shopRemotes) do
+							local remote = gameRemotes:FindFirstChild(remoteName)
+							print("  " .. remoteName .. ": " .. (remote and "✅" or "❌"))
+						end
+
+						local shopEvents = {
+							"PurchaseItem", "ItemPurchased", "SellItem", 
+							"ItemSold", "OpenShop", "CloseShop"
+						}
+
+						print("Shop Remote Events:")
+						for _, eventName in ipairs(shopEvents) do
+							local event = gameRemotes:FindFirstChild(eventName)
+							print("  " .. eventName .. ": " .. (event and "✅" or "❌"))
+						end
+					else
+						print("GameRemotes folder: ❌")
+					end
+
+					-- Test ShopSystem functionality
+					if _G.ShopSystem then
+						print("Testing ShopSystem methods:")
+						local hasGetShopItems = _G.ShopSystem.HandleGetShopItems ~= nil
+						local hasGetCategories = _G.ShopSystem.HandleGetShopCategories ~= nil
+						print("  HandleGetShopItems: " .. (hasGetShopItems and "✅" or "❌"))
+						print("  HandleGetShopCategories: " .. (hasGetCategories and "✅" or "❌"))
+
+						-- Test getting shop items
+						local success, result = pcall(function()
+							return _G.ShopSystem:HandleGetShopItems(player)
+						end)
+						print("  GetShopItems test: " .. (success and ("✅ (" .. #result .. " items)") or ("❌ " .. tostring(result))))
+					end
+
+					print("========================")
+
+				elseif command == "/testshopremotes" then
+					print("🧪 Testing shop remote functions...")
+
+					local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+					if not gameRemotes then
+						print("❌ GameRemotes not found")
+						return
+					end
+
+					-- Test GetShopItems
+					local getShopItems = gameRemotes:FindFirstChild("GetShopItems")
+					if getShopItems and getShopItems:IsA("RemoteFunction") then
+						local success, result = pcall(function()
+							return getShopItems:InvokeServer()
+						end)
+						print("GetShopItems: " .. (success and ("✅ " .. #result .. " items") or ("❌ " .. tostring(result))))
+					else
+						print("GetShopItems: ❌ Not found or wrong type")
+					end
+
+					-- Test GetShopItemsByCategory
+					local getByCategory = gameRemotes:FindFirstChild("GetShopItemsByCategory")
+					if getByCategory and getByCategory:IsA("RemoteFunction") then
+						local success, result = pcall(function()
+							return getByCategory:InvokeServer("seeds")
+						end)
+						print("GetShopItemsByCategory: " .. (success and ("✅ " .. #result .. " seeds") or ("❌ " .. tostring(result))))
+					else
+						print("GetShopItemsByCategory: ❌ Not found or wrong type")
+					end
+
+					print("Remote function testing complete!")
+
+				elseif command == "/forcecreateshop" then
+					print("🔧 Force creating shop remotes...")
+
+					local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+					if not gameRemotes then
+						gameRemotes = Instance.new("Folder")
+						gameRemotes.Name = "GameRemotes"
+						gameRemotes.Parent = game:GetService("ReplicatedStorage")
+						print("Created GameRemotes folder")
+					end
+
+					local shopRemotes = {
+						{name = "GetShopItems", type = "RemoteFunction"},
+						{name = "GetShopItemsByCategory", type = "RemoteFunction"},
+						{name = "GetShopCategories", type = "RemoteFunction"},
+						{name = "GetSellableItems", type = "RemoteFunction"},
+						{name = "PurchaseItem", type = "RemoteEvent"},
+						{name = "SellItem", type = "RemoteEvent"}
+					}
+
+					for _, remote in ipairs(shopRemotes) do
+						if not gameRemotes:FindFirstChild(remote.name) then
+							local newRemote = Instance.new(remote.type)
+							newRemote.Name = remote.name
+							newRemote.Parent = gameRemotes
+							print("Created " .. remote.type .. ": " .. remote.name)
+						else
+							print("Already exists: " .. remote.name)
+						end
+					end
+
+					print("✅ Shop remotes created/verified!")
+				
 				elseif command == "/forcerescan" then
 					print("🔄 Force rescanning systems...")
 
@@ -346,6 +463,7 @@ local function SetupSystemDebugCommands()
 end
 
 -- ========== MAIN COORDINATION FUNCTION ==========
+-- REPLACE the CoordinateSystemInitialization function in your SystemInitializer.server.lua
 
 local function CoordinateSystemInitialization()
 	print("🎯 Starting system coordination...")
@@ -354,22 +472,112 @@ local function CoordinateSystemInitialization()
 		-- Step 1: Load GameCore
 		local GameCore = LoadGameCore()
 
-		-- Step 2: Verify modules exist
+		-- Step 2: Load ShopSystem (ADDED THIS)
+		print("🛒 Loading ShopSystem...")
+		local ShopSystem = nil
+		local systemsFolder = ServerScriptService:FindFirstChild("Systems")
+		if systemsFolder then
+			local shopSystemModule = systemsFolder:FindFirstChild("ShopSystem")
+			if shopSystemModule then
+				local shopSuccess, shopResult = pcall(function()
+					return require(shopSystemModule)
+				end)
+				if shopSuccess then
+					ShopSystem = shopResult
+					print("✅ ShopSystem loaded successfully")
+				else
+					warn("❌ ShopSystem failed to load: " .. tostring(shopResult))
+				end
+			else
+				warn("❌ ShopSystem module not found in Systems folder")
+			end
+		else
+			warn("❌ Systems folder not found")
+		end
+
+		-- Step 3: Verify modules exist
 		local modulesFound, moduleCount = VerifyModulesExist()
 
-		-- Step 3: Verify workspace models
+		-- Step 4: Verify workspace models
 		local modelsExist = VerifyWorkspaceModels()
 
-		-- Step 4: Initialize GameCore (this will load and initialize modules)
+		-- Step 5: Initialize GameCore (this will load and initialize modules)
 		InitializeGameCore(GameCore)
 
-		-- Step 5: Wait for modules to connect
+		-- Step 6: Initialize ShopSystem (ADDED THIS)
+		if ShopSystem then
+			print("🛒 Initializing ShopSystem...")
+			local shopInitSuccess, shopInitError = pcall(function()
+				return ShopSystem:Initialize(GameCore)
+			end)
+
+			if shopInitSuccess then
+				print("✅ ShopSystem initialized successfully")
+				_G.ShopSystem = ShopSystem
+
+				-- Connect ShopSystem remote handlers (IMPORTANT!)
+				if GameCore.RemoteFunctions then
+					-- Connect shop remote functions to ShopSystem handlers
+					if GameCore.RemoteFunctions.GetShopItems then
+						GameCore.RemoteFunctions.GetShopItems.OnServerInvoke = function(player)
+							return ShopSystem:HandleGetShopItems(player)
+						end
+						print("✅ Connected GetShopItems handler")
+					end
+
+					if GameCore.RemoteFunctions.GetShopItemsByCategory then
+						GameCore.RemoteFunctions.GetShopItemsByCategory.OnServerInvoke = function(player, category)
+							return ShopSystem:HandleGetShopItemsByCategory(player, category)
+						end
+						print("✅ Connected GetShopItemsByCategory handler")
+					end
+
+					if GameCore.RemoteFunctions.GetShopCategories then
+						GameCore.RemoteFunctions.GetShopCategories.OnServerInvoke = function(player)
+							return ShopSystem:HandleGetShopCategories(player)
+						end
+						print("✅ Connected GetShopCategories handler")
+					end
+
+					if GameCore.RemoteFunctions.GetSellableItems then
+						GameCore.RemoteFunctions.GetSellableItems.OnServerInvoke = function(player)
+							return ShopSystem:HandleGetSellableItems(player)
+						end
+						print("✅ Connected GetSellableItems handler")
+					end
+				end
+
+				-- Connect shop events
+				if GameCore.RemoteEvents then
+					if GameCore.RemoteEvents.PurchaseItem then
+						GameCore.RemoteEvents.PurchaseItem.OnServerEvent:Connect(function(player, itemId, quantity)
+							ShopSystem:HandlePurchase(player, itemId, quantity or 1)
+						end)
+						print("✅ Connected PurchaseItem handler")
+					end
+
+					if GameCore.RemoteEvents.SellItem then
+						GameCore.RemoteEvents.SellItem.OnServerEvent:Connect(function(player, itemId, quantity)
+							ShopSystem:HandleSell(player, itemId, quantity or 1)
+						end)
+						print("✅ Connected SellItem handler")
+					end
+				end
+
+			else
+				warn("❌ ShopSystem initialization failed: " .. tostring(shopInitError))
+			end
+		else
+			warn("⚠️ ShopSystem not available - shop functionality will be limited")
+		end
+
+		-- Step 7: Wait for modules to connect
 		WaitForModuleConnections(15)
 
-		-- Step 6: Verify remote events are ready
+		-- Step 8: Verify remote events are ready
 		VerifyRemoteEvents()
 
-		-- Step 7: Setup debug commands
+		-- Step 9: Setup debug commands
 		SetupSystemDebugCommands()
 
 		return true
@@ -380,6 +588,7 @@ local function CoordinateSystemInitialization()
 		print("")
 		print("🔧 COORDINATION RESULTS:")
 		print("  🎮 GameCore: " .. (SystemState.GameCoreLoaded and "✅" or "❌"))
+		print("  🛒 ShopSystem: " .. (_G.ShopSystem and "✅" or "❌"))
 		print("  📦 Modules: " .. (SystemState.ModulesInitialized and "✅" or "❌"))  
 		print("  📡 Remote Events: " .. (SystemState.RemoteEventsReady and "✅" or "❌"))
 		print("  🔗 Systems Connected: " .. (SystemState.SystemsConnected and "✅" or "❌"))
@@ -390,6 +599,7 @@ local function CoordinateSystemInitialization()
 		print("  /testcow - Test cow assignment")
 		print("  /testmilking - Test milking system")
 		print("  /forcerescan - Force rescan models")
+		print("  /debugshop - Debug shop system")
 		return true
 	else
 		warn("💥 System coordination failed: " .. tostring(errorMessage))
@@ -406,7 +616,6 @@ local function CoordinateSystemInitialization()
 		return false
 	end
 end
-
 -- ========== EXECUTE COORDINATION ==========
 
 spawn(function()

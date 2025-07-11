@@ -1285,45 +1285,55 @@ _G.ForceShop = function()
 		print("Force shop open:", success and "SUCCESS" or "FAILED")
 	end
 end
+-- ADD this enhanced method to your UIManager.lua
+-- Replace the existing HandleOpenShopFromServer method
+
 function UIManager:HandleOpenShopFromServer()
 	print("UIManager: 🛒 Received OpenShop event from server!")
 
-	-- NUCLEAR RESET - clear everything
-	print("UIManager: Performing nuclear state reset...")
+	-- Force clear any stuck states
 	self.State.IsTransitioning = false
 	self.State.TransitionStartTime = nil
-	self.State.ActiveMenus = {}
-	self.State.CurrentPage = "None"
 
-	-- Force close any visible menus
-	local menuContainer = self.State.MainUI and self.State.MainUI:FindFirstChild("MenuContainer")
-	if menuContainer then
-		menuContainer.Visible = false
-		-- Clear any existing menu content
-		local menuFrame = menuContainer:FindFirstChild("MenuFrame")
-		if menuFrame then
-			for _, child in pairs(menuFrame:GetChildren()) do
-				if child.Name ~= "CloseButton" and not child:IsA("UICorner") then
-					child:Destroy()
-				end
+	-- Close any existing menus first
+	if #self.State.ActiveMenus > 0 then
+		print("UIManager: Closing existing menus before opening shop")
+		self:CloseActiveMenusForced()
+		wait(0.1)
+	end
+
+	-- Try to open shop with retry logic
+	local attempts = 0
+	local maxAttempts = 3
+	local success = false
+
+	while not success and attempts < maxAttempts do
+		attempts = attempts + 1
+		print("UIManager: Shop open attempt " .. attempts .. "/" .. maxAttempts)
+
+		success = self:OpenMenu("Shop")
+
+		if success then
+			print("UIManager: ✅ Shop opened successfully!")
+			self:ShowNotification("🛒 Shop Opened", "Welcome to Pet Palace Market!", "success")
+			break
+		else
+			print("UIManager: ❌ Shop open attempt " .. attempts .. " failed")
+			if attempts < maxAttempts then
+				-- Reset state and try again
+				self.State.IsTransitioning = false
+				self.State.TransitionStartTime = nil
+				self.State.CurrentPage = "None"
+				wait(0.2)
 			end
 		end
 	end
 
-	print("UIManager: State reset complete, attempting shop open...")
-
-	-- Try to open shop immediately
-	local success = self:OpenMenu("Shop")
-
-	if success then
-		print("UIManager: ✅ Shop opened successfully after reset!")
-		self:ShowNotification("🛒 Shop Opened", "Welcome to Pet Palace Market!", "success")
-	else
-		warn("UIManager: ❌ Shop still failed to open after reset")
-		self:ShowNotification("Shop Error", "Shop failed to open. Use /resetui command.", "error")
+	if not success then
+		warn("UIManager: ❌ Shop failed to open after " .. maxAttempts .. " attempts")
+		self:ShowNotification("Shop Error", "Shop failed to open. Try the /shop command.", "error")
 	end
 end
-
 function UIManager:HandleCloseShopFromServer()
 	print("UIManager: Handling shop close request from server...")
 
