@@ -436,7 +436,7 @@ function GameCore:SetupRemoteConnections()
 	self.RemoteEvents = {}
 	self.RemoteFunctions = {}
 
-	-- FIXED: Complete list of remote events including shop system
+	-- FIXED: Removed shop events - let ShopSystem handle these
 	local requiredRemoteEvents = {
 		-- Core events
 		"PlayerDataUpdated", "ShowNotification",
@@ -446,17 +446,16 @@ function GameCore:SetupRemoteConnections()
 		"ShowChairPrompt", "HideChairPrompt", 
 		"StartMilkingSession", "StopMilkingSession", 
 		"ContinueMilking", "MilkingSessionUpdate",
-		-- Shop events (ADDED THESE)
-		"PurchaseItem", "ItemPurchased", "SellItem", "ItemSold", 
-		"CurrencyUpdated", "OpenShop", "CloseShop"
+		-- Proximity events
+		"OpenShop", "CloseShop"
+		-- REMOVED: Shop purchase events (handled by ShopSystem)
 	}
 
-	-- FIXED: Complete list of remote functions including all shop functions
+	-- FIXED: Removed shop functions - let ShopSystem handle these
 	local requiredRemoteFunctions = {
 		-- Core functions
-		"GetPlayerData", "GetFarmingData",
-		-- Shop functions (ADDED THESE MISSING ONES)
-		"GetShopItems", "GetShopItemsByCategory", "GetShopCategories", "GetSellableItems"
+		"GetPlayerData", "GetFarmingData"
+		-- REMOVED: Shop functions (handled by ShopSystem)
 	}
 
 	-- Create/connect remote events
@@ -483,7 +482,7 @@ function GameCore:SetupRemoteConnections()
 		self.RemoteFunctions[funcName] = remote
 	end
 
-	print("GameCore: ✅ Remote connections established")
+	print("GameCore: ✅ Remote connections established (shop events handled by ShopSystem)")
 	print("  RemoteEvents: " .. #requiredRemoteEvents)
 	print("  RemoteFunctions: " .. #requiredRemoteFunctions)
 end

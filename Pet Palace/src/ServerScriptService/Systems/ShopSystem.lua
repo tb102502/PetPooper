@@ -1120,9 +1120,42 @@ function ShopSystem:SendNotification(player, title, message, notificationType)
 end
 
 function ShopSystem:SendEnhancedPurchaseConfirmation(player, item, quantity)
+	print("🎉 ShopSystem: Sending purchase confirmation for " .. item.id)
+
+	-- Calculate total cost
+	local totalCost = item.price * quantity
+
+	-- Send the ItemPurchased event (this is what GameClient listens for)
 	if self.RemoteEvents.ItemPurchased then
-		self.RemoteEvents.ItemPurchased:FireClient(player, item.id, quantity, item.price * quantity, item.currency)
+		self.RemoteEvents.ItemPurchased:FireClient(player, item.id, quantity, totalCost, item.currency)
+		print("📡 ShopSystem: Sent ItemPurchased event to client")
 	end
+
+	-- Also send a notification
+	local currencyName = item.currency == "farmTokens" and "Farm Tokens" or "Coins"
+	local itemName = item.name or item.id
+
+	self:SendNotification(player, "Purchase Successful!", 
+		"Bought " .. quantity .. "x " .. itemName .. " for " .. totalCost .. " " .. currencyName, "success")
+end
+
+-- Also add this debug method to help troubleshoot:
+function ShopSystem:DebugPurchaseFlow(player, itemId)
+	print("=== PURCHASE FLOW DEBUG ===")
+	print("Player: " .. player.Name)
+	print("Item: " .. itemId)
+	print("RemoteEvents.PurchaseItem exists: " .. tostring(self.RemoteEvents.PurchaseItem ~= nil))
+	print("RemoteEvents.ItemPurchased exists: " .. tostring(self.RemoteEvents.ItemPurchased ~= nil))
+	print("GameCore reference exists: " .. tostring(self.GameCore ~= nil))
+
+	if self.GameCore then
+		local playerData = self.GameCore:GetPlayerData(player)
+		if playerData then
+			print("Player coins: " .. (playerData.coins or 0))
+			print("Player farmTokens: " .. (playerData.farmTokens or 0))
+		end
+	end
+	print("===========================")
 end
 
 function ShopSystem:DeepCopyTable(original)
@@ -1225,7 +1258,7 @@ end
 
 -- ========== AUTOMATIC SEED FIXING ==========
 
-function ShopSystem:FixSeedVisibilityIssues()
+--[[function ShopSystem:FixSeedVisibilityIssues()
 	print("🔧 FIXING SEED VISIBILITY ISSUES...")
 
 	if not self.ItemConfig or not self.ItemConfig.ShopItems then
@@ -1268,7 +1301,6 @@ function ShopSystem:FixSeedVisibilityIssues()
 				print("  Fixed price for " .. itemId .. " to " .. item.price)
 				wasFixed = true
 			end
-
 			-- Fix missing currency
 			if not item.currency then
 				if itemId == "golden_seeds" or itemId == "glorious_sunflower_seeds" then
@@ -1340,7 +1372,7 @@ function ShopSystem:FixSeedVisibilityIssues()
 
 	return fixedCount > 0
 end
-
+]]
 -- ========== ENHANCED SEED VALIDATION ==========
 
 function ShopSystem:ValidateSeedSpecifically(item, itemId)
@@ -1490,7 +1522,50 @@ game:GetService("Players").PlayerAdded:Connect(function(player)
 		end
 	end)
 end)
+game:GetService("Players").PlayerAdded:Connect(function(player)
+	player.Chatted:Connect(function(message)
+		if player.Name == "YourUsernameHere" then -- Replace with your actual username
+			local args = string.split(message:lower(), " ")
+			local command = args[1]
 
+			if command == "/testpurchase" then
+				local itemId = args[2] or "carrot_seeds"
+				print("🧪 Testing purchase flow for " .. itemId)
+				ShopSystem:DebugPurchaseFlow(player, itemId)
+
+			elseif command == "/checkremotes" then
+				print("=== REMOTE EVENTS CHECK ===")
+				local gameRemotes = game:GetService("ReplicatedStorage"):FindFirstChild("GameRemotes")
+				if gameRemotes then
+					local purchaseEvent = gameRemotes:FindFirstChild("PurchaseItem")
+					if purchaseEvent then
+						print("✅ PurchaseItem remote exists")
+						print("Connections: " .. #purchaseEvent.Event:GetConnections())
+					else
+						print("❌ PurchaseItem remote missing")
+					end
+				else
+					print("❌ GameRemotes folder missing")
+				end
+				print("===========================")
+
+			elseif command == "/givecoins" then
+				local amount = tonumber(args[2]) or 1000
+				if ShopSystem.GameCore then
+					local playerData = ShopSystem.GameCore:GetPlayerData(player)
+					if playerData then
+						playerData.coins = (playerData.coins or 0) + amount
+						ShopSystem.GameCore:SavePlayerData(player)
+						if ShopSystem.GameCore.RemoteEvents and ShopSystem.GameCore.RemoteEvents.PlayerDataUpdated then
+							ShopSystem.GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
+						end
+						print("💰 Gave " .. amount .. " coins to " .. player.Name)
+					end
+				end
+			end
+		end
+	end)
+end)
 print("ShopSystem: ✅ FIXED - Items should now show in shop!")
 print("🔧 FIXES APPLIED:")
 print("  ✅ Made validation more permissive")

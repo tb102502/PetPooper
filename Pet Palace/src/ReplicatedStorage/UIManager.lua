@@ -37,13 +37,15 @@ UIManager.State = {
 	ShopTabs = {},
 	ActiveShopTab = "seeds",
 	RemoteEvents = {},
-	RemoteFunctions = {}
+	RemoteFunctions = {},
+	PurchaseCooldowns = {}, -- Add this line
+	PURCHASE_COOLDOWN = 2 -- 2 second cooldown
 }
 
 -- UI Configuration
 UIManager.Config = {
 	TransitionTime = 0.3,
-	NotificationDisplayTime = 5,
+	NotificationDisplayTime = 2,
 	MaxNotificationsVisible = 3,
 	UIOrder = {
 		Background = 1,
@@ -678,12 +680,47 @@ end
 function UIManager:HandleBuyClick(itemId, quantity)
 	print("UIManager: Buy click - " .. itemId .. " x" .. quantity)
 
+	-- ADDED: Purchase cooldown check to prevent double purchasing
+	local currentTime = tick()
+	local lastPurchase = self.State.PurchaseCooldowns[itemId] or 0
+
+	if currentTime - lastPurchase < self.State.PURCHASE_COOLDOWN then
+		print("UIManager: Purchase blocked - cooldown active for " .. itemId)
+		self:ShowNotification("Purchase Cooldown", "Please wait before purchasing again!", "warning")
+		return
+	end
+
+	-- ADDED: Set cooldown timestamp
+	self.State.PurchaseCooldowns[itemId] = currentTime
+
 	if self.State.RemoteEvents.PurchaseItem then
 		self.State.RemoteEvents.PurchaseItem:FireServer(itemId, quantity)
-		print("UIManager: Sent purchase request")
+		print("UIManager: Sent purchase request for " .. itemId)
+
+		-- Show immediate feedback
 	else
+		-- Reset cooldown if remote not available
+		self.State.PurchaseCooldowns[itemId] = nil
 		self:ShowNotification("Shop Error", "Purchase system not available!", "error")
 	end
+end
+
+-- ADDED: Method to clear cooldown after successful purchase
+function UIManager:ClearPurchaseCooldown(itemId)
+	if self.State.PurchaseCooldowns[itemId] then
+		self.State.PurchaseCooldowns[itemId] = nil
+		print("UIManager: Cleared purchase cooldown for " .. itemId)
+	end
+end
+
+-- ADDED: Method to handle successful purchase confirmation
+function UIManager:HandlePurchaseSuccess(itemId, quantity, cost, currency)
+	-- Clear the cooldown since purchase was successful
+	self:ClearPurchaseCooldown(itemId)
+
+	-- Show success notification
+	local currencyName = currency == "farmTokens" and "Farm Tokens" or "Coins"
+
 end
 
 function UIManager:HandleSellClick(itemId, quantity)
@@ -1315,7 +1352,7 @@ function UIManager:HandleOpenShopFromServer()
 
 		if success then
 			print("UIManager: ✅ Shop opened successfully!")
-			self:ShowNotification("🛒 Shop Opened", "Welcome to Pet Palace Market!", "success")
+			self:ShowNotification("🛒 Shop Opened", "Welcome to the Shop!", "success")
 			break
 		else
 			print("UIManager: ❌ Shop open attempt " .. attempts .. " failed")
@@ -2290,14 +2327,23 @@ end
 
 function UIManager:ShowNotification(title, message, notificationType)
 	notificationType = notificationType or "info"
+	if title:find("Purchase") or title:find("Bought") or title:find("Complete") or title:find("Purchased") then
+		print("🔔 NOTIFICATION DEBUG:")
+		print("  Title: " .. title)
+		print("  Message: " .. message)
+		print("  Type: " .. notificationType)
+		print("  Source: " .. debug.traceback())
+		print("========================")
+	end
 
-	print("UIManager: Queuing notification: " .. title)
-
+	-- Continue with normal notification logic...
 	table.insert(self.State.NotificationQueue, {
 		title = title,
 		message = message,
 		type = notificationType,
 		timestamp = tick()
+	
+
 	})
 end
 
