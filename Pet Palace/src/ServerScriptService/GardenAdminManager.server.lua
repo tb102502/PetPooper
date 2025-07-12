@@ -62,14 +62,13 @@ GardenAdminManager.GardenModel = nil
 GardenAdminManager.SoilPart = nil
 GardenAdminManager.FarmPlot = nil
 
--- Configuration
---GardenAdminManager.Config = {
-	--gardenModelName = "Garden",
-	--soilPartName = "Soil",
-	--regionSize = 60,
-	--gridSize = 10,
-	--spotSpacing = 5
---}
+GardenAdminManager.Config = {
+	gardenModelName = "Garden",
+	soilPartName = "Soil",
+	regionSize = 60,
+	gridSize = 10,
+	spotSpacing = 5
+}
 
 -- Initialize garden references
 function GardenAdminManager:Initialize()
