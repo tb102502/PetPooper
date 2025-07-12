@@ -36,9 +36,26 @@ function CropVisualManager:Initialize()
 
 	-- Scan for available models
 	self:UpdateAvailableModels()
-
+	self:InitializeForGarden()
 	print("CropVisualManager: Module initialized successfully")
 	return true
+end
+function CropVisualManager:InitializeForGarden()
+	print("CropVisualManager: Initializing for Garden system...")
+
+	-- Find Garden references
+	self.GardenModel = workspace:FindFirstChild("Garden")
+	self.SoilPart = self.GardenModel and self.GardenModel:FindFirstChild("Soil")
+
+	if self.GardenModel and self.SoilPart then
+		print("CropVisualManager: ✅ Garden references established")
+		print("  Garden: " .. self.GardenModel.Name)
+		print("  Soil: " .. self.SoilPart.Name)
+		return true
+	else
+		warn("CropVisualManager: ❌ Garden references not found")
+		return false
+	end
 end
 
 -- ========== MODEL MANAGEMENT ==========
@@ -770,5 +787,78 @@ function CropVisualManager:GetStatus()
 end
 
 print("CropVisualManager: ✅ Module loaded successfully")
+_G.CheckGardenStatus = function()
+	print("=== GARDEN SYSTEM STATUS CHECK ===")
 
+	-- Check workspace references
+	local garden = workspace:FindFirstChild("Garden")
+	local soil = garden and garden:FindFirstChild("Soil")
+
+	print("Workspace References:")
+	print("  Garden model: " .. (garden and "✅ " .. garden.Name or "❌ Not found"))
+	print("  Soil part: " .. (soil and "✅ " .. soil.Name or "❌ Not found"))
+
+	if soil then
+		print("  Soil size: " .. tostring(soil.Size))
+		print("  Soil position: " .. tostring(soil.Position))
+	end
+
+	-- Check module references
+	print("Module References:")
+	print("  _G.FarmPlot: " .. (_G.FarmPlot and "✅" or "❌"))
+	print("  _G.GameCore: " .. (_G.GameCore and "✅" or "❌"))
+	print("  _G.GardenAdminManager: " .. (_G.GardenAdminManager and "✅" or "❌"))
+
+	-- Check active garden regions
+	if garden then
+		local regionCount = 0
+		for _, child in pairs(garden:GetChildren()) do
+			if child:IsA("Model") and child.Name:find("_GardenRegion") then
+				regionCount = regionCount + 1
+			end
+		end
+		print("Active garden regions: " .. regionCount)
+	end
+
+	print("=================================")
+end
+
+-- Global function to create garden region for a player
+_G.CreateGardenRegion = function(playerName)
+	local player = game.Players:FindFirstChild(playerName)
+	if not player then
+		print("Player not found: " .. playerName)
+		return false
+	end
+
+	if _G.FarmPlot then
+		return _G.FarmPlot:CreateSimpleFarmPlot(player)
+	else
+		print("FarmPlot module not available")
+		return false
+	end
+end
+
+-- Global function to validate all garden regions
+_G.ValidateAllGardens = function()
+	print("Validating all garden regions...")
+
+	if not _G.GardenAdminManager then
+		print("GardenAdminManager not available")
+		return
+	end
+
+	for _, player in pairs(game.Players:GetPlayers()) do
+		print("Checking " .. player.Name .. "...")
+		_G.GardenAdminManager:ValidatePlayerGardenRegion(player)
+	end
+
+	print("Validation complete!")
+end
+
+print("✅ Garden Integration Updates loaded!")
+print("🔧 Global Debug Functions Available:")
+print("  _G.CheckGardenStatus() - Check garden system status")
+print("  _G.CreateGardenRegion('PlayerName') - Create garden region")
+print("  _G.ValidateAllGardens() - Validate all garden regions")
 return CropVisualManager

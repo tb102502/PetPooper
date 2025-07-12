@@ -142,7 +142,8 @@ function GameCore:InitializeLoadedModules()
 
 		if success then
 			print("GameCore: ✅ FarmPlot initialized")
-			_G.FarmPlot = FarmPlot
+			_G.FarmPlot = FarmPlot  -- ← ADD THIS LINE
+			print("GameCore: ✅ FarmPlot set globally")
 		else
 			warn("GameCore: ❌ FarmPlot initialization failed")
 		end
@@ -562,11 +563,11 @@ end
 -- ========== FARM PLOT PURCHASE PROCESSING ==========
 
 function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
-	print("🌾 GameCore: Processing farm plot purchase for " .. player.Name)
+	print("🌾 GameCore: Processing garden plot purchase for " .. player.Name)
 
-	-- Handle farm plot starter (first-time farm creation)
+	-- Handle farm plot starter (creates garden region instead of separate farm)
 	if item.id == "farm_plot_starter" then
-		print("🌾 Processing farm plot starter")
+		print("🌱 Processing garden plot starter")
 
 		-- Initialize farming data
 		if not playerData.farming then
@@ -581,16 +582,21 @@ function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
 			playerData.farming.plots = (playerData.farming.plots or 0) + quantity
 		end
 
-		-- Create the physical farm plot using modular system
-		local success = self:CreateSimpleFarmPlot(player)
+		-- Create garden region using FarmPlot module
+		local success = false
+		if _G.FarmPlot then
+			success = _G.FarmPlot:CreateSimpleFarmPlot(player)
+		end
+
 		if not success then
+			-- Revert farming data if garden creation failed
 			if playerData.farming.plots then
 				playerData.farming.plots = playerData.farming.plots - quantity
 			end
 			return false
 		end
 
-		print("🌾 Created simple farm plot for " .. player.Name)
+		print("🌱 Created garden region for " .. player.Name)
 		return true
 	end
 
@@ -631,7 +637,33 @@ function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
 end
 
 -- ========== PLAYER MANAGEMENT ==========
+function GameCore:EnsurePlayerHasGarden(player)
+	if not _G.FarmPlot then
+		warn("GameCore: FarmPlot module not available for garden check")
+		return false
+	end
 
+	-- Check if garden exists in workspace
+	local garden = workspace:FindFirstChild("Garden")
+	if not garden then
+		warn("GameCore: Garden model not found in workspace")
+		return false
+	end
+
+	-- Check if player should have garden access
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return false end
+
+	local hasFarmStarter = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+	local hasFarmingData = playerData.farming and playerData.farming.plots and playerData.farming.plots > 0
+
+	if not (hasFarmStarter or hasFarmingData) then
+		return false
+	end
+
+	-- Use FarmPlot module to ensure garden region exists
+	return _G.FarmPlot:EnsurePlayerHasFarm(player)
+end
 function GameCore:SetupPlayerHandlers()
 	Players.PlayerAdded:Connect(function(player)
 		self:LoadPlayerData(player)

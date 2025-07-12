@@ -180,6 +180,24 @@ local function InitializeEnhancedSystemsInOrder(UIManager, GameClient)
 	ClientState.InventorySystemReady = true
 	return true
 end
+local function ValidateClientGardenReferences()
+	print("🌱 Validating client-side garden references...")
+
+	local garden = workspace:FindFirstChild("Garden")
+	local soil = garden and garden:FindFirstChild("Soil")
+
+	print("Client Garden Status:")
+	print("  Garden found: " .. (garden and "✅" or "❌"))
+	print("  Soil found: " .. (soil and "✅" or "❌"))
+
+	return garden ~= nil and soil ~= nil
+end
+
+-- Add this to your client initialization
+spawn(function()
+	wait(3) -- Wait for workspace to fully load
+	ValidateClientGardenReferences()
+end)
 
 -- ========== STEP 4: SETUP ENHANCED MILKING SYSTEM ==========
 

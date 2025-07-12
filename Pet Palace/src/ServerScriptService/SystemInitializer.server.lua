@@ -326,7 +326,49 @@ local function LoadAndInitializeShopSystem(GameCore)
 
 	return false
 end
+local function ValidateGardenIntegration()
+	print("🌱 Validating Garden Integration...")
 
+	-- Check for Garden model
+	local garden = workspace:FindFirstChild("Garden")
+	if not garden then
+		warn("⚠️ Garden model not found in workspace")
+		warn("   Please ensure Garden model exists in workspace")
+		return false
+	end
+
+	-- Check for Soil part
+	local soil = garden:FindFirstChild("Soil")
+	if not soil then
+		warn("⚠️ Soil part not found in Garden model")
+		warn("   Please ensure Garden contains a part named 'Soil'")
+		return false
+	end
+
+	if not soil:IsA("BasePart") then
+		warn("⚠️ Soil is not a BasePart")
+		warn("   Please ensure Soil is a Part, UnionOperation, or other BasePart")
+		return false
+	end
+
+	-- Check Garden PrimaryPart
+	if garden.PrimaryPart ~= soil then
+		warn("⚠️ Garden PrimaryPart not set to Soil")
+		warn("   Recommendation: Set Garden.PrimaryPart = Soil in Studio")
+	end
+
+	print("✅ Garden integration validation passed")
+	print("  Garden: " .. garden.Name)
+	print("  Soil: " .. soil.Name .. " (Size: " .. tostring(soil.Size) .. ")")
+
+	return true
+end
+
+-- Add this after your existing GameCore initialization
+local gardenValid = ValidateGardenIntegration()
+if not gardenValid then
+	warn("❌ Garden integration issues detected - see warnings above")
+end
 -- ========== STEP 5: VERIFY MODULES AND SETUP ==========
 
 local function VerifyEnhancedModules()

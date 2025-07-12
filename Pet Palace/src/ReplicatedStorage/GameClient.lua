@@ -218,7 +218,12 @@ function GameClient:SetupEventHandlers()
 				self:RefreshInventoryDisplays()
 			end)
 		end,
-
+		PlantSeed = function(plotModel)
+			pcall(function()
+				print("GameClient: Received garden plot click, showing seed selection for", plotModel.Name)
+				self:ShowSeedSelectionForPlot(plotModel)
+			end)
+		end,
 		-- ENHANCED: Inventory-specific updates
 		InventoryUpdated = function(inventoryType, newInventory)
 			pcall(function()
@@ -235,14 +240,6 @@ function GameClient:SetupEventHandlers()
 		ItemPurchased = function(itemId, quantity, cost, currency)
 			pcall(function()
 				self:HandleItemPurchased(itemId, quantity, cost, currency)
-			end)
-		end,
-
-		-- Farming System
-		PlantSeed = function(plotModel)
-			pcall(function()
-				print("GameClient: Received plot click, showing seed selection for", plotModel.Name)
-				self:ShowSeedSelectionForPlot(plotModel)
 			end)
 		end,
 
@@ -534,7 +531,230 @@ function GameClient:SetupInventoryRefresh()
 end
 
 -- ========== ENHANCED PLANTING SYSTEM ==========
+function GameClient:ShowSeedSelectionForPlot(plotModel)
+	local playerData = self:GetPlayerData()
+	if not playerData or not playerData.farming or not playerData.farming.inventory then
+		if self.UIManager then
+			self.UIManager:ShowNotification("No Seeds", "You need to buy seeds from the shop first!", "warning")
+		end
+		return
+	end
 
+	-- Get available seeds from inventory
+	local availableSeeds = {}
+	for itemId, quantity in pairs(playerData.farming.inventory) do
+		if itemId:find("_seeds") and quantity > 0 then
+			table.insert(availableSeeds, {id = itemId, quantity = quantity})
+		end
+	end
+
+	if #availableSeeds == 0 then
+		if self.UIManager then
+			self.UIManager:ShowNotification("No Seeds", "You don't have any seeds to plant! Buy some from the shop.", "warning")
+		end
+		return
+	end
+
+	-- Create seed selection UI
+	self:CreateGardenSeedSelectionUI(plotModel, availableSeeds)
+end
+
+function GameClient:CreateGardenSeedSelectionUI(plotModel, availableSeeds)
+	local Players = game:GetService("Players")
+	local LocalPlayer = Players.LocalPlayer
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+	-- Remove existing UI
+	local existingUI = playerGui:FindFirstChild("GardenSeedSelectionUI")
+	if existingUI then existingUI:Destroy() end
+
+	-- Create new UI
+	local seedUI = Instance.new("ScreenGui")
+	seedUI.Name = "GardenSeedSelectionUI"
+	seedUI.ResetOnSpawn = false
+	seedUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	seedUI.Parent = playerGui
+
+	-- Main frame
+	local mainFrame = Instance.new("Frame")
+	mainFrame.Size = UDim2.new(0, 350, 0, math.min(250, 100 + (#availableSeeds * 40)))
+	mainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+	mainFrame.BorderSizePixel = 0
+	mainFrame.Parent = seedUI
+
+	-- Corner radius
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.02, 0)
+	corner.Parent = mainFrame
+
+	-- Title
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, 0, 0, 45)
+	title.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
+	title.BorderSizePixel = 0
+	title.Text = "🌱 Select Seed for Garden"
+	title.TextColor3 = Color3.new(1, 1, 1)
+	title.TextScaled = true
+	title.Font = Enum.Font.GothamBold
+	title.Parent = mainFrame
+
+	-- Title corner
+	local titleCorner = Instance.new("UICorner")
+	titleCorner.CornerRadius = UDim.new(0.02, 0)
+	titleCorner.Parent = title
+
+	-- Scrolling frame for seeds
+	local scrollFrame = Instance.new("ScrollingFrame")
+	scrollFrame.Size = UDim2.new(1, -20, 1, -90)
+	scrollFrame.Position = UDim2.new(0, 10, 0, 50)
+	scrollFrame.BackgroundTransparency = 1
+	scrollFrame.BorderSizePixel = 0
+	scrollFrame.ScrollBarThickness = 8
+	scrollFrame.ScrollBarImageColor3 = Color3.fromRGB(100, 150, 100)
+	scrollFrame.Parent = mainFrame
+
+	-- List layout for seeds
+	local listLayout = Instance.new("UIListLayout")
+	listLayout.Padding = UDim.new(0, 5)
+	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	listLayout.Parent = scrollFrame
+
+	-- Create seed buttons
+	for i, seedData in ipairs(availableSeeds) do
+		local seedButton = Instance.new("TextButton")
+		seedButton.Size = UDim2.new(1, -10, 0, 35)
+		seedButton.BackgroundColor3 = Color3.fromRGB(80, 120, 80)
+		seedButton.BorderSizePixel = 0
+		seedButton.LayoutOrder = i
+		seedButton.Parent = scrollFrame
+
+		-- Seed button corner
+		local buttonCorner = Instance.new("UICorner")
+		buttonCorner.CornerRadius = UDim.new(0.1, 0)
+		buttonCorner.Parent = seedButton
+
+		-- Seed button text
+		local buttonText = Instance.new("TextLabel")
+		buttonText.Size = UDim2.new(1, -10, 1, 0)
+		buttonText.Position = UDim2.new(0, 10, 0, 0)
+		buttonText.BackgroundTransparency = 1
+		buttonText.Text = self:GetSeedDisplayName(seedData.id) .. " (x" .. seedData.quantity .. ")"
+		buttonText.TextColor3 = Color3.new(1, 1, 1)
+		buttonText.TextScaled = true
+		buttonText.Font = Enum.Font.Gotham
+		buttonText.TextXAlignment = Enum.TextXAlignment.Left
+		buttonText.Parent = seedButton
+
+		-- Hover effect
+		seedButton.MouseEnter:Connect(function()
+			seedButton.BackgroundColor3 = Color3.fromRGB(100, 140, 100)
+		end)
+
+		seedButton.MouseLeave:Connect(function()
+			seedButton.BackgroundColor3 = Color3.fromRGB(80, 120, 80)
+		end)
+
+		-- Click handler
+		seedButton.MouseButton1Click:Connect(function()
+			print("GameClient: Player selected seed for garden:", seedData.id)
+			self:PlantSelectedSeedInGarden(plotModel, seedData.id)
+			seedUI:Destroy()
+		end)
+	end
+
+	-- Update scroll frame size
+	scrollFrame.CanvasSize = UDim2.new(0, 0, 0, #availableSeeds * 40)
+
+	-- Cancel button
+	local cancelButton = Instance.new("TextButton")
+	cancelButton.Size = UDim2.new(0, 100, 0, 30)
+	cancelButton.Position = UDim2.new(0.5, -50, 1, -40)
+	cancelButton.BackgroundColor3 = Color3.fromRGB(200, 80, 80)
+	cancelButton.BorderSizePixel = 0
+	cancelButton.Text = "Cancel"
+	cancelButton.TextColor3 = Color3.new(1, 1, 1)
+	cancelButton.TextScaled = true
+	cancelButton.Font = Enum.Font.Gotham
+	cancelButton.Parent = mainFrame
+
+	-- Cancel button corner
+	local cancelCorner = Instance.new("UICorner")
+	cancelCorner.CornerRadius = UDim.new(0.1, 0)
+	cancelCorner.Parent = cancelButton
+
+	-- Cancel click handler
+	cancelButton.MouseButton1Click:Connect(function()
+		seedUI:Destroy()
+	end)
+
+	-- Auto-close after 30 seconds
+	spawn(function()
+		wait(30)
+		if seedUI and seedUI.Parent then
+			seedUI:Destroy()
+		end
+	end)
+end
+
+function GameClient:GetSeedDisplayName(seedId)
+	-- Convert seed ID to display name
+	local ItemConfig = require(game.ReplicatedStorage:WaitForChild("ItemConfig"))
+	local seedInfo = ItemConfig.ShopItems and ItemConfig.ShopItems[seedId]
+
+	if seedInfo and seedInfo.name then
+		return seedInfo.name
+	else
+		-- Fallback to formatted ID
+		return seedId:gsub("_seeds", ""):gsub("_", " "):gsub("^%l", string.upper) .. " Seeds"
+	end
+end
+
+function GameClient:PlantSelectedSeedInGarden(plotModel, seedId)
+	print("GameClient: Planting seed in garden:", seedId, "on plot", plotModel.Name)
+
+	-- Send to server
+	if self.RemoteEvents.PlantSeed then
+		self.RemoteEvents.PlantSeed:FireServer(plotModel, seedId)
+		if self.UIManager then
+			self.UIManager:ShowNotification("🌱 Planting...", "Planting " .. self:GetSeedDisplayName(seedId) .. " in your garden!", "info")
+		end
+	else
+		warn("GameClient: PlantSeed remote event not available")
+		if self.UIManager then
+			self.UIManager:ShowNotification("Error", "Planting system not available!", "error")
+		end
+	end
+end
+
+
+print("✅ Garden Seed Selection UI loaded!")
+print("🌱 How to plant:")
+print("  1. Walk to your garden region")
+print("  2. Click on green garden spots")
+print("  3. Select seeds from the popup")
+print("  4. Watch your crops grow!")
+
+-- Global debug function to test seed UI
+_G.TestGardenSeedUI = function()
+	if _G.GameClient then
+		-- Create a fake plot for testing
+		local testPlot = Instance.new("Model")
+		testPlot.Name = "TestGardenSpot"
+
+		local testSeeds = {
+			{id = "carrot_seeds", quantity = 5},
+			{id = "corn_seeds", quantity = 3},
+			{id = "potato_seeds", quantity = 2}
+		}
+
+		_G.GameClient:CreateGardenSeedSelectionUI(testPlot, testSeeds)
+		print("✅ Test seed UI created!")
+	else
+		print("❌ GameClient not available")
+	end
+end
 function GameClient:StartPlantingMode(seedId)
 	print("GameClient: Starting ENHANCED planting mode with seed:", seedId)
 
@@ -687,32 +907,6 @@ function GameClient:SetupFarmingSystemLogic()
 	}
 
 	print("GameClient: Enhanced farming system logic setup complete")
-end
-
-function GameClient:ShowSeedSelectionForPlot(plotModel)
-	local playerData = self:GetPlayerData()
-	if not playerData or not playerData.farming or not playerData.farming.inventory then
-		if self.UIManager then
-			self.UIManager:ShowNotification("No Seeds", "You need to buy seeds from the shop first!", "warning")
-		end
-		return
-	end
-
-	local availableSeeds = {}
-	for itemId, quantity in pairs(playerData.farming.inventory) do
-		if itemId:find("_seeds") and quantity > 0 then
-			table.insert(availableSeeds, {id = itemId, quantity = quantity})
-		end
-	end
-
-	if #availableSeeds == 0 then
-		if self.UIManager then
-			self.UIManager:ShowNotification("No Seeds", "You don't have any seeds to plant! Buy some from the shop.", "warning")
-		end
-		return
-	end
-
-	self:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
 end
 
 function GameClient:CreateSimpleSeedSelectionUI(plotModel, availableSeeds)
