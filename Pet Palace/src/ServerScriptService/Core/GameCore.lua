@@ -669,16 +669,48 @@ function GameCore:SetupPlayerHandlers()
 		self:LoadPlayerData(player)
 		self:CreatePlayerLeaderstats(player)
 
-		-- Ensure player has farm if they should
+		-- AUTO-CREATE GARDEN FOR ALL PLAYERS
 		spawn(function()
-			wait(2) -- Wait for data to settle
-			self:EnsurePlayerHasFarm(player)
+			wait(3) -- Wait for data to settle
+
+			-- Give every player a garden automatically
+			local playerData = self:GetPlayerData(player)
+			if playerData then
+				-- Initialize farming data for all players
+				if not playerData.farming then
+					playerData.farming = {
+						plots = 1,
+						inventory = {
+							carrot_seeds = 5,  -- Give starter seeds
+							corn_seeds = 3
+						}
+					}
+				end
+
+				-- Mark as having farm access (without purchase)
+				playerData.purchaseHistory = playerData.purchaseHistory or {}
+				playerData.purchaseHistory.farm_plot_starter = true
+
+				-- Save the data
+				self:SavePlayerData(player)
+
+				-- Create the garden region
+				self:EnsurePlayerHasFarm(player)
+
+				print("🌱 Auto-created garden for " .. player.Name)
+
+				-- Welcome notification
+				if self.SendNotification then
+					self:SendNotification(player, "🌱 Welcome to Your Garden!", 
+						"Your personal garden is ready! Press F to see your seeds, then click garden spots to plant.", "success")
+				end
+			end
 		end)
 
 		-- Give starter cow after delay if cow system available
 		if CowCreationModule then
 			spawn(function()
-				wait(5)
+				wait(8)  -- Increased delay to avoid conflicts
 				pcall(function()
 					CowCreationModule:GiveStarterCow(player)
 				end)

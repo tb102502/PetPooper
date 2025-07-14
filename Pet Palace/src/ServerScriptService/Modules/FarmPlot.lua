@@ -595,20 +595,27 @@ function FarmPlot:EnsurePlayerHasFarm(player)
 	local playerData = GameCore:GetPlayerData(player)
 	if not playerData then return false end
 
-	-- Check if player has purchased farm access
-	local hasFarmStarter = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
-	local hasFarmingData = playerData.farming and playerData.farming.plots and playerData.farming.plots > 0
-
-	if not (hasFarmStarter or hasFarmingData) then
-		return false
+	-- AUTO-GRANT FARM ACCESS TO ALL PLAYERS (no purchase required)
+	-- Initialize farming data if missing
+	if not playerData.farming then
+		playerData.farming = {
+			plots = 1,
+			inventory = {
+				carrot_seeds = 5,
+				corn_seeds = 3
+			}
+		}
+		GameCore:SavePlayerData(player)
 	end
 
+	-- Check if garden region already exists
 	local region, regionType = self:GetPlayerFarm(player)
 	if not region then
-		print("FarmPlot: Creating missing garden region for " .. player.Name)
+		print("FarmPlot: Creating automatic garden region for " .. player.Name)
 		return self:CreateSimpleFarmPlot(player)
 	end
 
+	print("FarmPlot: Garden already exists for " .. player.Name)
 	return true
 end
 

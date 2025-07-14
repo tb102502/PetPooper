@@ -39,28 +39,30 @@ function GardenFarmPlotManager:ValidatePlayerGardenRegion(player)
 		return 
 	end
 
-	-- Check if player should have a garden region
-	local shouldHaveRegion = (playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter) or
-		(playerData.farming and playerData.farming.plots and playerData.farming.plots > 0)
-
-	if not shouldHaveRegion then
-		print("GardenFarmPlotManager: Player " .. player.Name .. " doesn't need a garden region")
-		return
-	end
+	-- AUTO-GRANT GARDEN TO ALL PLAYERS (remove purchase check)
+	print("GardenFarmPlotManager: All players automatically get gardens")
 
 	-- Initialize farming data if needed
 	if not playerData.farming then
 		playerData.farming = {
 			plots = 1,
-			inventory = {}
+			inventory = {
+				carrot_seeds = 5,
+				corn_seeds = 3
+			}
 		}
+
+		-- Mark as having farm access
+		playerData.purchaseHistory = playerData.purchaseHistory or {}
+		playerData.purchaseHistory.farm_plot_starter = true
+
 		GameCore:SavePlayerData(player)
 	end
 
 	print("GardenFarmPlotManager: Player " .. player.Name .. " should have a garden region")
 
 	-- Check if garden region exists
-	local garden = Workspace:FindFirstChild("Garden")
+	local garden = workspace:FindFirstChild("Garden")
 	if not garden then
 		warn("GardenFarmPlotManager: Garden model not found in workspace")
 		return
@@ -71,7 +73,7 @@ function GardenFarmPlotManager:ValidatePlayerGardenRegion(player)
 
 	if not existingRegion then
 		-- Create missing garden region
-		print("GardenFarmPlotManager: Creating missing garden region for " .. player.Name)
+		print("GardenFarmPlotManager: Creating automatic garden region for " .. player.Name)
 		if _G.FarmPlot then
 			local success = _G.FarmPlot:CreateSimpleFarmPlot(player)
 			if success then
@@ -85,6 +87,7 @@ function GardenFarmPlotManager:ValidatePlayerGardenRegion(player)
 		self:ValidateGardenRegionStructure(player, existingRegion)
 	end
 end
+
 
 function GardenFarmPlotManager:ValidateGardenRegionStructure(player, region)
 	print("GardenFarmPlotManager: Validating garden region structure for " .. player.Name)

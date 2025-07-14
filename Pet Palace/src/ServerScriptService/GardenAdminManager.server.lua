@@ -564,7 +564,64 @@ function GardenAdminManager:SetupAdminCommands()
 
 				elseif command == "/gardenstats" then
 					self:PrintGardenStatistics()
+				elseif command == "/giveseeds" then
+					local targetName = args[2]
+					local seedType = args[3] or "carrot_seeds"
+					local amount = tonumber(args[4]) or 10
 
+					if targetName then
+						local targetPlayer = Players:FindFirstChild(targetName)
+						if targetPlayer and _G.GameCore then
+							_G.GameCore:AddItemToInventory(targetPlayer, "farming", seedType, amount)
+							print("Admin: Gave " .. amount .. " " .. seedType .. " to " .. targetPlayer.Name)
+						end
+					end
+				elseif command == "/giveallgardens" then
+					print("Admin: Giving gardens to all current players...")
+					for _, p in pairs(Players:GetPlayers()) do
+						local playerData = GameCore:GetPlayerData(p)
+						if playerData then
+							-- Initialize farming data
+							playerData.farming = playerData.farming or {
+								plots = 1,
+								inventory = {
+									carrot_seeds = 5,
+									corn_seeds = 3
+								}
+							}
+
+							-- Mark as having farm access
+							playerData.purchaseHistory = playerData.purchaseHistory or {}
+							playerData.purchaseHistory.farm_plot_starter = true
+
+							GameCore:SavePlayerData(p)
+
+							-- Create garden
+							if _G.FarmPlot then
+								_G.FarmPlot:CreateSimpleFarmPlot(p)
+							end
+
+							print("  ✅ " .. p.Name .. " - Garden created")
+						end
+					end
+					print("Admin: All current players now have gardens!")
+					
+				elseif command == "/testgarden" then
+					local targetName = args[2] or player.Name
+					local targetPlayer = Players:FindFirstChild(targetName)
+
+					if targetPlayer then
+						-- Give test seeds
+						_G.GameCore:AddItemToInventory(targetPlayer, "farming", "carrot_seeds", 5)
+						_G.GameCore:AddItemToInventory(targetPlayer, "farming", "corn_seeds", 3)
+
+						-- Ensure garden exists
+						if _G.FarmPlot then
+							_G.FarmPlot:CreateSimpleFarmPlot(targetPlayer)
+						end
+
+						print("Admin: Set up test garden for " .. targetPlayer.Name)
+					end
 				elseif command == "/creategarden" then
 					local targetName = args[2] or player.Name
 					local targetPlayer = Players:FindFirstChild(targetName)
