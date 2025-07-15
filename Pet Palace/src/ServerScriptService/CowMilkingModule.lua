@@ -19,18 +19,20 @@ local TweenService = game:GetService("TweenService")
 
 -- Configuration
 CowMilkingModule.Config = {
-	clicksPerMilk = 10, -- 10 clicks = 1 milk
+	clicksPerMilk = 10, -- Keep this the same (10 clicks = 1 milk)
 	proximityDistance = 15,
 	sessionTimeout = 30,
 	maxMilkPerSession = 20,
 	proximityCheckInterval = 3,
 	movementThreshold = 8,
-	-- ENHANCED: Anti-spam protection
-	minimumClickInterval = 0.05, -- 50ms minimum between clicks
-	maximumClicksPerSecond = 20, -- Maximum 20 clicks per second
-	suspiciousClickThreshold = 30, -- Flag if more than 30 clicks/sec
-	clickIdTimeoutSeconds = 5 -- How long to remember click IDs
+
+	-- MODIFIED: Much faster clicking allowed
+	minimumClickInterval = 0.01,        -- 10ms between clicks = 100 clicks/sec max
+	maximumClicksPerSecond = 100,       -- Allow up to 100 clicks per second
+	suspiciousClickThreshold = 150,     -- Flag suspicious at 150 clicks/sec
+	clickIdTimeoutSeconds = 0
 }
+
 
 -- Module State
 CowMilkingModule.ActiveSessions = {} -- [userId] = sessionData with progress
@@ -933,51 +935,64 @@ function CowMilkingModule:HandleStartMilkingSession(player, cowId)
 	self:StartMilkingSession(player, cowId, seatPart)
 end
 
+--[[
+    FIXED: CowMilkingModule.lua - GiveMilkToPlayer Function
+    Replace the existing GiveMilkToPlayer function in CowMilkingModule.lua
+]]
+
 function CowMilkingModule:GiveMilkToPlayer(player, cowId, milkAmount)
-	if not GameCore then return end
-
-	local success, playerData = pcall(function()
-		return GameCore:GetPlayerData(player)
-	end)
-
-	if not success or not playerData then return end
-
-	-- Add milk to inventory
-	if not playerData.farming then
-		playerData.farming = {inventory = {}}
-	end
-	if not playerData.farming.inventory then
-		playerData.farming.inventory = {}
+	if not GameCore then 
+		warn("GameCore not available for milk collection")
+		return false
 	end
 
-	playerData.farming.inventory.milk = (playerData.farming.inventory.milk or 0) + milkAmount
+	print("🥛 FIXED: Giving " .. milkAmount .. " milk to " .. player.Name .. " using GameCore system")
 
-	-- Update cow data
-	if playerData.livestock and playerData.livestock.cows and playerData.livestock.cows[cowId] then
-		local cowData = playerData.livestock.cows[cowId]
-		cowData.lastMilkCollection = os.time()
-		cowData.totalMilkProduced = (cowData.totalMilkProduced or 0) + milkAmount
+	-- Use GameCore's proper milk collection system instead of direct manipulation
+	local success = false
+
+	-- Try to use GameCore's CollectMilk function if available
+	if GameCore.CollectMilk then
+		success = GameCore:CollectMilk(player, milkAmount)
+	else
+		-- Fallback: Use GameCore's AddItemToInventory with proper milk type
+		success = GameCore:AddItemToInventory(player, "milk", "milk", milkAmount)
+
+		if success then
+			-- Update stats manually since we're using fallback
+			local playerData = GameCore:GetPlayerData(player)
+			if playerData then
+				playerData.stats = playerData.stats or {}
+				playerData.stats.milkCollected = (playerData.stats.milkCollected or 0) + milkAmount
+
+				-- Update cow data
+				if playerData.livestock and playerData.livestock.cows then
+					for i, cow in ipairs(playerData.livestock.cows) do
+						if cow.id == cowId then
+							cow.lastMilkCollection = os.time()
+							cow.totalMilkProduced = (cow.totalMilkProduced or 0) + milkAmount
+							break
+						end
+					end
+				end
+
+				-- Force update player data and UI
+				GameCore:UpdatePlayerData(player, playerData)
+
+				-- Send notification
+				GameCore:SendNotification(player, "🥛 Milk Collected", 
+					"Collected " .. milkAmount .. " milk from your cow!", "success")
+			end
+		end
 	end
 
-	-- Update stats
-	if not playerData.stats then
-		playerData.stats = {}
+	if success then
+		print("✅ FIXED: Successfully gave " .. milkAmount .. " milk to " .. player.Name)
+		return true
+	else
+		warn("❌ FIXED: Failed to give milk to " .. player.Name)
+		return false
 	end
-	playerData.stats.milkCollected = (playerData.stats.milkCollected or 0) + milkAmount
-
-	-- Save data
-	pcall(function()
-		GameCore:SavePlayerData(player)
-	end)
-
-	-- Trigger UI update
-	if GameCore.RemoteEvents and GameCore.RemoteEvents.PlayerDataUpdated then
-		pcall(function()
-			GameCore.RemoteEvents.PlayerDataUpdated:FireClient(player, playerData)
-		end)
-	end
-
-	print("🎁 FIXED: Gave " .. milkAmount .. " milk to " .. player.Name)
 end
 
 function CowMilkingModule:HandleStopMilkingSession(player)

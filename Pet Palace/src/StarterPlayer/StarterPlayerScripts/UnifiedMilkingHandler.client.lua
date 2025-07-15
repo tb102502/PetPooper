@@ -29,11 +29,11 @@ local MilkingState = {
 	totalClicks = 0,
 	milkCollected = 0,
 
-	-- ENHANCED: Timing and duplicate prevention
+	-- MODIFIED: Much faster timing
 	lastClickTime = 0,
-	clickCooldown = 0.1, -- Increased cooldown to prevent spam
+	clickCooldown = 0.15, -- CHANGED: 30ms cooldown (was 100ms)
 	lastServerClickTime = 0,
-	serverClickCooldown = 0.15, -- Server-side cooldown
+	serverClickCooldown = 0.02, -- CHANGED: 50ms server cooldown (was 150ms)
 
 	-- System references
 	remoteEvents = {},
@@ -44,7 +44,7 @@ local MilkingState = {
 	enableSounds = true,
 	debugMode = false,
 
-	-- NEW: Click tracking for debugging
+	-- Click tracking for debugging
 	localClickCount = 0,
 	serverClickCount = 0
 }
