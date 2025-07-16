@@ -644,7 +644,25 @@ ItemConfig.ShopItems = {
 			}
 		}
 	},
-
+	scythe_tool = {
+		id = "scythe_tool",
+		name = "🔪 Scythe",
+		description = "🌾 WHEAT CUTTING TOOL 🌾\nPowerful tool for harvesting wheat efficiently!\n\n⚡ Features:\n• Cut wheat in large areas\n• Durable construction\n• Fast harvesting\n• Professional grade\n\n🔪 Essential for wheat farming!",
+		price = 500,
+		currency = "coins",
+		category = "farm",
+		icon = "🔪",
+		maxQuantity = 1,
+		type = "tool",
+		purchaseOrder = 15, -- Advanced farming tool
+		toolData = {
+			durability = 100,
+			toolType = "scythe",
+			cuttingRadius = 8,
+			efficiency = 1.5
+		}
+	},
+	
 	milk_efficiency_1 = {
 		id = "milk_efficiency_1",
 		name = "🥛 Enhanced Milking I",
@@ -1302,7 +1320,36 @@ ItemConfig.MutationAchievements = {
 		icon = "🍀"
 	}
 }
-
+-- Get wheat-specific data
+function ItemConfig.GetWheatData(wheatId)
+	return ItemConfig.Crops[wheatId]
+end
+-- Check if item is a scythe
+function ItemConfig.IsScythe(itemId)
+	local item = ItemConfig.ShopItems[itemId]
+	return item and item.type == "tool" and item.toolData and item.toolData.toolType == "scythe"
+end
+-- Get tool durability
+function ItemConfig.GetToolDurability(toolId)
+	local tool = ItemConfig.ShopItems[toolId]
+	if tool and tool.toolData then
+		return tool.toolData.durability or 100
+	end
+	return 100
+end
+-- Get tool cutting radius
+function ItemConfig.GetCuttingRadius(toolId)
+	local tool = ItemConfig.ShopItems[toolId]
+	if tool and tool.toolData then
+		return tool.toolData.cuttingRadius or 5
+	end
+	return 5
+end
+print("ItemConfig: ✅ Wheat and Scythe items added!")
+print("🌾 New Items:")
+print("  ✅ Wheat crop (sellable)")
+print("  ✅ Wheat seeds (plantable)")
+print("  ✅ Scythe tool (purchasable)")
 function ItemConfig.CheckMutationAchievement(player, mutationType, totalMutations, isFirstTry)
 	-- This function would be called by GameCore when mutations are created
 	local achievements = {}
