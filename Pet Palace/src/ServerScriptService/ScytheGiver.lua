@@ -1,5 +1,5 @@
 --[[
-    ScytheGiver.lua - Server-side Scythe Tool Giver
+    ScytheGiver.lua - Server-side Scythe Tool Giver (FIXED)
     Place in: ServerScriptService/ScytheGiver.lua
     
     FEATURES:
@@ -7,6 +7,8 @@
     ✅ One scythe per player
     ✅ Touch detection on ScytheGiver model
     ✅ Integration with existing framework
+    ✅ FIXED: Proper scythe appearance with blade and handle
+    ✅ FIXED: Correct positioning in player's hands
 ]]
 
 local ScytheGiver = {}
@@ -139,7 +141,7 @@ end
 -- ========== SCYTHE TOOL CREATION ==========
 
 function ScytheGiver:CreateScytheTool()
-	print("ScytheGiver: Creating scythe tool...")
+	print("ScytheGiver: Creating realistic scythe tool...")
 
 	-- Check if scythe tool already exists in ServerStorage
 	local serverStorage = ServerStorage
@@ -158,25 +160,102 @@ function ScytheGiver:CreateScytheTool()
 	scytheTool.CanBeDropped = false
 	scytheTool.Parent = serverStorage
 
-	-- Create a simple scythe handle
+	-- Create the main handle (wooden shaft)
 	local handle = Instance.new("Part")
 	handle.Name = "Handle"
-	handle.Size = Vector3.new(0.2, 3.5, 0.2)
+	handle.Size = Vector3.new(0.15, 4, 0.15)  -- Longer, thinner handle
 	handle.Material = Enum.Material.Wood
 	handle.BrickColor = BrickColor.new("Reddish brown")
-	handle.Shape = Enum.PartType.Cylinder
+	handle.Shape = Enum.PartType.Block  -- Changed from Cylinder to Block
 	handle.Parent = scytheTool
 
-	-- Create tool icon/display
+	-- Make handle cylindrical with mesh
+	local handleMesh = Instance.new("CylinderMesh")
+	handleMesh.Parent = handle
+
+	-- IMPORTANT: Set the tool's grip properties for proper positioning
+	scytheTool.Grip = CFrame.new(0, -1.5, 0) * CFrame.Angles(math.rad(0), 0, math.rad(20))
+
+	-- Create the scythe blade (curved metal part)
+	local blade = Instance.new("Part")
+	blade.Name = "Blade"
+	blade.Size = Vector3.new(0.1, 2, 0.3)  -- Thin, long blade
+	blade.Material = Enum.Material.Metal
+	blade.BrickColor = BrickColor.new("Light stone grey")
+	blade.Shape = Enum.PartType.Block
+	blade.Parent = scytheTool
+
+	-- Position blade at the top of the handle, angled
+	local bladeWeld = Instance.new("WeldConstraint")
+	bladeWeld.Part0 = handle
+	bladeWeld.Part1 = blade
+	bladeWeld.Parent = handle
+
+	-- Position blade at top of handle, angled like a real scythe
+	blade.CFrame = handle.CFrame * CFrame.new(0.3, 1.8, 0) * CFrame.Angles(math.rad(0), math.rad(45), math.rad(30))
+
+	-- Create a second blade part for the curved shape
+	local bladeCurve = Instance.new("Part")
+	bladeCurve.Name = "BladeCurve"
+	bladeCurve.Size = Vector3.new(0.1, 1.5, 0.25)
+	bladeCurve.Material = Enum.Material.Metal
+	bladeCurve.BrickColor = BrickColor.new("Light stone grey")
+	bladeCurve.Shape = Enum.PartType.Block
+	bladeCurve.Parent = scytheTool
+
+	-- Position curved part of blade
+	local curveWeld = Instance.new("WeldConstraint")
+	curveWeld.Part0 = blade
+	curveWeld.Part1 = bladeCurve
+	curveWeld.Parent = blade
+
+	bladeCurve.CFrame = blade.CFrame * CFrame.new(0.1, -0.5, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(-20))
+
+	-- Add blade edge effect
+	local bladeEdge = Instance.new("Part")
+	bladeEdge.Name = "BladeEdge"
+	bladeEdge.Size = Vector3.new(0.05, 2, 0.05)
+	bladeEdge.Material = Enum.Material.Neon
+	bladeEdge.BrickColor = BrickColor.new("Institutional white")
+	bladeEdge.Shape = Enum.PartType.Block
+	bladeEdge.Parent = scytheTool
+
+	local edgeWeld = Instance.new("WeldConstraint")
+	edgeWeld.Part0 = blade
+	edgeWeld.Part1 = bladeEdge
+	edgeWeld.Parent = blade
+
+	bladeEdge.CFrame = blade.CFrame * CFrame.new(0, 0, 0.15)
+
+	-- Add handle grip wrap
+	local gripWrap = Instance.new("Part")
+	gripWrap.Name = "GripWrap"
+	gripWrap.Size = Vector3.new(0.2, 0.8, 0.2)
+	gripWrap.Material = Enum.Material.Fabric
+	gripWrap.BrickColor = BrickColor.new("Dark stone grey")
+	gripWrap.Shape = Enum.PartType.Block
+	gripWrap.Parent = scytheTool
+
+	local gripMesh = Instance.new("CylinderMesh")
+	gripMesh.Parent = gripWrap
+
+	local gripWeld = Instance.new("WeldConstraint")
+	gripWeld.Part0 = handle
+	gripWeld.Part1 = gripWrap
+	gripWeld.Parent = handle
+
+	gripWrap.CFrame = handle.CFrame * CFrame.new(0, -1.5, 0)
+
+	-- Create tool icon/display billboard
 	local toolGui = Instance.new("BillboardGui")
 	toolGui.Size = UDim2.new(0, 50, 0, 50)
-	toolGui.StudsOffset = Vector3.new(0, 2, 0)
+	toolGui.StudsOffset = Vector3.new(0, 3, 0)
 	toolGui.Parent = handle
 
 	local toolIcon = Instance.new("TextLabel")
 	toolIcon.Size = UDim2.new(1, 0, 1, 0)
 	toolIcon.BackgroundTransparency = 1
-	toolIcon.Text = "🔪"
+	toolIcon.Text = "🌾"  -- Wheat emoji more appropriate for scythe
 	toolIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
 	toolIcon.TextScaled = true
 	toolIcon.Font = Enum.Font.SourceSans
@@ -186,7 +265,7 @@ function ScytheGiver:CreateScytheTool()
 	self:CreateScytheToolScript(scytheTool)
 
 	self.ScytheTool = scytheTool
-	print("ScytheGiver: ✅ Created scythe tool")
+	print("ScytheGiver: ✅ Created realistic scythe tool with proper positioning")
 end
 
 function ScytheGiver:CreateScytheToolScript(tool)
@@ -287,12 +366,22 @@ function ScytheGiver:GiveScytheToPlayer(player)
 	local scytheClone = self.ScytheTool:Clone()
 	scytheClone.Parent = player.Backpack
 
+	-- Auto-equip the scythe so it appears in their hands immediately
+	spawn(function()
+		wait(0.1)  -- Small delay to ensure it's in backpack
+		if scytheClone.Parent == player.Backpack then
+			-- Move to character to equip
+			scytheClone.Parent = player.Character
+			print("ScytheGiver: Auto-equipped scythe for " .. player.Name)
+		end
+	end)
+
 	-- Visual feedback
 	self:CreateGiveEffect(player)
 
 	-- Send notification
 	if self.GameCore and self.GameCore.SendNotification then
-		self.GameCore:SendNotification(player, "🔪 Scythe Acquired", "You received a scythe! Use it to harvest wheat.", "success")
+		self.GameCore:SendNotification(player, "🌾 Scythe Acquired", "You received a scythe! Use it to harvest wheat.", "success")
 	end
 
 	-- Update player data
