@@ -976,7 +976,7 @@ ItemConfig.ShopItems = {
 		maxQuantity = 1,
 		type = "upgrade",
 		purchaseOrder = 2 -- Ultimate automation
-	}
+	},
 }
 
 -- ========== RARITY FUNCTIONS ==========

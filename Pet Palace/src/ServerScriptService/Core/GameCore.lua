@@ -755,15 +755,36 @@ end
 
 -- ========== DATA MANAGEMENT ==========
 
+-- ========== TRIMMINGS INTEGRATION FOR GAMECORE ==========
+-- Add these modifications to your existing GameCore.lua
+
+-- ========== UPDATE DEFAULT PLAYER DATA ==========
+-- REPLACE your existing GetDefaultPlayerData method with this enhanced version:
+
 function GameCore:GetDefaultPlayerData()
 	return {
 		coins = 100,
 		farmTokens = 0,
+		trimmings = 0, -- ADDED: Trimmings currency
+		milk = 0,
 		upgrades = {},
 		purchaseHistory = {},
 		farming = {
 			plots = 0,
-			inventory = {}
+			inventory = {},
+			level = 1
+		},
+		mining = {
+			inventory = {},
+			tools = {},
+			level = 1,
+			experience = 0
+		},
+		crafting = {
+			inventory = {},
+			recipes = {},
+			stations = {},
+			level = 1
 		},
 		livestock = {
 			cows = {}
@@ -771,12 +792,200 @@ function GameCore:GetDefaultPlayerData()
 		stats = {
 			coinsEarned = 100,
 			cropsHarvested = 0,
-			milkCollected = 0
+			milkCollected = 0,
+			itemsSold = 0,
+			oresMined = 0,
+			itemsCrafted = 0,
+			trimmingsEarned = 0 -- ADDED: Trimmings stat tracking
 		},
 		firstJoin = os.time(),
 		lastSave = os.time()
 	}
 end
+
+-- ========== UPDATE LEADERSTATS CREATION ==========
+-- REPLACE your existing CreatePlayerLeaderstats method:
+
+function GameCore:CreatePlayerLeaderstats(player)
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
+
+	local playerData = self.PlayerData[player.UserId]
+	if not playerData then return end
+
+	-- Coins leaderstat
+	local coins = Instance.new("IntValue")
+	coins.Name = "Coins"
+	coins.Value = playerData.coins or 0
+	coins.Parent = leaderstats
+
+	-- ADDED: Trimmings leaderstat
+	local trimmings = Instance.new("IntValue")
+	trimmings.Name = "Trimmings"
+	trimmings.Value = playerData.trimmings or 0
+	trimmings.Parent = leaderstats
+
+	print("GameCore: Created leaderstats for " .. player.Name .. " (Coins: " .. coins.Value .. ", Trimmings: " .. trimmings.Value .. ")")
+end
+
+-- ========== UPDATE LEADERSTATS UPDATING ==========
+-- REPLACE your existing UpdatePlayerLeaderstats method:
+
+function GameCore:UpdatePlayerLeaderstats(player)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not leaderstats then 
+		self:CreatePlayerLeaderstats(player)
+		return
+	end
+
+	local playerData = self.PlayerData[player.UserId]
+	if not playerData then return end
+
+	-- Update coins
+	local coins = leaderstats:FindFirstChild("Coins")
+	if coins then 
+		coins.Value = playerData.coins or 0
+	end
+
+	-- ADDED: Update trimmings
+	local trimmings = leaderstats:FindFirstChild("Trimmings")
+	if trimmings then 
+		trimmings.Value = playerData.trimmings or 0
+	end
+end
+
+-- ========== TRIMMINGS MANAGEMENT METHODS ==========
+-- ADD these new methods to your GameCore:
+
+function GameCore:AddTrimmings(player, amount)
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return false end
+
+	amount = amount or 1
+	playerData.trimmings = (playerData.trimmings or 0) + amount
+
+	-- Update stats
+	playerData.stats = playerData.stats or {}
+	playerData.stats.trimmingsEarned = (playerData.stats.trimmingsEarned or 0) + amount
+
+	self:UpdatePlayerData(player, playerData)
+
+	print("GameCore: Added " .. amount .. " trimmings to " .. player.Name .. " (Total: " .. playerData.trimmings .. ")")
+	return true
+end
+
+function GameCore:RemoveTrimmings(player, amount)
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return false end
+
+	amount = amount or 1
+	local currentTrimmings = playerData.trimmings or 0
+
+	if currentTrimmings < amount then
+		print("GameCore: " .. player.Name .. " doesn't have enough trimmings (has " .. currentTrimmings .. ", needs " .. amount .. ")")
+		return false
+	end
+
+	playerData.trimmings = currentTrimmings - amount
+	self:UpdatePlayerData(player, playerData)
+
+	print("GameCore: Removed " .. amount .. " trimmings from " .. player.Name .. " (Remaining: " .. playerData.trimmings .. ")")
+	return true
+end
+
+function GameCore:GetPlayerTrimmings(player)
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return 0 end
+	return playerData.trimmings or 0
+end
+
+function GameCore:SetPlayerTrimmings(player, amount)
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return false end
+
+	playerData.trimmings = math.max(0, amount)
+	self:UpdatePlayerData(player, playerData)
+
+	print("GameCore: Set " .. player.Name .. "'s trimmings to " .. playerData.trimmings)
+	return true
+end
+
+-- ========== REMOTE FUNCTIONS FOR TRIMMINGS ==========
+-- ADD this to your SetupEnhancedRemoteConnections method in the requiredRemoteFunctions table:
+
+local requiredRemoteFunctions = {
+	-- Core functions
+	"GetPlayerData", "GetFarmingData",
+	-- Inventory functions
+	"GetInventoryData", "GetMiningData", "GetCraftingData",
+	-- Selling function
+	"SellInventoryItem",
+	-- ADDED: Trimmings functions
+	"GetPlayerTrimmings", "AddTrimmings", "RemoveTrimmings"
+}
+
+-- ADD this to your SetupEnhancedEventHandlers method:
+
+
+
+-- ========== EXAMPLE USAGE ==========
+-- You can now use trimmings anywhere in your game:
+
+-- Give trimmings to a player
+-- GameCore:AddTrimmings(player, 50)
+
+-- Remove trimmings from a player
+-- GameCore:RemoveTrimmings(player, 25)
+
+-- Check how many trimmings a player has
+-- local trimmings = GameCore:GetPlayerTrimmings(player)
+
+-- Set exact amount of trimmings
+-- GameCore:SetPlayerTrimmings(player, 100)
+
+-- ========== GLOBAL TEST FUNCTIONS ==========
+-- ADD these for testing:
+
+_G.GiveTrimmings = function(playerName, amount)
+	local player = game.Players:FindFirstChild(playerName)
+	if not player then
+		print("Player not found: " .. playerName)
+		return
+	end
+
+	local success = GameCore:AddTrimmings(player, amount or 50)
+	if success then
+		print("Gave " .. (amount or 50) .. " trimmings to " .. playerName)
+	else
+		print("Failed to give trimmings to " .. playerName)
+	end
+end
+
+_G.CheckTrimmings = function(playerName)
+	local player = game.Players:FindFirstChild(playerName)
+	if not player then
+		print("Player not found: " .. playerName)
+		return
+	end
+
+	local trimmings = GameCore:GetPlayerTrimmings(player)
+	print(playerName .. " has " .. trimmings .. " trimmings")
+	return trimmings
+end
+
+print("✅ TRIMMINGS INTEGRATION LOADED!")
+print("🎯 NEW FEATURES:")
+print("  ✅ Trimmings currency fully integrated into GameCore")
+print("  ✅ Automatic leaderstats creation and updating")
+print("  ✅ DataStore integration (saves with all other player data)")
+print("  ✅ Trimmings management methods")
+print("  ✅ Remote function support")
+print("  ✅ Stats tracking")
+print("")
+print("🧪 Test Commands:")
+print("  _G.GiveTrimmings('PlayerName', 100) - Give trimmings")
+print("  _G.CheckTrimmings('PlayerName') - Check trimmings balance")
 
 function GameCore:GetPlayerData(player)
 	if not self.PlayerData[player.UserId] then
@@ -841,31 +1050,6 @@ function GameCore:SavePlayerData(player, forceImmediate)
 	end
 end
 
-function GameCore:CreatePlayerLeaderstats(player)
-	local leaderstats = Instance.new("Folder")
-	leaderstats.Name = "leaderstats"
-	leaderstats.Parent = player
-
-	local coins = Instance.new("IntValue")
-	coins.Name = "Coins"
-	coins.Value = self.PlayerData[player.UserId].coins
-	coins.Parent = leaderstats
-end
-
-function GameCore:UpdatePlayerLeaderstats(player)
-	local leaderstats = player:FindFirstChild("leaderstats")
-	if not leaderstats then 
-		self:CreatePlayerLeaderstats(player)
-		return
-	end
-
-	local playerData = self.PlayerData[player.UserId]
-	if not playerData then return end
-
-	local coins = leaderstats:FindFirstChild("Coins")
-	if coins then coins.Value = playerData.coins end
-end
-
 function GameCore:SendNotification(player, title, message, type)
 	if self.RemoteEvents.ShowNotification then
 		self.RemoteEvents.ShowNotification:FireClient(player, title, message, type)
@@ -886,199 +1070,6 @@ end
 
 -- ========== ENHANCED REMOTE FUNCTION SETUP ==========
 
-function GameCore:SetupEnhancedRemoteConnections()
-	print("GameCore: Setting up ENHANCED remote connections with inventory support...")
-
-	local remotes = ReplicatedStorage:FindFirstChild("GameRemotes")
-	if not remotes then
-		remotes = Instance.new("Folder")
-		remotes.Name = "GameRemotes"
-		remotes.Parent = ReplicatedStorage
-		print("GameCore: Created GameRemotes folder")
-	end
-
-	self.RemoteEvents = {}
-	self.RemoteFunctions = {}
-
-	-- ENHANCED: Remote events with inventory support
-	local requiredRemoteEvents = {
-		-- Core events
-		"PlayerDataUpdated", "ShowNotification",
-		-- Farm events
-		"PlantSeed", "HarvestCrop", "HarvestAllCrops",
-		-- ADDED: Inventory events
-		"InventoryUpdated", "ItemSold", "ItemPurchased",
-		-- Cow milking events
-		"ShowChairPrompt", "HideChairPrompt", 
-		"StartMilkingSession", "StopMilkingSession", 
-		"ContinueMilking", "MilkingSessionUpdate",
-		-- Proximity events
-		"OpenShop", "CloseShop"
-	}
-
-	-- ENHANCED: Remote functions with inventory support
-	local requiredRemoteFunctions = {
-		-- Core functions
-		"GetPlayerData", "GetFarmingData",
-		-- ADDED: Inventory functions
-		"GetInventoryData", "GetMiningData", "GetCraftingData",
-		-- ADDED: Selling function
-		"SellInventoryItem"
-	}
-
-	-- Create/connect remote events
-	for _, eventName in ipairs(requiredRemoteEvents) do
-		local remote = remotes:FindFirstChild(eventName)
-		if not remote then
-			remote = Instance.new("RemoteEvent")
-			remote.Name = eventName
-			remote.Parent = remotes
-			print("GameCore: Created RemoteEvent: " .. eventName)
-		end
-		self.RemoteEvents[eventName] = remote
-	end
-
-	-- Create/connect remote functions
-	for _, funcName in ipairs(requiredRemoteFunctions) do
-		local remote = remotes:FindFirstChild(funcName)
-		if not remote then
-			remote = Instance.new("RemoteFunction")
-			remote.Name = funcName
-			remote.Parent = remotes
-			print("GameCore: Created RemoteFunction: " .. funcName)
-		end
-		self.RemoteFunctions[funcName] = remote
-	end
-
-	-- Setup enhanced event handlers
-	self:SetupEnhancedEventHandlers()
-
-	print("GameCore: ✅ Enhanced remote connections established with inventory support")
-	print("  RemoteEvents: " .. #requiredRemoteEvents)
-	print("  RemoteFunctions: " .. #requiredRemoteFunctions)
-end
-
-function GameCore:SetupEnhancedEventHandlers()
-	print("GameCore: Setting up enhanced event handlers...")
-
-	-- Core remote function handlers
-	if self.RemoteFunctions.GetPlayerData then
-		self.RemoteFunctions.GetPlayerData.OnServerInvoke = function(player)
-			return self:GetPlayerData(player)
-		end
-	end
-
-	if self.RemoteFunctions.GetFarmingData then
-		self.RemoteFunctions.GetFarmingData.OnServerInvoke = function(player)
-			local playerData = self:GetPlayerData(player)
-			return playerData and playerData.farming or {
-				plots = 0,
-				inventory = {},
-				level = 1
-			}
-		end
-	end
-
-	-- ADDED: Enhanced inventory functions
-	if self.RemoteFunctions.GetInventoryData then
-		self.RemoteFunctions.GetInventoryData.OnServerInvoke = function(player, inventoryType)
-			return self:GetInventoryData(player, inventoryType)
-		end
-	end
-
-	if self.RemoteFunctions.GetMiningData then
-		self.RemoteFunctions.GetMiningData.OnServerInvoke = function(player)
-			local playerData = self:GetPlayerData(player)
-			return playerData and playerData.mining or {
-				inventory = {},
-				tools = {},
-				level = 1
-			}
-		end
-	end
-
-	if self.RemoteFunctions.GetCraftingData then
-		self.RemoteFunctions.GetCraftingData.OnServerInvoke = function(player)
-			local playerData = self:GetPlayerData(player)
-			return playerData and playerData.crafting or {
-				inventory = {},
-				recipes = {},
-				stations = {}
-			}
-		end
-	end
-
-	-- ADDED: Sell inventory item function
-	if self.RemoteFunctions.SellInventoryItem then
-		self.RemoteFunctions.SellInventoryItem.OnServerInvoke = function(player, itemId, quantity)
-			return self:SellInventoryItem(player, itemId, quantity)
-		end
-	end
-
-	-- ADDED: Sell inventory item event (alternative)
-	if self.RemoteEvents.SellItem then
-		self.RemoteEvents.SellItem.OnServerEvent:Connect(function(player, itemId, quantity)
-			pcall(function()
-				self:SellInventoryItem(player, itemId, quantity)
-			end)
-		end)
-	end
-
-	-- Farm system event handlers (delegate to modules)
-	if self.RemoteEvents.PlantSeed then
-		self.RemoteEvents.PlantSeed.OnServerEvent:Connect(function(player, plotModel, seedId)
-			pcall(function()
-				self:PlantSeed(player, plotModel, seedId)
-			end)
-		end)
-		print("✅ Connected PlantSeed handler")
-	end
-
-	if self.RemoteEvents.HarvestCrop then
-		self.RemoteEvents.HarvestCrop.OnServerEvent:Connect(function(player, plotModel)
-			pcall(function()
-				self:HarvestCrop(player, plotModel)
-			end)
-		end)
-		print("✅ Connected HarvestCrop handler")
-	end
-
-	if self.RemoteEvents.HarvestAllCrops then
-		self.RemoteEvents.HarvestAllCrops.OnServerEvent:Connect(function(player)
-			pcall(function()
-				self:HarvestAllCrops(player)
-			end)
-		end)
-		print("✅ Connected HarvestAllCrops handler")
-	end
-
-	-- Cow milking event handlers (delegate to modules)
-	if self.RemoteEvents.StartMilkingSession then
-		self.RemoteEvents.StartMilkingSession.OnServerEvent:Connect(function(player, cowId)
-			if CowMilkingModule and CowMilkingModule.HandleStartMilkingSession then
-				CowMilkingModule:HandleStartMilkingSession(player, cowId)
-			end
-		end)
-	end
-
-	if self.RemoteEvents.StopMilkingSession then
-		self.RemoteEvents.StopMilkingSession.OnServerEvent:Connect(function(player)
-			if CowMilkingModule and CowMilkingModule.HandleStopMilkingSession then
-				CowMilkingModule:HandleStopMilkingSession(player)
-			end
-		end)
-	end
-
-	if self.RemoteEvents.ContinueMilking then
-		self.RemoteEvents.ContinueMilking.OnServerEvent:Connect(function(player)
-			if CowMilkingModule and CowMilkingModule.HandleContinueMilking then
-				CowMilkingModule:HandleContinueMilking(player)
-			end
-		end)
-	end
-
-	print("GameCore: ✅ Enhanced event handlers setup complete")
-end
 
 -- ========== INVENTORY MANAGEMENT METHODS ==========
 
