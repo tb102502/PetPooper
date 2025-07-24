@@ -482,7 +482,7 @@ function ShopSystem:HandleGetSellableItems(player)
 			{id = "broccoli", name = "🥦 Broccoli", sellPrice = 30},
 			{id = "tomato", name = "🍅 Tomato", sellPrice = 35},
 			{id = "strawberry", name = "🍓 Strawberry", sellPrice = 40},
-			{id = "wheat", name = "🌾 Wheat", sellPrice = 45},
+			{id = "wheat", name = "🌾 Wheat", sellPrice = 2},
 			{id = "corn", name = "🌽 Corn", sellPrice = 60},	
 			{id = "broccarrot", name = "🌽 Broccarrot", sellPrice = 150},		
 			{id = "broctato", name = "🌽 Broctato", sellPrice = 200},

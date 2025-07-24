@@ -57,11 +57,8 @@ local SWING_CONFIG = {
 
 -- Pre-made Roblox animation IDs for scythe-like movements
 local ROBLOX_ANIMATIONS = {
-	"rbxassetid://522635514", -- Sword slash (works well for scythe)
-	"rbxassetid://218504594", -- Tool swing animation
-	"rbxassetid://507768375", -- Axe chop (good for overhead swing)
-	"rbxassetid://522625313", -- Another sword swing variant
-	"rbxassetid://507766388"  -- Tool use animation
+	"http://www.roblox.com/asset/?id=522635514" -- Sword slash (works well for scythe)
+
 }
 
 ScytheAnimation.isAnimating = false

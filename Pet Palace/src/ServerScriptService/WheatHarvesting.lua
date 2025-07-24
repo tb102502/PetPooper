@@ -1,31 +1,18 @@
---[[
-    WheatHarvesting.lua - Fixed Wheat Harvesting System
-    Place in: ServerScriptService/WheatHarvesting.lua
-    
-    FIXES:
-    ✅ Corrected wheat field structure detection
-    ✅ Individual grain (Part) removal system
-    ✅ Proximity-based grain selection
-    ✅ Proper integration with existing systems
-]]
-
 local WheatHarvesting = {}
-
 -- Services
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-
--- Configuration
+-- Configuration - UPDATED for chunk system
 local HARVESTING_CONFIG = {
-	PARTS_PER_SECTION = 6, -- Number of individual grain Parts per GrainCluster
+	CHUNKS_PER_SECTION = 10, -- Number of wheat chunks per section
 	PROXIMITY_DISTANCE = 15,
 	HARVESTING_COOLDOWN = 0.5,
 	RESPAWN_TIME = 300, -- 5 minutes
-	MAX_HARVEST_DISTANCE = 8 -- Maximum distance to harvest a grain
+	MAX_HARVEST_DISTANCE = 12, -- Increased for larger chunks
+	WHEAT_PER_CHUNK = 5 -- Amount of wheat harvested per chunk
 }
-
 -- State tracking
 WheatHarvesting.GameCore = nil
 WheatHarvesting.RemoteEvents = {}
@@ -34,12 +21,9 @@ WheatHarvesting.WheatSections = {}
 WheatHarvesting.PlayerSessions = {}
 WheatHarvesting.ProximityConnections = {}
 WheatHarvesting.SectionData = {}
-
 -- ========== INITIALIZATION ==========
-
 function WheatHarvesting:Initialize(gameCore)
-	print("WheatHarvesting: Initializing FIXED wheat harvesting system...")
-
+	print("WheatHarvesting: Initializing CHUNK-BASED wheat harvesting system...")
 	self.GameCore = gameCore
 
 	-- Setup wheat field reference
@@ -57,27 +41,24 @@ function WheatHarvesting:Initialize(gameCore)
 	-- Setup respawn system
 	self:SetupRespawnSystem()
 
-	print("WheatHarvesting: ✅ FIXED wheat harvesting system initialized")
+	print("WheatHarvesting: ✅ CHUNK-BASED wheat harvesting system initialized")
 	print("  Wheat field sections: " .. #self.WheatSections)
 
 	return true
 end
-
--- ========== WHEAT FIELD SETUP (FIXED) ==========
-
+-- ========== WHEAT FIELD SETUP (UPDATED) ==========
 function WheatHarvesting:SetupWheatField()
-	print("WheatHarvesting: Setting up FIXED wheat field structure...")
-
+	print("WheatHarvesting: Setting up CHUNK-BASED wheat field structure...")
 	-- Find the WheatField model
 	self.WheatField = workspace:FindFirstChild("WheatField")
 	if not self.WheatField then
 		error("WheatHarvesting: WheatField model not found in workspace!")
 	end
 
-	-- Find wheat sections with correct structure
+	-- Find wheat sections - UPDATED for 2 sections
 	self.WheatSections = {}
 
-	-- Look for Section1, Section2, etc.
+	-- Look for Section1, Section2 (reduced from 6 to 2)
 	for i = 1, 2 do
 		local section = self.WheatField:FindFirstChild("Section" .. i)
 		if section then
@@ -104,42 +85,48 @@ function WheatHarvesting:SetupWheatField()
 
 	print("WheatHarvesting: Found " .. #self.WheatSections .. " valid wheat sections")
 end
-
--- ========== SECTION DATA INITIALIZATION (FIXED) ==========
-
+-- ========== SECTION DATA INITIALIZATION (UPDATED) ==========
 function WheatHarvesting:InitializeSectionData()
-	print("WheatHarvesting: Initializing FIXED section data...")
-
+	print("WheatHarvesting: Initializing CHUNK-BASED section data...")
 	for i, sectionInfo in ipairs(self.WheatSections) do
-		-- Count actual Parts in the GrainCluster
-		local grainParts = {}
+		-- Find wheat chunks in the GrainCluster
+		local wheatChunks = {}
+
+		-- Look for any Models or Parts that represent wheat chunks
 		for _, child in pairs(sectionInfo.grainCluster:GetChildren()) do
-			if child:IsA("Model") and child.Name == "Part" then
-				table.insert(grainParts, child)
+			if (child:IsA("Model") or child:IsA("BasePart")) and 
+				(child.Name:find("Chunk") or child.Name:find("Part") or child.Name:find("Wheat")) then
+				table.insert(wheatChunks, child)
+			end
+		end
+
+		-- If no specific chunks found, use all Models and Parts
+		if #wheatChunks == 0 then
+			for _, child in pairs(sectionInfo.grainCluster:GetChildren()) do
+				if child:IsA("Model") or child:IsA("BasePart") then
+					table.insert(wheatChunks, child)
+				end
 			end
 		end
 
 		self.SectionData[i] = {
 			section = sectionInfo.section,
 			grainCluster = sectionInfo.grainCluster,
-			grainParts = grainParts,
-			availableGrains = #grainParts,
-			totalGrains = #grainParts,
+			wheatChunks = wheatChunks,
+			availableChunks = #wheatChunks,
+			totalChunks = #wheatChunks,
 			respawnTime = 0,
 			sectionNumber = sectionInfo.sectionNumber
 		}
 
-		print("WheatHarvesting: Section " .. i .. " has " .. #grainParts .. " grain parts")
+		print("WheatHarvesting: Section " .. i .. " has " .. #wheatChunks .. " wheat chunks")
 	end
 
-	print("WheatHarvesting: ✅ FIXED section data initialized")
+	print("WheatHarvesting: ✅ CHUNK-BASED section data initialized")
 end
-
 -- ========== REMOTE EVENTS SETUP ==========
-
 function WheatHarvesting:SetupRemoteEvents()
 	print("WheatHarvesting: Setting up remote events...")
-
 	local remotes = ReplicatedStorage:FindFirstChild("GameRemotes")
 	if not remotes then
 		error("WheatHarvesting: GameRemotes folder not found!")
@@ -163,12 +150,10 @@ function WheatHarvesting:SetupRemoteEvents()
 
 	self:ConnectEventHandlers()
 end
-
 function WheatHarvesting:ConnectEventHandlers()
 	self.RemoteEvents.StartWheatHarvesting.OnServerEvent:Connect(function(player)
 		self:StartHarvestingSession(player)
 	end)
-
 	self.RemoteEvents.StopWheatHarvesting.OnServerEvent:Connect(function(player)
 		self:StopHarvestingSession(player)
 	end)
@@ -177,20 +162,15 @@ function WheatHarvesting:ConnectEventHandlers()
 		self:HandleScytheSwing(player)
 	end)
 end
-
 -- ========== PROXIMITY DETECTION ==========
-
 function WheatHarvesting:SetupProximityDetection()
 	local connection = RunService.Heartbeat:Connect(function()
 		self:CheckPlayerProximity()
 	end)
-
 	table.insert(self.ProximityConnections, connection)
 end
-
 function WheatHarvesting:CheckPlayerProximity()
 	if not self.WheatField then return end
-
 	local wheatCenter = self.WheatField:GetModelCFrame().Position
 
 	for _, player in pairs(Players:GetPlayers()) do
@@ -209,10 +189,8 @@ function WheatHarvesting:CheckPlayerProximity()
 		end
 	end
 end
-
 function WheatHarvesting:PlayerEnteredWheatProximity(player)
 	print("WheatHarvesting: " .. player.Name .. " entered wheat field proximity")
-
 	if not self.PlayerSessions[player.UserId] then
 		self.PlayerSessions[player.UserId] = {
 			nearWheat = false,
@@ -228,11 +206,9 @@ function WheatHarvesting:PlayerEnteredWheatProximity(player)
 
 	self.RemoteEvents.ShowWheatPrompt:FireClient(player, hasScythe, availableWheat)
 end
-
 function WheatHarvesting:PlayerLeftWheatProximity(player)
 	if self.PlayerSessions[player.UserId] then
 		self.PlayerSessions[player.UserId].nearWheat = false
-
 		if self.PlayerSessions[player.UserId].harvesting then
 			self:StopHarvestingSession(player)
 		end
@@ -240,12 +216,9 @@ function WheatHarvesting:PlayerLeftWheatProximity(player)
 
 	self.RemoteEvents.HideWheatPrompt:FireClient(player)
 end
-
 -- ========== HARVESTING SESSION MANAGEMENT ==========
-
 function WheatHarvesting:StartHarvestingSession(player)
 	print("WheatHarvesting: Starting harvesting session for " .. player.Name)
-
 	if not self.PlayerSessions[player.UserId] or not self.PlayerSessions[player.UserId].nearWheat then
 		return
 	end
@@ -272,29 +245,24 @@ function WheatHarvesting:StartHarvestingSession(player)
 	self.RemoteEvents.WheatHarvestUpdate:FireClient(player, {
 		harvesting = true,
 		availableWheat = availableWheat,
-		message = "Click to swing your scythe and harvest wheat!"
+		message = "Click to swing your scythe and harvest wheat chunks!"
 	})
 end
-
 function WheatHarvesting:StopHarvestingSession(player)
 	if self.PlayerSessions[player.UserId] then
 		self.PlayerSessions[player.UserId].harvesting = false
-
 		self.RemoteEvents.WheatHarvestUpdate:FireClient(player, {
 			harvesting = false,
 			availableWheat = self:GetAvailableWheatCount()
 		})
 	end
 end
-
--- ========== SCYTHE SWING HANDLING (FIXED) ==========
-
+-- ========== SCYTHE SWING HANDLING (UPDATED FOR CHUNKS) ==========
 function WheatHarvesting:HandleScytheSwing(player)
 	local session = self.PlayerSessions[player.UserId]
 	if not session or not session.harvesting then
 		return
 	end
-
 	-- Check cooldown
 	local currentTime = tick()
 	if (currentTime - session.lastSwingTime) < HARVESTING_CONFIG.HARVESTING_COOLDOWN then
@@ -308,25 +276,27 @@ function WheatHarvesting:HandleScytheSwing(player)
 		return
 	end
 
-	-- Find closest grain to harvest
-	local harvestedGrain = self:HarvestClosestGrain(player)
+	-- Find closest chunk to harvest
+	local harvestedChunk = self:HarvestClosestChunk(player)
 
-	if harvestedGrain then
-		-- Give wheat to player
+	if harvestedChunk then
+		-- Give wheat to player - UPDATED amount per chunk
 		if self.GameCore and self.GameCore.AddItemToInventory then
-			local success = self.GameCore:AddItemToInventory(player, "farming", "wheat", 1)
+			local wheatAmount = HARVESTING_CONFIG.WHEAT_PER_CHUNK
+			local success = self.GameCore:AddItemToInventory(player, "farming", "wheat", wheatAmount)
 
 			if success then
 				if self.GameCore.SendNotification then
 					self.GameCore:SendNotification(player, "🌾 Wheat Harvested", 
-						"Harvested 1 wheat grain!", "success")
+						"Harvested " .. wheatAmount .. " wheat from chunk!", "success")
 				end
 
 				-- Update player stats
 				local playerData = self.GameCore:GetPlayerData(player)
 				if playerData then
 					playerData.stats = playerData.stats or {}
-					playerData.stats.wheatHarvested = (playerData.stats.wheatHarvested or 0) + 1
+					playerData.stats.wheatHarvested = (playerData.stats.wheatHarvested or 0) + wheatAmount
+					playerData.stats.wheatChunksHarvested = (playerData.stats.wheatChunksHarvested or 0) + 1
 					self.GameCore:UpdatePlayerData(player, playerData)
 				end
 			end
@@ -350,32 +320,37 @@ function WheatHarvesting:HandleScytheSwing(player)
 	else
 		-- No wheat found nearby
 		if self.GameCore and self.GameCore.SendNotification then
-			self.GameCore:SendNotification(player, "No Wheat Nearby", "Move closer to wheat grains to harvest them!", "warning")
+			self.GameCore:SendNotification(player, "No Wheat Nearby", "Move closer to wheat chunks to harvest them!", "warning")
 		end
 	end
 end
-
--- ========== GRAIN HARVESTING (NEW) ==========
-
-function WheatHarvesting:HarvestClosestGrain(player)
+-- ========== CHUNK HARVESTING (NEW) ==========
+function WheatHarvesting:HarvestClosestChunk(player)
 	local character = player.Character
 	if not character or not character:FindFirstChild("HumanoidRootPart") then
 		return nil
 	end
-
 	local playerPos = character.HumanoidRootPart.Position
-	local closestGrain = nil
+	local closestChunk = nil
 	local closestDistance = HARVESTING_CONFIG.MAX_HARVEST_DISTANCE
 	local closestSectionIndex = nil
 
-	-- Find closest harvestable grain
+	-- Find closest harvestable chunk
 	for sectionIndex, sectionData in pairs(self.SectionData) do
-		if sectionData.availableGrains > 0 then
-			for i, grainPart in pairs(sectionData.grainParts) do
-				if grainPart and grainPart.Parent then -- Check if grain still exists
-					local distance = (grainPart.Position - playerPos).Magnitude
+		if sectionData.availableChunks > 0 then
+			for i, wheatChunk in pairs(sectionData.wheatChunks) do
+				if wheatChunk and wheatChunk.Parent then -- Check if chunk still exists
+					-- Get chunk position
+					local chunkPos
+					if wheatChunk:IsA("Model") then
+						chunkPos = wheatChunk:GetModelCFrame().Position
+					else
+						chunkPos = wheatChunk.Position
+					end
+
+					local distance = (chunkPos - playerPos).Magnitude
 					if distance < closestDistance then
-						closestGrain = grainPart
+						closestChunk = wheatChunk
 						closestDistance = distance
 						closestSectionIndex = sectionIndex
 					end
@@ -384,89 +359,121 @@ function WheatHarvesting:HarvestClosestGrain(player)
 		end
 	end
 
-	-- Harvest the closest grain
-	if closestGrain and closestSectionIndex then
-		self:RemoveGrain(closestSectionIndex, closestGrain)
-		return closestGrain
+	-- Harvest the closest chunk
+	if closestChunk and closestSectionIndex then
+		self:RemoveChunk(closestSectionIndex, closestChunk)
+		return closestChunk
 	end
 
 	return nil
 end
-
-function WheatHarvesting:RemoveGrain(sectionIndex, grainPart)
+function WheatHarvesting:RemoveChunk(sectionIndex, wheatChunk)
 	local sectionData = self.SectionData[sectionIndex]
 	if not sectionData then return end
+	-- Create harvest effect at chunk position
+	local chunkPos
+	if wheatChunk:IsA("Model") then
+		chunkPos = wheatChunk:GetModelCFrame().Position
+	else
+		chunkPos = wheatChunk.Position
+	end
 
-	-- Create harvest effect
-	self:CreateHarvestEffect(grainPart.Position)
+	self:CreateChunkHarvestEffect(chunkPos)
 
-	-- Remove the grain part
-	grainPart:Destroy()
+	-- Remove the wheat chunk
+	wheatChunk:Destroy()
 
 	-- Update section data
-	for i, part in pairs(sectionData.grainParts) do
-		if part == grainPart then
-			table.remove(sectionData.grainParts, i)
+	for i, chunk in pairs(sectionData.wheatChunks) do
+		if chunk == wheatChunk then
+			table.remove(sectionData.wheatChunks, i)
 			break
 		end
 	end
 
-	sectionData.availableGrains = sectionData.availableGrains - 1
+	sectionData.availableChunks = sectionData.availableChunks - 1
 
 	-- If section is empty, set respawn timer
-	if sectionData.availableGrains <= 0 then
+	if sectionData.availableChunks <= 0 then
 		sectionData.respawnTime = tick() + HARVESTING_CONFIG.RESPAWN_TIME
 		print("WheatHarvesting: Section " .. sectionIndex .. " is empty, will respawn in " .. HARVESTING_CONFIG.RESPAWN_TIME .. " seconds")
 	end
 end
-
-function WheatHarvesting:CreateHarvestEffect(position)
-	-- Create wheat particles
-	for i = 1, 3 do
+function WheatHarvesting:CreateChunkHarvestEffect(position)
+	-- Create enhanced effects for chunk harvesting
+	for i = 1, 8 do -- More particles for bigger chunks
 		local particle = Instance.new("Part")
-		particle.Name = "WheatParticle"
-		particle.Size = Vector3.new(0.1, 0.1, 0.1)
+		particle.Name = "WheatChunkParticle"
+		particle.Size = Vector3.new(0.2, 0.2, 0.2) -- Slightly bigger particles
 		particle.Material = Enum.Material.Neon
 		particle.BrickColor = BrickColor.new("Bright yellow")
 		particle.Anchored = false
 		particle.CanCollide = false
 		particle.Position = position + Vector3.new(
-			math.random(-1, 1),
-			math.random(0, 2),
-			math.random(-1, 1)
+			math.random(-2, 2),
+			math.random(0, 3),
+			math.random(-2, 2)
 		)
 		particle.Parent = workspace
-
 		local bodyVelocity = Instance.new("BodyVelocity")
 		bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
 		bodyVelocity.Velocity = Vector3.new(
-			math.random(-5, 5),
-			math.random(5, 15),
-			math.random(-5, 5)
+			math.random(-8, 8),
+			math.random(8, 20),
+			math.random(-8, 8)
 		)
 		bodyVelocity.Parent = particle
 
-		game:GetService("Debris"):AddItem(particle, 2)
+		game:GetService("Debris"):AddItem(particle, 3)
 	end
+
+	-- Create larger explosion effect for chunks
+	local chunkEffect = Instance.new("Part")
+	chunkEffect.Name = "ChunkHarvestEffect"
+	chunkEffect.Size = Vector3.new(3, 3, 3)
+	chunkEffect.Material = Enum.Material.Neon
+	chunkEffect.BrickColor = BrickColor.new("Bright yellow")
+	chunkEffect.Anchored = true
+	chunkEffect.CanCollide = false
+	chunkEffect.Transparency = 0.5
+	chunkEffect.Shape = Enum.PartType.Ball
+	chunkEffect.Position = position
+	chunkEffect.Parent = workspace
+
+	local effectTween = TweenService:Create(chunkEffect,
+		TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		{
+			Transparency = 1,
+			Size = Vector3.new(6, 6, 6)
+		}
+	)
+	effectTween:Play()
+
+	effectTween.Completed:Connect(function()
+		chunkEffect:Destroy()
+	end)
 end
-
--- ========== UTILITY FUNCTIONS ==========
-
+-- ========== UTILITY FUNCTIONS (UPDATED) ==========
 function WheatHarvesting:PlayerHasScythe(player)
-	return player.Backpack:FindFirstChild("Scythe") or 
+	return player.Backpack:FindFirstChild("Scythe") or
 		(player.Character and player.Character:FindFirstChild("Scythe"))
 end
-
 function WheatHarvesting:GetAvailableWheatCount()
 	local count = 0
 	for _, sectionData in pairs(self.SectionData) do
-		count = count + sectionData.availableGrains
+		-- Count chunks multiplied by wheat per chunk
+		count = count + (sectionData.availableChunks * HARVESTING_CONFIG.WHEAT_PER_CHUNK)
 	end
 	return count
 end
-
--- ========== RESPAWN SYSTEM ==========
-
+function WheatHarvesting:GetAvailableChunkCount()
+	local count = 0
+	for _, sectionData in pairs(self.SectionData) do
+		count = count + sectionData.availableChunks
+	end
+	return count
+end
+-- ========== RESPAWN SYSTEM (UPDATED) ==========
 function WheatHarvesting:SetupRespawnSystem()
 	spawn(function()
 		while true do
@@ -475,13 +482,11 @@ function WheatHarvesting:SetupRespawnSystem()
 		end
 	end)
 end
-
 function WheatHarvesting:CheckRespawns()
 	local currentTime = tick()
 	local respawnedSections = 0
-
 	for sectionIndex, sectionData in pairs(self.SectionData) do
-		if sectionData.availableGrains <= 0 and currentTime >= sectionData.respawnTime and sectionData.respawnTime > 0 then
+		if sectionData.availableChunks <= 0 and currentTime >= sectionData.respawnTime and sectionData.respawnTime > 0 then
 			self:RespawnSection(sectionIndex)
 			respawnedSections = respawnedSections + 1
 		end
@@ -501,48 +506,63 @@ function WheatHarvesting:CheckRespawns()
 		end
 	end
 end
-
 function WheatHarvesting:RespawnSection(sectionIndex)
 	local sectionData = self.SectionData[sectionIndex]
 	if not sectionData then return end
+	-- Clear old chunks array
+	sectionData.wheatChunks = {}
 
-	-- Clear old grain parts array
-	sectionData.grainParts = {}
-
-	-- Find all Parts in the grain cluster and restore them
+	-- Find all chunks in the grain cluster and restore them
 	for _, child in pairs(sectionData.grainCluster:GetChildren()) do
-		if child:IsA("BasePart") and child.Name == "Part" then
-			child.Transparency = 0
-			child.CanCollide = true
-			table.insert(sectionData.grainParts, child)
+		if (child:IsA("Model") or child:IsA("BasePart")) and 
+			(child.Name:find("Chunk") or child.Name:find("Part") or child.Name:find("Wheat")) then
+
+			-- Make sure it's visible and collidable
+			if child:IsA("BasePart") then
+				child.Transparency = 0
+				child.CanCollide = true
+			elseif child:IsA("Model") then
+				-- Restore all parts in the model
+				for _, part in pairs(child:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.Transparency = 0
+						part.CanCollide = true
+					end
+				end
+			end
+
+			table.insert(sectionData.wheatChunks, child)
 		end
 	end
 
 	-- Reset section data
-	sectionData.availableGrains = #sectionData.grainParts
+	sectionData.availableChunks = #sectionData.wheatChunks
 	sectionData.respawnTime = 0
 
-	print("WheatHarvesting: Respawned section " .. sectionIndex .. " with " .. sectionData.availableGrains .. " grains")
+	print("WheatHarvesting: Respawned section " .. sectionIndex .. " with " .. sectionData.availableChunks .. " chunks")
 end
-
--- ========== DEBUG FUNCTIONS ==========
-
+-- ========== DEBUG FUNCTIONS (UPDATED) ==========
 function WheatHarvesting:DebugStatus()
-	print("=== WHEAT HARVESTING DEBUG STATUS ===")
+	print("=== CHUNK-BASED WHEAT HARVESTING DEBUG STATUS ===")
 	print("Wheat field: " .. (self.WheatField and self.WheatField.Name or "❌ Not found"))
-	print("Sections: " .. #self.WheatSections)
+	print("Sections: " .. #self.WheatSections .. " (reduced to 2)")
 	print("Active sessions: " .. self:CountTable(self.PlayerSessions))
 	print("Available wheat: " .. self:GetAvailableWheatCount())
+	print("Available chunks: " .. self:GetAvailableChunkCount())
 	print("")
-
 	print("Section status:")
 	for i, sectionData in pairs(self.SectionData) do
-		print("  Section " .. i .. ": " .. sectionData.availableGrains .. "/" .. sectionData.totalGrains .. " grains")
+		print("  Section " .. i .. ": " .. sectionData.availableChunks .. "/" .. sectionData.totalChunks .. " chunks")
+		print("    Wheat value: " .. (sectionData.availableChunks * HARVESTING_CONFIG.WHEAT_PER_CHUNK) .. " wheat")
 	end
 
-	print("=====================================")
+	print("")
+	print("CHUNK-BASED CONFIG:")
+	print("  Wheat per chunk: " .. HARVESTING_CONFIG.WHEAT_PER_CHUNK)
+	print("  Max harvest distance: " .. HARVESTING_CONFIG.MAX_HARVEST_DISTANCE)
+	print("  Respawn time: " .. HARVESTING_CONFIG.RESPAWN_TIME .. " seconds")
+	print("==================================================")
 end
-
 function WheatHarvesting:CountTable(t)
 	local count = 0
 	for _ in pairs(t) do
@@ -550,26 +570,20 @@ function WheatHarvesting:CountTable(t)
 	end
 	return count
 end
-
 -- ========== CLEANUP ==========
-
 function WheatHarvesting:Cleanup()
 	for _, connection in pairs(self.ProximityConnections) do
 		if connection then
 			connection:Disconnect()
 		end
 	end
-
 	self.PlayerSessions = {}
 	self.ProximityConnections = {}
 end
-
 Players.PlayerRemoving:Connect(function(player)
 	if WheatHarvesting.PlayerSessions[player.UserId] then
 		WheatHarvesting.PlayerSessions[player.UserId] = nil
 	end
 end)
-
 _G.WheatHarvesting = WheatHarvesting
-
 return WheatHarvesting
