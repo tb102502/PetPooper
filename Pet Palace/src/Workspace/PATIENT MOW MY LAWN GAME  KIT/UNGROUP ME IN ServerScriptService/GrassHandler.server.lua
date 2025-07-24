@@ -1,5 +1,5 @@
 local Replicated = game:GetService("ReplicatedStorage")
-local folder = Replicated:WaitForChild("GameRemotes")
+local folder = Replicated:WaitForChild("Events")
 local GrassMowed = folder:WaitForChild("GrassMowed")
 local Info = TweenInfo.new(.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out, 0, false, 0);
 local Size = {Size = Vector3.new(2,0.4,2)}

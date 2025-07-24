@@ -36,7 +36,225 @@ CropCreation.PlantingCooldowns = {}
 CropCreation.RemoteEventCooldowns = {}
 
 -- ========== INITIALIZATION ==========
+-- ADD this method to the top of your CropCreation.lua module (after the local variables):
 
+-- ========== SAFE ID GENERATION ==========
+
+function CropCreation:GenerateSafeSpotId(gardenSpotModel)
+	if not gardenSpotModel then
+		return "unknown_" .. tostring(math.random(1000000, 9999999))
+	end
+
+	-- Try to create a consistent ID based on the spot's properties
+	local spotName = gardenSpotModel.Name or "UnknownSpot"
+	local parentName = (gardenSpotModel.Parent and gardenSpotModel.Parent.Name) or "UnknownParent"
+
+	-- Get position-based ID for consistency
+	local positionId = ""
+	if gardenSpotModel.PrimaryPart then
+		local pos = gardenSpotModel.PrimaryPart.Position
+		positionId = math.floor(pos.X) .. "_" .. math.floor(pos.Y) .. "_" .. math.floor(pos.Z)
+	elseif gardenSpotModel:FindFirstChild("SpotPart") then
+		local pos = gardenSpotModel.SpotPart.Position
+		positionId = math.floor(pos.X) .. "_" .. math.floor(pos.Y) .. "_" .. math.floor(pos.Z)
+	else
+		positionId = tostring(math.random(100000, 999999))
+	end
+
+	-- Create a safe, consistent ID
+	local safeId = parentName .. "_" .. spotName .. "_" .. positionId
+
+	-- Clean up the ID to remove any problematic characters
+	safeId = safeId:gsub("[^%w_]", "_")
+
+	return safeId
+end
+
+-- ========== REPLACE ALL INSTANCES ==========
+
+-- REPLACE the StartCropGrowthTimer method with this version that uses safe ID generation:
+
+function CropCreation:StartCropGrowthTimer(gardenSpotModel, seedData, cropType, cropRarity)
+	if not gardenSpotModel or not gardenSpotModel.Parent then
+		warn("❌ CropCreation: Invalid garden spot for growth timer")
+		return false
+	end
+
+	-- FIXED: Use safe ID generation instead of GetDebugId()
+	local spotId = self:GenerateSafeSpotId(gardenSpotModel)
+
+	-- Cancel any existing timer for this spot
+	if self.GrowthTimers[spotId] then
+		self.GrowthTimers[spotId]:Disconnect()
+		self.GrowthTimers[spotId] = nil
+		print("🔄 Cancelled existing growth timer for spot: " .. spotId)
+	end
+
+	-- Get the actual growth time from seed data
+	local growTime = seedData.growTime or 300
+	local stages = {"planted", "sprouting", "growing", "flowering", "ready"}
+	local stageTime = growTime / (#stages - 1) -- Time per stage transition
+
+	print("🌱 CropCreation: Starting SAFE growth timer for garden " .. cropType)
+	print("  📊 Total grow time: " .. growTime .. " seconds")
+	print("  🎯 Safe Spot ID: " .. spotId)
+
+	-- Store timer reference
+	local connection
+	connection = spawn(function()
+		for stage = 1, #stages - 1 do -- 1 to 4 (planted starts at 0, so we go to ready at 4)
+			print("⏰ " .. cropType .. " Stage " .. stage .. " - Waiting " .. stageTime .. "s for " .. stages[stage + 1])
+
+			-- Wait for the stage time
+			wait(stageTime)
+
+			-- CRITICAL: Validate garden spot still exists and hasn't been harvested
+			if not gardenSpotModel or not gardenSpotModel.Parent then
+				print("❌ Garden growth timer stopped - spot destroyed at stage " .. stage)
+				self.GrowthTimers[spotId] = nil
+				return
+			end
+
+			-- Check if spot was harvested or replanted
+			local isEmpty = gardenSpotModel:GetAttribute("IsEmpty")
+			if isEmpty then
+				print("❌ Garden growth timer stopped - spot became empty (harvested) at stage " .. stage)
+				self.GrowthTimers[spotId] = nil
+				return
+			end
+
+			-- Check if this is still the same crop
+			local currentCropType = gardenSpotModel:GetAttribute("PlantType")
+			if currentCropType ~= cropType then
+				print("❌ Garden growth timer stopped - crop type changed at stage " .. stage)
+				self.GrowthTimers[spotId] = nil
+				return
+			end
+
+			-- Advance to next stage
+			local newStageIndex = stage
+			local newStageName = stages[stage + 1]
+
+			gardenSpotModel:SetAttribute("GrowthStage", newStageIndex)
+
+			print("🌱✅ Garden " .. cropType .. " advanced to stage " .. newStageIndex .. " (" .. newStageName .. ")")
+
+			-- Update visual through CropVisual module with robust error handling
+			if CropVisual then
+				local success, error = pcall(function()
+					return CropVisual:UpdateCropStage(gardenSpotModel, cropType, cropRarity, newStageName, newStageIndex)
+				end)
+
+				if success then
+					print("✅ CropVisual updated successfully for stage " .. newStageName)
+				else
+					warn("❌ CropVisual update failed for stage " .. newStageName .. ": " .. tostring(error))
+					-- DON'T stop the timer - continue growing even if visual fails
+					print("🔄 Continuing growth timer despite visual error")
+				end
+			else
+				warn("❌ CropVisual module not available for stage update")
+			end
+
+			-- Fire growth event for other systems (with error protection)
+			pcall(function()
+				self:FireGrowthStageEvent(gardenSpotModel, cropType, cropRarity, newStageName, newStageIndex)
+			end)
+		end
+
+		-- Final stage: Mark as fully grown (stage 4 = ready)
+		if gardenSpotModel and gardenSpotModel.Parent then
+			-- Double-check it's still the right crop
+			local isEmpty = gardenSpotModel:GetAttribute("IsEmpty")
+			local currentCropType = gardenSpotModel:GetAttribute("PlantType")
+
+			if not isEmpty and currentCropType == cropType then
+				gardenSpotModel:SetAttribute("GrowthStage", 4)
+				print("🌱🎉 Garden " .. cropType .. " FULLY GROWN after " .. growTime .. " seconds - ready for harvest!")
+
+				-- Final visual update (with error protection)
+				if CropVisual then
+					local success, error = pcall(function()
+						return CropVisual:UpdateCropStage(gardenSpotModel, cropType, cropRarity, "ready", 4)
+					end)
+
+					if not success then
+						warn("❌ Final CropVisual update failed: " .. tostring(error))
+						-- Create a basic "ready" indicator even if visual fails
+						self:CreateBasicReadyIndicator(gardenSpotModel, cropType)
+					else
+						print("✅ Final CropVisual update successful - " .. cropType .. " crop ready!")
+					end
+				else
+					-- No CropVisual available, create basic ready indicator
+					self:CreateBasicReadyIndicator(gardenSpotModel, cropType)
+				end
+
+				-- Add harvest-ready effects (with error protection)
+				pcall(function()
+					self:CreateHarvestReadyEffects(gardenSpotModel, cropType, cropRarity)
+				end)
+			else
+				print("❌ Crop was harvested or changed before completion")
+			end
+		else
+			print("❌ Garden spot destroyed before completion")
+		end
+
+		-- Clean up timer reference
+		self.GrowthTimers[spotId] = nil
+		print("🧹 Cleaned up growth timer for " .. cropType .. " after " .. growTime .. "s")
+	end)
+
+	-- Store the connection
+	self.GrowthTimers[spotId] = connection
+
+	print("✅ Safe growth timer started successfully for " .. cropType)
+	return true
+end
+
+-- REPLACE the CleanupGrowthTimer method with this safe version:
+
+function CropCreation:CleanupGrowthTimer(gardenSpotModel)
+	if not gardenSpotModel then return end
+
+	-- FIXED: Use safe ID generation instead of GetDebugId()
+	local spotId = self:GenerateSafeSpotId(gardenSpotModel)
+
+	if self.GrowthTimers[spotId] then
+		self.GrowthTimers[spotId]:Disconnect()
+		self.GrowthTimers[spotId] = nil
+		print("🧹 Cleaned up growth timer for spot: " .. spotId)
+	end
+end
+
+-- ALSO UPDATE the ClearGardenSpot method to use safe ID:
+
+function CropCreation:ClearGardenSpot(gardenSpotModel)
+	print("🧹 CropCreation: Clearing garden spot: " .. gardenSpotModel.Name)
+
+	-- Clean up growth timer FIRST using safe ID
+	self:CleanupGrowthTimer(gardenSpotModel)
+
+	-- Remove crop models
+	for _, child in pairs(gardenSpotModel:GetChildren()) do
+		if child:IsA("Model") and child.Name == "CropModel" then
+			child:Destroy()
+		end
+	end
+
+	-- Reset attributes
+	gardenSpotModel:SetAttribute("IsEmpty", true)
+	gardenSpotModel:SetAttribute("PlantType", "")
+	gardenSpotModel:SetAttribute("SeedType", "")
+	gardenSpotModel:SetAttribute("GrowthStage", 0)
+	gardenSpotModel:SetAttribute("PlantedTime", 0)
+	gardenSpotModel:SetAttribute("Rarity", "common")
+	gardenSpotModel:SetAttribute("IsMutation", false)
+	gardenSpotModel:SetAttribute("MutationType", "")
+
+	print("✅ Garden spot cleared and timer cleaned up safely")
+end
 function CropCreation:Initialize(gameCoreRef, cropVisualRef, mutationSystemRef)
 	print("CropCreation: Initializing Garden-based crop creation system...")
 
@@ -88,6 +306,8 @@ end
 
 -- ========== GARDEN CROP PLANTING ==========
 
+-- REPLACE the PlantSeed method in CropCreation.lua with this enhanced version:
+
 function CropCreation:PlantSeed(player, gardenSpotModel, seedId, seedData)
 	print("🌱 CropCreation: PlantSeed on Garden - " .. player.Name .. " wants to plant " .. seedId)
 
@@ -111,8 +331,8 @@ function CropCreation:PlantSeed(player, gardenSpotModel, seedId, seedData)
 		return false
 	end
 
-	-- Step 5: Get/validate seed data
-	local finalSeedData = seedData or ItemConfig.GetSeedData(seedId)
+	-- Step 5: Get seed data from ItemConfig with proper growth time
+	local finalSeedData = self:GetEnhancedSeedData(seedId, seedData)
 	if not finalSeedData then
 		warn("❌ CropCreation: Seed data not found for " .. seedId)
 		self:SendNotification(player, "Invalid Seed", "Seed data not found for " .. seedId .. "!", "error")
@@ -138,13 +358,13 @@ function CropCreation:PlantSeed(player, gardenSpotModel, seedId, seedData)
 	-- Step 9: Update garden spot state
 	self:UpdateGardenSpotState(gardenSpotModel, cropType, seedId, cropRarity)
 
-	-- Step 10: Start growth timer
+	-- Step 10: Start growth timer with correct time from ItemConfig
 	self:StartCropGrowthTimer(gardenSpotModel, finalSeedData, cropType, cropRarity)
 
 	-- Step 11: Check for immediate mutations
 	if MutationSystem then
 		spawn(function()
-			wait(0.5) -- Small delay to ensure spot is fully set up
+			wait(0.5)
 			MutationSystem:CheckForImmediateMutation(player, gardenSpotModel, cropType)
 		end)
 	end
@@ -153,13 +373,179 @@ function CropCreation:PlantSeed(player, gardenSpotModel, seedId, seedData)
 	self:UpdatePlayerStats(player, "seedsPlanted", 1)
 	GameCore:SavePlayerData(player)
 
-	-- Step 13: Send success notification
+	-- Step 13: Send success notification with actual grow time
 	self:SendGardenPlantingSuccessNotification(player, seedId, finalSeedData, cropRarity)
 
-	print("🎉 CropCreation: Successfully planted " .. seedId .. " (" .. cropRarity .. ") on garden for " .. player.Name)
+	print("🎉 CropCreation: Successfully planted " .. seedId .. " (" .. cropRarity .. ") with " .. finalSeedData.growTime .. "s grow time")
 	return true
 end
 
+-- ADD this new method to get enhanced seed data with correct growth times:
+function CropCreation:GetEnhancedSeedData(seedId, providedSeedData)
+	-- First try to get from ItemConfig
+	local itemConfigSeed = ItemConfig.ShopItems[seedId]
+	if itemConfigSeed and itemConfigSeed.farmingData then
+		local seedData = {}
+
+		-- Copy all farming data from ItemConfig
+		for key, value in pairs(itemConfigSeed.farmingData) do
+			seedData[key] = value
+		end
+
+		-- Ensure we have the correct grow time
+		if not seedData.growTime then
+			warn("⚠️ CropCreation: No growTime in ItemConfig for " .. seedId .. ", using default")
+			seedData.growTime = 300 -- 5 minute default
+		end
+
+		print("📊 CropCreation: Using ItemConfig data for " .. seedId .. " (growTime: " .. seedData.growTime .. "s)")
+		return seedData
+	end
+
+	-- Fallback to provided data
+	if providedSeedData then
+		if not providedSeedData.growTime then
+			providedSeedData.growTime = 300 -- Default fallback
+		end
+		print("📊 CropCreation: Using provided data for " .. seedId .. " (growTime: " .. providedSeedData.growTime .. "s)")
+		return providedSeedData
+	end
+
+	-- Final fallback - construct basic seed data
+	warn("⚠️ CropCreation: No seed data found for " .. seedId .. ", creating fallback")
+	return {
+		growTime = 300,
+		yieldAmount = 1,
+		resultCropId = seedId:gsub("_seeds", ""),
+		stages = {"planted", "sprouting", "growing", "flowering", "ready"}
+	}
+end
+
+-- ADD this fallback method for when CropVisual fails:
+function CropCreation:CreateBasicReadyIndicator(gardenSpotModel, cropType)
+	print("🔧 Creating basic ready indicator for " .. cropType)
+
+	-- Find the crop model
+	local cropModel = gardenSpotModel:FindFirstChild("CropModel")
+	if not cropModel or not cropModel.PrimaryPart then
+		return
+	end
+
+	-- Add a simple glow effect to indicate readiness
+	local existingLight = cropModel.PrimaryPart:FindFirstChild("ReadyGlow")
+	if not existingLight then
+		local readyGlow = Instance.new("PointLight")
+		readyGlow.Name = "ReadyGlow"
+		readyGlow.Color = Color3.fromRGB(255, 215, 0) -- Golden glow
+		readyGlow.Brightness = 1.5
+		readyGlow.Range = 8
+		readyGlow.Parent = cropModel.PrimaryPart
+
+		print("✅ Added basic ready glow to " .. cropType)
+	end
+end
+
+-- ENHANCE the existing CreateHarvestReadyEffects method:
+function CropCreation:CreateHarvestReadyEffects(gardenSpotModel, cropType, cropRarity)
+	print("✨ Creating harvest-ready effects for " .. cropType)
+
+	-- Find the crop model
+	local cropModel = gardenSpotModel:FindFirstChild("CropModel")
+	if not cropModel or not cropModel.PrimaryPart then
+		print("⚠️ No crop model found for ready effects")
+		return
+	end
+
+	-- Create enhanced ready particles
+	for i = 1, 5 do
+		local particle = Instance.new("Part")
+		particle.Name = "HarvestReadyParticle"
+		particle.Size = Vector3.new(0.3, 0.3, 0.3)
+		particle.Material = Enum.Material.Neon
+		particle.Color = Color3.fromRGB(255, 215, 0) -- Golden color
+		particle.CanCollide = false
+		particle.Anchored = true
+		particle.Shape = Enum.PartType.Ball
+
+		local position = cropModel.PrimaryPart.Position + Vector3.new(
+			math.random(-3, 3),
+			math.random(2, 5),
+			math.random(-3, 3)
+		)
+		particle.Position = position
+		particle.Parent = workspace
+
+		-- Animate the particle
+		spawn(function()
+			-- Float upward with sparkling effect
+			for j = 1, 30 do
+				if particle and particle.Parent then
+					particle.Position = particle.Position + Vector3.new(0, 0.1, 0)
+					particle.Transparency = j / 30
+					wait(0.1)
+				else
+					break
+				end
+			end
+
+			-- Clean up
+			if particle and particle.Parent then
+				particle:Destroy()
+			end
+		end)
+
+		wait(0.1) -- Small delay between particles
+	end
+
+	print("✨ Harvest-ready effects created for " .. cropType)
+end
+
+-- ADD this method to verify timer completion:
+function CropCreation:VerifyTimerCompletion(gardenSpotModel, expectedCropType)
+	if not gardenSpotModel or not gardenSpotModel.Parent then
+		return false
+	end
+
+	local growthStage = gardenSpotModel:GetAttribute("GrowthStage") or 0
+	local plantType = gardenSpotModel:GetAttribute("PlantType") or ""
+	local isEmpty = gardenSpotModel:GetAttribute("IsEmpty")
+
+	local isReady = growthStage >= 4 and not isEmpty and plantType == expectedCropType
+
+	print("🔍 Timer completion verification:")
+	print("  Growth Stage: " .. growthStage .. " (ready if >= 4)")
+	print("  Plant Type: " .. plantType .. " (expected: " .. expectedCropType .. ")")
+	print("  Is Empty: " .. tostring(isEmpty))
+	print("  Is Ready: " .. tostring(isReady))
+
+	return isReady
+end
+
+-- ENHANCE the SendGardenPlantingSuccessNotification to show actual grow time:
+function CropCreation:SendGardenPlantingSuccessNotification(player, seedId, seedData, cropRarity)
+	local seedInfo = ItemConfig.ShopItems and ItemConfig.ShopItems[seedId]
+	local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
+
+	local growTime = seedData.growTime or 300
+	local minutes = math.floor(growTime / 60)
+	local seconds = growTime % 60
+
+	local timeText
+	if minutes > 0 then
+		if seconds > 0 then
+			timeText = minutes .. "m " .. seconds .. "s"
+		else
+			timeText = minutes .. " minutes"
+		end
+	else
+		timeText = seconds .. " seconds"
+	end
+
+	local message = "Successfully planted " .. seedName .. " in your garden!\n🌟 Rarity: " .. cropRarity .. 
+		"\n⏰ Ready in " .. timeText
+
+	self:SendNotification(player, "🌱 Garden Seed Planted!", message, "success")
+end
 -- ========== GARDEN VALIDATION ==========
 
 function CropCreation:ValidateGardenPlantingInputs(player, gardenSpotModel, seedId)
@@ -306,97 +692,32 @@ function CropCreation:UpdateGardenSpotState(gardenSpotModel, cropType, seedId, c
 	gardenSpotModel:SetAttribute("IsGardenCrop", true)
 end
 
-function CropCreation:ClearGardenSpot(gardenSpotModel)
-	print("🧹 CropCreation: Clearing garden spot: " .. gardenSpotModel.Name)
-
-	-- Remove crop models
-	for _, child in pairs(gardenSpotModel:GetChildren()) do
-		if child:IsA("Model") and child.Name == "CropModel" then
-			child:Destroy()
-		end
+-- REPLACE the existing FireGrowthStageEvent method with this enhanced version:
+function CropCreation:FireGrowthStageEvent(gardenSpotModel, cropType, cropRarity, stageName, stageIndex)
+	-- Fire event for other systems that need to know about growth changes
+	if GameCore and GameCore.Events and GameCore.Events.CropGrowthStageChanged then
+		pcall(function()
+			GameCore.Events.CropGrowthStageChanged:Fire(gardenSpotModel, cropType, cropRarity, stageName, stageIndex)
+		end)
 	end
 
-	-- Reset attributes
-	gardenSpotModel:SetAttribute("IsEmpty", true)
-	gardenSpotModel:SetAttribute("PlantType", "")
-	gardenSpotModel:SetAttribute("SeedType", "")
-	gardenSpotModel:SetAttribute("GrowthStage", 0)
-	gardenSpotModel:SetAttribute("PlantedTime", 0)
-	gardenSpotModel:SetAttribute("Rarity", "common")
-	gardenSpotModel:SetAttribute("IsMutation", false)
-	gardenSpotModel:SetAttribute("MutationType", "")
-
-	-- Clean up growth timer
-	local spotId = tostring(gardenSpotModel)
-	if self.GrowthTimers[spotId] then
-		self.GrowthTimers[spotId]:Disconnect()
-		self.GrowthTimers[spotId] = nil
-	end
+	-- Debug print for tracking
+	print("📡 Growth stage event fired: " .. cropType .. " -> " .. stageName .. " (stage " .. stageIndex .. ")")
 end
 
--- ========== GARDEN GROWTH SYSTEM ==========
-
-function CropCreation:StartCropGrowthTimer(gardenSpotModel, seedData, cropType, cropRarity)
-	local spotId = tostring(gardenSpotModel)
-
-	-- Cancel any existing timer for this spot
-	if self.GrowthTimers[spotId] then
-		self.GrowthTimers[spotId]:Disconnect()
+-- ADD this debug method to check timer status:
+function CropCreation:DebugGrowthTimers()
+	print("=== GROWTH TIMER DEBUG ===")
+	local activeCount = 0
+	for spotId, timer in pairs(self.GrowthTimers) do
+		if timer then
+			activeCount = activeCount + 1
+			print("  Active timer: " .. spotId)
+		end
 	end
-
-	local growTime = seedData.growTime or 300 -- Default 5 minutes
-	local stages = {"planted", "sprouting", "growing", "flowering", "ready"}
-	local stageTime = growTime / (#stages - 1)
-
-	print("🌱 CropCreation: Starting growth timer for garden " .. cropType .. " (" .. growTime .. "s total)")
-
-	-- Create growth coroutine
-	self.GrowthTimers[spotId] = spawn(function()
-		for stage = 1, #stages - 1 do
-			wait(stageTime)
-
-			if gardenSpotModel and gardenSpotModel.Parent then
-				local currentStage = gardenSpotModel:GetAttribute("GrowthStage") or 0
-				if currentStage == stage - 1 then -- Only advance if still in expected stage
-					local newStageIndex = stage
-					local newStageName = stages[stage + 1]
-
-					gardenSpotModel:SetAttribute("GrowthStage", newStageIndex)
-
-					print("🌱 Garden " .. cropType .. " advanced to stage " .. newStageIndex .. " (" .. newStageName .. ")")
-
-					-- Update visual through CropVisual module
-					if CropVisual then
-						CropVisual:UpdateCropStage(gardenSpotModel, cropType, cropRarity, newStageName, newStageIndex)
-					end
-
-					-- Fire growth event for other systems
-					self:FireGrowthStageEvent(gardenSpotModel, cropType, cropRarity, newStageName, newStageIndex)
-				else
-					print("🌱 Garden growth timer stopped - stage mismatch")
-					break
-				end
-			else
-				print("🌱 Garden growth timer stopped - spot no longer exists")
-				break
-			end
-		end
-
-		-- Mark as fully grown
-		if gardenSpotModel and gardenSpotModel.Parent then
-			gardenSpotModel:SetAttribute("GrowthStage", 4)
-			if CropVisual then
-				CropVisual:UpdateCropStage(gardenSpotModel, cropType, cropRarity, "ready", 4)
-			end
-			print("🌱 Garden " .. cropType .. " fully grown and ready for harvest!")
-		end
-
-		-- Clean up timer reference
-		self.GrowthTimers[spotId] = nil
-	end)
+	print("Total active timers: " .. activeCount)
+	print("========================")
 end
-
--- ========== GARDEN HARVESTING ==========
 
 function CropCreation:HarvestCrop(player, gardenSpotModel)
 	print("🌾 CropCreation: Harvesting garden crop for " .. player.Name)
@@ -797,13 +1118,6 @@ function CropCreation:UpdatePlayerStats(player, statName, amount)
 	playerData.stats[statName] = (playerData.stats[statName] or 0) + amount
 end
 
-function CropCreation:FireGrowthStageEvent(gardenSpotModel, cropType, cropRarity, stageName, stageIndex)
-	-- Fire event for other systems that need to know about growth changes
-	if GameCore and GameCore.Events and GameCore.Events.CropGrowthStageChanged then
-		GameCore.Events.CropGrowthStageChanged:Fire(gardenSpotModel, cropType, cropRarity, stageName, stageIndex)
-	end
-end
-
 -- ========== NOTIFICATION HELPERS ==========
 
 function CropCreation:SendNotification(player, title, message, type)
@@ -812,16 +1126,6 @@ function CropCreation:SendNotification(player, title, message, type)
 	else
 		print("[" .. title .. "] " .. message .. " (to " .. player.Name .. ")")
 	end
-end
-
-function CropCreation:SendGardenPlantingSuccessNotification(player, seedId, seedData, cropRarity)
-	local seedInfo = ItemConfig.ShopItems and ItemConfig.ShopItems[seedId]
-	local seedName = seedInfo and seedInfo.name or seedId:gsub("_", " ")
-
-	local message = "Successfully planted " .. seedName .. " in your garden!\n🌟 Rarity: " .. cropRarity .. 
-		"\n⏰ Ready in " .. math.floor(seedData.growTime/60) .. " minutes."
-
-	self:SendNotification(player, "🌱 Garden Seed Planted!", message, "success")
 end
 
 function CropCreation:SendGardenHarvestSuccessNotification(player, cropInfo, yield)

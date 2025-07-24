@@ -1,5 +1,5 @@
 local Replicated = game:GetService("ReplicatedStorage")
-local folder = Replicated:WaitForChild("GameRemotes")
+local folder = Replicated:WaitForChild("Events")
 local GrassMowed = folder:WaitForChild("GrassMowed")
 local GrassAMT = require(script.Parent.Parent:WaitForChild("MowerConfig"))
 local plr = script.Parent.Parent.Parent.Parent

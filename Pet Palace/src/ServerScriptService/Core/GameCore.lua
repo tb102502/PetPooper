@@ -130,29 +130,76 @@ function GameCore:LoadModules()
 	return modulesLoaded >= 1 -- At least one module required
 end
 
+-- REPLACE the InitializeLoadedModules method in your GameCore.lua with this enhanced version:
+
 function GameCore:InitializeLoadedModules()
-	print("GameCore: Initializing loaded modules...")
+	print("GameCore: Initializing loaded modules with proper dependencies...")
 
 	-- Initialize FarmPlot first (needed by other modules)
 	if FarmPlot then
 		print("GameCore: Initializing FarmPlot...")
-		local success = pcall(function()
+		local success, error = pcall(function()
 			return FarmPlot:Initialize(self)
 		end)
 
 		if success then
 			print("GameCore: ✅ FarmPlot initialized")
-			_G.FarmPlot = FarmPlot  -- ← ADD THIS LINE
+			_G.FarmPlot = FarmPlot
 			print("GameCore: ✅ FarmPlot set globally")
 		else
-			warn("GameCore: ❌ FarmPlot initialization failed")
+			warn("GameCore: ❌ FarmPlot initialization failed: " .. tostring(error))
+		end
+	end
+
+	-- Initialize CropVisual second (needed by CropCreation)
+	if CropVisual then
+		print("GameCore: Initializing CropVisual...")
+		local success, error = pcall(function()
+			return CropVisual:Initialize(self, nil) -- CropCreation will be passed later
+		end)
+
+		if success then
+			print("GameCore: ✅ CropVisual initialized")
+			_G.CropVisual = CropVisual
+		else
+			warn("GameCore: ❌ CropVisual initialization failed: " .. tostring(error))
+		end
+	end
+
+	-- Initialize CropCreation third (depends on CropVisual)
+	if CropCreation then
+		print("GameCore: Initializing CropCreation...")
+		local success, error = pcall(function()
+			return CropCreation:Initialize(self, CropVisual, MutationSystem)
+		end)
+
+		if success then
+			print("GameCore: ✅ CropCreation initialized")
+			_G.CropCreation = CropCreation
+		else
+			warn("GameCore: ❌ CropCreation initialization failed: " .. tostring(error))
+		end
+	end
+
+	-- Update CropVisual with CropCreation reference
+	if CropVisual and CropCreation then
+		print("GameCore: Updating CropVisual with CropCreation reference...")
+		local success, error = pcall(function()
+			-- Re-initialize CropVisual with CropCreation reference
+			return CropVisual:Initialize(self, CropCreation)
+		end)
+
+		if success then
+			print("GameCore: ✅ CropVisual updated with CropCreation reference")
+		else
+			warn("GameCore: ❌ CropVisual update failed: " .. tostring(error))
 		end
 	end
 
 	-- Initialize CowCreationModule
 	if CowCreationModule then
 		print("GameCore: Initializing CowCreationModule...")
-		local success = pcall(function()
+		local success, error = pcall(function()
 			return CowCreationModule:Initialize(self, ItemConfig)
 		end)
 
@@ -160,14 +207,14 @@ function GameCore:InitializeLoadedModules()
 			print("GameCore: ✅ CowCreationModule initialized")
 			_G.CowCreationModule = CowCreationModule
 		else
-			warn("GameCore: ❌ CowCreationModule initialization failed")
+			warn("GameCore: ❌ CowCreationModule initialization failed: " .. tostring(error))
 		end
 	end
 
 	-- Initialize CowMilkingModule
 	if CowMilkingModule then
 		print("GameCore: Initializing CowMilkingModule...")
-		local success = pcall(function()
+		local success, error = pcall(function()
 			return CowMilkingModule:Initialize(self, CowCreationModule)
 		end)
 
@@ -175,30 +222,83 @@ function GameCore:InitializeLoadedModules()
 			print("GameCore: ✅ CowMilkingModule initialized")
 			_G.CowMilkingModule = CowMilkingModule
 		else
-			warn("GameCore: ❌ CowMilkingModule initialization failed")
+			warn("GameCore: ❌ CowMilkingModule initialization failed: " .. tostring(error))
 		end
 	end
 
-	-- Initialize crop modules if available
-	if CropCreation then
-		local success = pcall(function()
-			return CropCreation:Initialize(self, CropVisual, MutationSystem)
+	-- Initialize MutationSystem if available
+	if MutationSystem and CropCreation and CropVisual then
+		print("GameCore: Initializing MutationSystem...")
+		local success, error = pcall(function()
+			return MutationSystem:Initialize(self, CropCreation, CropVisual)
 		end)
+
 		if success then
-			print("GameCore: ✅ CropCreation initialized")
+			print("GameCore: ✅ MutationSystem initialized")
+		else
+			warn("GameCore: ❌ MutationSystem initialization failed: " .. tostring(error))
 		end
 	end
 
-	if CropVisual then
-		local success = pcall(function()
-			return CropVisual:Initialize(self, CropCreation)
-		end)
-		if success then
-			print("GameCore: ✅ CropVisual initialized")
-		end
+	-- Validate all module references are available globally
+	print("GameCore: Validating global module references...")
+	local moduleStatus = {
+		FarmPlot = _G.FarmPlot ~= nil,
+		CropCreation = _G.CropCreation ~= nil,
+		CropVisual = _G.CropVisual ~= nil,
+		CowCreationModule = _G.CowCreationModule ~= nil,
+		CowMilkingModule = _G.CowMilkingModule ~= nil,
+		GameCore = _G.GameCore ~= nil
+	}
+
+	for moduleName, isAvailable in pairs(moduleStatus) do
+		print("  " .. moduleName .. ": " .. (isAvailable and "✅" or "❌"))
 	end
+
+	print("GameCore: Module initialization complete!")
 end
 
+-- ADD this method to verify module connections:
+function GameCore:VerifyModuleConnections()
+	print("=== MODULE CONNECTION VERIFICATION ===")
+
+	-- Test CropCreation -> CropVisual connection
+	if _G.CropCreation and _G.CropVisual then
+		print("✅ CropCreation <-> CropVisual: Connected")
+	else
+		warn("❌ CropCreation <-> CropVisual: Missing connection")
+	end
+
+	-- Test FarmPlot -> GameCore connection
+	if _G.FarmPlot and _G.GameCore then
+		print("✅ FarmPlot <-> GameCore: Connected")
+	else
+		warn("❌ FarmPlot <-> GameCore: Missing connection")
+	end
+
+	-- Test growth timer system
+	if _G.CropCreation then
+		local cropCreation = _G.CropCreation
+		if cropCreation.GrowthTimers then
+			print("✅ Growth Timer System: Initialized")
+			print("  Active timers: " .. (cropCreation:CountTable(cropCreation.GrowthTimers) or 0))
+		else
+			warn("❌ Growth Timer System: Not initialized")
+		end
+	end
+
+	print("=====================================")
+end
+
+-- ADD this helper method:
+function GameCore:CountTable(t)
+	if not t then return 0 end
+	local count = 0
+	for _ in pairs(t) do
+		count = count + 1
+	end
+	return count
+end
 -- ========== ADDED: FARM PLOT INTEGRATION METHODS ==========
 
 function GameCore:CreateSimpleFarmPlot(player)
@@ -293,7 +393,335 @@ function GameCore:GetSimpleFarmPosition(player)
 		return CFrame.new(finalPosition)
 	end
 end
+-- ADD this method to your existing GameCore.lua (around line 300, after ProcessFarmPlotPurchase)
 
+function GameCore:ProcessWheatFieldPurchase(player, playerData, item, quantity)
+	print("🌾 GameCore: Processing wheat field access purchase for " .. player.Name)
+
+	-- Initialize farming data if needed
+	if not playerData.farming then
+		playerData.farming = {
+			plots = 0,
+			inventory = {}
+		}
+	end
+
+	-- Add wheat field access flags
+	playerData.farming.wheatFieldAccess = true
+	playerData.farming.wheatFieldUnlocked = os.time()
+
+	-- Give bonus wheat seeds
+	playerData.farming.inventory = playerData.farming.inventory or {}
+	playerData.farming.inventory.wheat_seeds = (playerData.farming.inventory.wheat_seeds or 0) + 10
+
+	-- Create wheat field region if FarmPlot module is available
+	local success = false
+	if _G.FarmPlot and _G.FarmPlot.CreateWheatField then
+		success = _G.FarmPlot:CreateWheatField(player)
+	else
+		-- Fallback: just mark as having access
+		success = true
+		print("🌾 GameCore: Wheat field access granted (no physical wheat field module)")
+	end
+
+	if success then
+		print("🌾 GameCore: Wheat field access successfully granted to " .. player.Name)
+
+		-- Send notification through GameCore's notification system
+		self:SendNotification(player, "🌾 Wheat Field Unlocked!", 
+			"Advanced farming is now available!\n\n🎁 Bonus: 10 FREE Wheat Seeds!\n\n• Plant wheat for higher profits\n• Buy the scythe tool for efficient harvesting\n• Scale up your farming operation!", "success")
+
+		return true
+	else
+		print("❌ GameCore: Wheat field creation failed for " .. player.Name)
+		return false
+	end
+end
+
+-- UPDATE the ProcessFarmPlotPurchase method to handle the new progression
+-- REPLACE your existing ProcessFarmPlotPurchase with this enhanced version:
+
+function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
+	print("🌾 GameCore: Processing farm plot purchase for " .. player.Name)
+
+	-- Handle different farm plot types
+	if item.id == "farm_plot_starter" then
+		print("🌱 Processing garden plot starter (100 coins)")
+
+		-- Initialize farming data
+		if not playerData.farming then
+			playerData.farming = {
+				plots = 1,
+				inventory = {
+					carrot_seeds = 5,
+					potato_seeds = 3
+				}
+			}
+		else
+			playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+		end
+
+		-- Create garden region using FarmPlot module
+		local success = false
+		if _G.FarmPlot then
+			success = _G.FarmPlot:CreateSimpleFarmPlot(player)
+		end
+
+		if not success then
+			-- Revert farming data if garden creation failed
+			if playerData.farming.plots then
+				playerData.farming.plots = playerData.farming.plots - quantity
+			end
+			return false
+		end
+
+		print("🌱 Created garden region for " .. player.Name)
+		return true
+
+	elseif item.id == "wheat_field_access" then
+		print("🌾 Processing wheat field access (10,000 coins)")
+		return self:ProcessWheatFieldPurchase(player, playerData, item, quantity)
+
+		-- Handle farm expansions
+	elseif item.id:find("farm_expansion") then
+		local expansionLevel = tonumber(item.id:match("farm_expansion_(%d+)"))
+		if expansionLevel and FarmPlot then
+			print("🌾 Processing farm expansion to level " .. expansionLevel)
+
+			playerData.farming = playerData.farming or {plots = 0, inventory = {}}
+			playerData.farming.expansionLevel = expansionLevel
+
+			local success = FarmPlot:ExpandFarm(player, expansionLevel)
+			if not success then
+				return false
+			end
+
+			print("🌾 Expanded farm to level " .. expansionLevel .. " for " .. player.Name)
+			return true
+		end
+	end
+
+	-- Regular farm plot purchase (fallback)
+	if not playerData.farming then
+		playerData.farming = {plots = 0, inventory = {}}
+	end
+
+	playerData.farming.plots = (playerData.farming.plots or 0) + quantity
+
+	local success = self:CreateSimpleFarmPlot(player)
+	if not success then
+		playerData.farming.plots = playerData.farming.plots - quantity
+		return false
+	end
+
+	print("🌾 Added " .. quantity .. " farm plot(s), total: " .. playerData.farming.plots)
+	return true
+end
+
+-- ADD this method to handle cave access processing:
+
+function GameCore:ProcessCaveAccessPurchase(player, playerData, item, quantity)
+	print("🕳️ GameCore: Processing cave access purchase for " .. player.Name)
+
+	-- Initialize mining data
+	if not playerData.mining then
+		playerData.mining = {
+			inventory = {},
+			tools = {},
+			level = 1,
+			experience = 0
+		}
+	end
+
+	-- Add cave access flags
+	playerData.mining.caveAccess = true
+	playerData.mining.caveAccessUnlocked = os.time()
+
+	-- Give starter wooden pickaxe
+	playerData.mining.tools.wooden_pickaxe = {
+		durability = 50,
+		maxDurability = 50,
+		acquiredTime = os.time()
+	}
+
+	-- Create cave access if mining module is available
+	local success = true -- Default to success since cave access is mainly data-driven
+
+	print("🕳️ GameCore: Cave access successfully granted to " .. player.Name)
+
+	-- Send notification
+	self:SendNotification(player, "🕳️ Cave Access Granted!", 
+		"Mining operations are now available!\n\n🎁 Bonus: FREE Wooden Pickaxe!\n\n• Mine copper and bronze ore in Cave 1\n• Upgrade to better pickaxes for rare ores\n• Diversify your income with mining!", "success")
+
+	return true
+end
+
+-- UPDATE the GetDefaultPlayerData to include progression flags:
+
+function GameCore:GetDefaultPlayerData()
+	return {
+		coins = 100,
+		farmTokens = 0,
+		trimmings = 0,
+		milk = 0,
+		upgrades = {},
+		purchaseHistory = {},
+		farming = {
+			plots = 0,
+			inventory = {},
+			level = 1,
+			-- NEW: Progression flags
+			wheatFieldAccess = false,
+			wheatFieldUnlocked = nil
+		},
+		mining = {
+			inventory = {},
+			tools = {},
+			level = 1,
+			experience = 0,
+			-- NEW: Progression flags
+			caveAccess = false,
+			caveAccessUnlocked = nil
+		},
+		crafting = {
+			inventory = {},
+			recipes = {},
+			stations = {},
+			level = 1
+		},
+		livestock = {
+			cows = {}
+		},
+		stats = {
+			coinsEarned = 100,
+			cropsHarvested = 0,
+			milkCollected = 0,
+			itemsSold = 0,
+			oresMined = 0,
+			itemsCrafted = 0,
+			trimmingsEarned = 0
+		},
+		firstJoin = os.time(),
+		lastSave = os.time()
+	}
+end
+
+-- ADD helper methods to check player progression:
+
+function GameCore:HasPlayerUnlockedWheatField(player)
+	local playerData = self:GetPlayerData(player)
+	if not playerData or not playerData.farming then return false end
+
+	return playerData.farming.wheatFieldAccess == true or 
+		(playerData.purchaseHistory and playerData.purchaseHistory.wheat_field_access == true)
+end
+
+function GameCore:HasPlayerUnlockedCaveAccess(player)
+	local playerData = self:GetPlayerData(player)
+	if not playerData or not playerData.mining then return false end
+
+	return playerData.mining.caveAccess == true or 
+		(playerData.purchaseHistory and playerData.purchaseHistory.cave_access_pass == true)
+end
+
+function GameCore:GetPlayerProgressionLevel(player)
+	local playerData = self:GetPlayerData(player)
+	if not playerData then return 0 end
+
+	local hasGarden = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+	local hasWheatField = self:HasPlayerUnlockedWheatField(player)
+	local hasCaveAccess = self:HasPlayerUnlockedCaveAccess(player)
+
+	if hasCaveAccess then return 3 -- Mining unlocked
+	elseif hasWheatField then return 2 -- Wheat farming unlocked
+	elseif hasGarden then return 1 -- Basic farming unlocked
+	else return 0 -- Just starting (only cow milking)
+	end
+end
+
+-- ADD debugging functions for the new progression system:
+
+function GameCore:DebugPlayerProgression(player)
+	print("=== PLAYER PROGRESSION DEBUG ===")
+	print("Player: " .. player.Name)
+
+	local playerData = self:GetPlayerData(player)
+	if not playerData then 
+		print("❌ No player data found")
+		return 
+	end
+
+	print("💰 Coins: " .. (playerData.coins or 0))
+	print("🎫 Farm Tokens: " .. (playerData.farmTokens or 0))
+	print("🥛 Milk: " .. (playerData.milk or 0))
+
+	print("\n📊 PROGRESSION STATUS:")
+	local progressionLevel = self:GetPlayerProgressionLevel(player)
+	print("Current Level: " .. progressionLevel)
+
+	-- Check each progression step
+	local hasGarden = playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+	print("1️⃣ Garden (100 coins): " .. (hasGarden and "✅ UNLOCKED" or "🔒 LOCKED"))
+
+	local hasWheatField = self:HasPlayerUnlockedWheatField(player)
+	print("2️⃣ Wheat Field (10,000 coins): " .. (hasWheatField and "✅ UNLOCKED" or "🔒 LOCKED"))
+
+	local hasCaveAccess = self:HasPlayerUnlockedCaveAccess(player)
+	print("3️⃣ Cave Access (250,000 coins): " .. (hasCaveAccess and "✅ UNLOCKED" or "🔒 LOCKED"))
+
+	-- Show purchase history
+	print("\n🛒 PURCHASE HISTORY:")
+	if playerData.purchaseHistory then
+		for itemId, purchased in pairs(playerData.purchaseHistory) do
+			if purchased then
+				print("  ✅ " .. itemId)
+			end
+		end
+	else
+		print("  No purchases yet")
+	end
+
+	-- Show next goal
+	print("\n🎯 NEXT GOAL:")
+	if progressionLevel == 0 then
+		print("  Buy Garden (100 coins) - Need " .. math.max(0, 100 - (playerData.coins or 0)) .. " more coins")
+	elseif progressionLevel == 1 then
+		print("  Buy Wheat Field Access (10,000 coins) - Need " .. math.max(0, 10000 - (playerData.coins or 0)) .. " more coins")
+	elseif progressionLevel == 2 then
+		print("  Buy Cave Access (250,000 coins) - Need " .. math.max(0, 250000 - (playerData.coins or 0)) .. " more coins")
+	else
+		print("  All major progression unlocked! Focus on upgrades and premium items.")
+	end
+
+	print("===============================")
+end
+
+-- Global debug function
+_G.DebugProgression = function(playerName)
+	local player = game.Players:FindFirstChild(playerName)
+	if not player then
+		print("Player not found: " .. playerName)
+		return
+	end
+
+	if GameCore and GameCore.DebugPlayerProgression then
+		GameCore:DebugPlayerProgression(player)
+	else
+		print("GameCore not available")
+	end
+end
+
+print("✅ GAMECORE PROGRESSION SYSTEM UPDATED!")
+print("🎯 NEW FEATURES:")
+print("  ✅ Wheat field access processing")
+print("  ✅ Cave access processing with starter tool")
+print("  ✅ Progression level tracking")
+print("  ✅ Enhanced default player data structure")
+print("  ✅ Helper methods for checking unlock status")
+print("  ✅ Debug functions for testing progression")
+print("")
+print("🧪 DEBUG COMMANDS:")
+print("  _G.DebugProgression('PlayerName') - Check player's progression status")
 -- ========== CROP SYSTEM INTEGRATION ==========
 
 function GameCore:PlantSeed(player, plotModel, seedId, seedData)
@@ -560,82 +988,6 @@ function GameCore:SetupEventHandlers()
 	print("GameCore: ✅ Event handlers setup complete")
 end
 
--- ========== FARM PLOT PURCHASE PROCESSING ==========
-
-function GameCore:ProcessFarmPlotPurchase(player, playerData, item, quantity)
-	print("🌾 GameCore: Processing garden plot purchase for " .. player.Name)
-
-	-- Handle farm plot starter (creates garden region instead of separate farm)
-	if item.id == "farm_plot_starter" then
-		print("🌱 Processing garden plot starter")
-
-		-- Initialize farming data
-		if not playerData.farming then
-			playerData.farming = {
-				plots = 1,
-				inventory = {
-					carrot_seeds = 5,
-					corn_seeds = 3
-				}
-			}
-		else
-			playerData.farming.plots = (playerData.farming.plots or 0) + quantity
-		end
-
-		-- Create garden region using FarmPlot module
-		local success = false
-		if _G.FarmPlot then
-			success = _G.FarmPlot:CreateSimpleFarmPlot(player)
-		end
-
-		if not success then
-			-- Revert farming data if garden creation failed
-			if playerData.farming.plots then
-				playerData.farming.plots = playerData.farming.plots - quantity
-			end
-			return false
-		end
-
-		print("🌱 Created garden region for " .. player.Name)
-		return true
-	end
-
-	-- Handle farm expansions
-	if item.id:find("farm_expansion") then
-		local expansionLevel = tonumber(item.id:match("farm_expansion_(%d+)"))
-		if expansionLevel and FarmPlot then
-			print("🌾 Processing farm expansion to level " .. expansionLevel)
-
-			playerData.farming = playerData.farming or {plots = 0, inventory = {}}
-			playerData.farming.expansionLevel = expansionLevel
-
-			local success = FarmPlot:ExpandFarm(player, expansionLevel)
-			if not success then
-				return false
-			end
-
-			print("🌾 Expanded farm to level " .. expansionLevel .. " for " .. player.Name)
-			return true
-		end
-	end
-
-	-- Regular farm plot purchase (fallback)
-	if not playerData.farming then
-		playerData.farming = {plots = 0, inventory = {}}
-	end
-
-	playerData.farming.plots = (playerData.farming.plots or 0) + quantity
-
-	local success = self:CreateSimpleFarmPlot(player)
-	if not success then
-		playerData.farming.plots = playerData.farming.plots - quantity
-		return false
-	end
-
-	print("🌾 Added " .. quantity .. " farm plot(s), total: " .. playerData.farming.plots)
-	return true
-end
-
 -- ========== PLAYER MANAGEMENT ==========
 function GameCore:EnsurePlayerHasGarden(player)
 	if not _G.FarmPlot then
@@ -752,59 +1104,6 @@ function GameCore:CreateNewCowSafely(player, cowType, cowConfig)
 	end
 	return false
 end
-
--- ========== DATA MANAGEMENT ==========
-
--- ========== TRIMMINGS INTEGRATION FOR GAMECORE ==========
--- Add these modifications to your existing GameCore.lua
-
--- ========== UPDATE DEFAULT PLAYER DATA ==========
--- REPLACE your existing GetDefaultPlayerData method with this enhanced version:
-
-function GameCore:GetDefaultPlayerData()
-	return {
-		coins = 100,
-		farmTokens = 0,
-		trimmings = 0, -- ADDED: Trimmings currency
-		milk = 0,
-		upgrades = {},
-		purchaseHistory = {},
-		farming = {
-			plots = 0,
-			inventory = {},
-			level = 1
-		},
-		mining = {
-			inventory = {},
-			tools = {},
-			level = 1,
-			experience = 0
-		},
-		crafting = {
-			inventory = {},
-			recipes = {},
-			stations = {},
-			level = 1
-		},
-		livestock = {
-			cows = {}
-		},
-		stats = {
-			coinsEarned = 100,
-			cropsHarvested = 0,
-			milkCollected = 0,
-			itemsSold = 0,
-			oresMined = 0,
-			itemsCrafted = 0,
-			trimmingsEarned = 0 -- ADDED: Trimmings stat tracking
-		},
-		firstJoin = os.time(),
-		lastSave = os.time()
-	}
-end
-
--- ========== UPDATE LEADERSTATS CREATION ==========
--- REPLACE your existing CreatePlayerLeaderstats method:
 
 function GameCore:CreatePlayerLeaderstats(player)
 	local leaderstats = Instance.new("Folder")
@@ -1598,17 +1897,6 @@ function GameCore:DebugEnhancedStatus()
 		end
 	end
 	print("==============================")
-end
-
--- ========== COUNT UTILITY ==========
-
-function GameCore:CountTable(t)
-	if not t then return 0 end
-	local count = 0
-	for _ in pairs(t) do
-		count = count + 1
-	end
-	return count
 end
 
 -- ========== GLOBAL FUNCTIONS FOR TESTING ==========

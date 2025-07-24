@@ -317,57 +317,6 @@ function ShopSystem:ValidateItemFixed(item, itemId)
 	return true
 end
 
--- FIXED: Much more permissive showing logic
-function ShopSystem:ShouldShowItemFixed(item, itemId, playerData)
-	-- Always show basic starter items regardless of requirements
-	local alwaysShowItems = {
-		"farm_plot_starter",
-		"carrot_seeds", 
-		"potato_seeds",
-		"cabbage_seeds",
-		"cave_access_pass",
-		"basic_workbench"
-	}
-
-	for _, alwaysShow in ipairs(alwaysShowItems) do
-		if itemId == alwaysShow then
-			print("✅ Always showing starter item: " .. itemId)
-			return true
-		end
-	end
-
-	-- Don't show items explicitly marked as not purchasable
-	if item.notPurchasable == true then
-		print("🔒 Item not purchasable: " .. itemId)
-		return false
-	end
-
-	-- Check purchase requirements (only for advanced items)
-	if item.requiresPurchase and playerData then
-		local hasPurchased = playerData.purchaseHistory and playerData.purchaseHistory[item.requiresPurchase]
-		if not hasPurchased then
-			print("🔒 Item requires purchase: " .. itemId .. " requires " .. item.requiresPurchase)
-			return false
-		end
-	end
-
-	-- Check if already owned (for single-purchase items)
-	if item.maxQuantity == 1 and playerData then
-		local alreadyOwned = playerData.purchaseHistory and playerData.purchaseHistory[itemId]
-		if alreadyOwned then
-			print("🔒 Item already owned: " .. itemId)
-			return false
-		end
-	end
-
-	-- REMOVED: Overly restrictive category requirements
-	-- Most items should be visible even if requirements aren't met
-	-- Players can see what's available and work towards requirements
-
-	print("✅ Item will be shown: " .. itemId)
-	return true
-end
-
 -- Keep category-specific items handler
 function ShopSystem:HandleGetShopItemsByCategory(player, category)
 	print("🛒 ShopSystem: GetShopItemsByCategory request from " .. player.Name .. " for category: " .. tostring(category))
@@ -798,7 +747,185 @@ function ShopSystem:CreateEnhancedItemCopy(item, itemId, playerData)
 
 	return itemCopy
 end
+function ShopSystem:ProcessWheatFieldAccess(player, playerData, item, quantity)
+	print("🌾 ShopSystem: Processing wheat field access purchase for " .. player.Name)
 
+	-- Mark as having wheat field access
+	playerData.purchaseHistory = playerData.purchaseHistory or {}
+	playerData.purchaseHistory[item.id] = true
+
+	-- Initialize or update farming data
+	if not playerData.farming then
+		playerData.farming = {plots = 0, inventory = {}}
+	end
+
+	-- Add flag for wheat farming access
+	playerData.farming.wheatFieldAccess = true
+	playerData.farming.wheatFieldUnlocked = os.time() -- Track when unlocked
+
+	-- Give bonus wheat seeds as welcome gift
+	if not playerData.farming.inventory then
+		playerData.farming.inventory = {}
+	end
+
+	-- Give 10 free wheat seeds as a starter bonus
+	playerData.farming.inventory.wheat_seeds = (playerData.farming.inventory.wheat_seeds or 0) + 10
+
+	-- Create the wheat field area (if you have a module for this)
+	if self.GameCore and self.GameCore.CreateWheatField then
+		local success = self.GameCore:CreateWheatField(player)
+		if not success then
+			print("⚠️ ShopSystem: Wheat field creation failed, but purchase will continue")
+		end
+	end
+
+	-- Send success notification
+	self:SendNotification(player, "🌾 Wheat Field Unlocked!", 
+		"You now have access to wheat farming!\n\n🎁 Bonus: 10 FREE Wheat Seeds!\n\n• Buy wheat seeds from the shop\n• Use the scythe tool for efficient harvesting\n• Higher profits await!", "success")
+
+	print("🌾 ShopSystem: Wheat field access granted to " .. player.Name)
+	print("  - Added wheat field access flag")
+	print("  - Gave 10 bonus wheat seeds")
+	return true
+end
+-- ADD these additional access handling methods:
+
+function ShopSystem:ProcessCaveAccess(player, playerData, item, quantity)
+	print("🕳️ ShopSystem: Processing cave access purchase for " .. player.Name)
+
+	-- Mark as having cave access
+	playerData.purchaseHistory = playerData.purchaseHistory or {}
+	playerData.purchaseHistory[item.id] = true
+
+	-- Initialize mining data
+	if not playerData.mining then
+		playerData.mining = {
+			inventory = {},
+			tools = {},
+			level = 1,
+			experience = 0
+		}
+	end
+
+	-- Add flag for mining access
+	playerData.mining.caveAccess = true
+	playerData.mining.caveAccessUnlocked = os.time()
+
+	-- Give basic starter mining tool
+	playerData.mining.tools.wooden_pickaxe = {
+		durability = 50,
+		maxDurability = 50,
+		acquiredTime = os.time()
+	}
+
+	-- Create cave access (if you have a module for this)
+	if self.GameCore and self.GameCore.CreateCaveAccess then
+		local success = self.GameCore:CreateCaveAccess(player)
+		if not success then
+			print("⚠️ ShopSystem: Cave access creation failed, but purchase will continue")
+		end
+	end
+
+	-- Send success notification
+	self:SendNotification(player, "🕳️ Cave Access Granted!", 
+		"Mining operations are now available!\n\n🎁 Bonus: FREE Wooden Pickaxe!\n\n• Explore Cave 1 for copper and bronze ore\n• Buy better pickaxes for rarer ores\n• New income stream unlocked!", "success")
+
+	print("🕳️ ShopSystem: Cave access granted to " .. player.Name)
+	print("  - Added cave access flag")
+	print("  - Gave wooden pickaxe tool")
+	return true
+end
+
+function ShopSystem:ProcessGenericAccess(player, playerData, item, quantity)
+	print("🔓 ShopSystem: Processing generic access purchase: " .. item.id)
+
+	-- Mark as purchased
+	playerData.purchaseHistory = playerData.purchaseHistory or {}
+	playerData.purchaseHistory[item.id] = true
+
+	-- Send notification
+	self:SendNotification(player, "🔓 Access Granted!", 
+		"You now have access to " .. (item.name or item.id) .. "!", "success")
+
+	return true
+end
+
+-- UPDATE the ShouldShowItemFixed method to properly handle requirements
+-- Find this method and UPDATE it to include this logic:
+
+function ShopSystem:ShouldShowItemFixed(item, itemId, playerData)
+	-- Always show basic starter items regardless of requirements
+	local alwaysShowItems = {
+		"farm_plot_starter",
+		"carrot_seeds", 
+		"potato_seeds",
+		"cabbage_seeds",
+		"basic_workbench"
+	}
+
+	for _, alwaysShow in ipairs(alwaysShowItems) do
+		if itemId == alwaysShow then
+			print("✅ Always showing starter item: " .. itemId)
+			return true
+		end
+	end
+
+	-- Don't show items explicitly marked as not purchasable
+	if item.notPurchasable == true or item.purchasable == false then
+		print("🔒 Item not purchasable: " .. itemId)
+		return false
+	end
+
+	-- Check purchase requirements
+	if item.requiresPurchase and playerData then
+		local hasPurchased = playerData.purchaseHistory and playerData.purchaseHistory[item.requiresPurchase]
+		if not hasPurchased then
+			print("🔒 Item requires purchase: " .. itemId .. " requires " .. item.requiresPurchase)
+			return false
+		end
+	end
+
+	-- Check if already owned (for single-purchase items)
+	if item.maxQuantity == 1 and playerData then
+		local alreadyOwned = playerData.purchaseHistory and playerData.purchaseHistory[itemId]
+		if alreadyOwned then
+			print("🔒 Item already owned: " .. itemId)
+			return false
+		end
+	end
+
+	-- SPECIAL CASE: Show wheat field access and cave access based on coin thresholds
+	if itemId == "wheat_field_access" then
+		local playerCoins = playerData and playerData.coins or 0
+		local hasGarden = playerData and playerData.purchaseHistory and playerData.purchaseHistory.farm_plot_starter
+
+		-- Show wheat field if player has garden and can see the progression
+		if hasGarden and playerCoins >= 1000 then -- Show when they have 1/10th the price
+			print("✅ Showing wheat field access: player has garden and sufficient progress")
+			return true
+		else
+			print("🔒 Hiding wheat field access: requires garden and more coins")
+			return false
+		end
+	end
+
+	if itemId == "cave_access_pass" then
+		local playerCoins = playerData and playerData.coins or 0
+		local hasWheatField = playerData and playerData.purchaseHistory and playerData.purchaseHistory.wheat_field_access
+
+		-- Show cave access if player has wheat field or has significant coin progress
+		if hasWheatField or playerCoins >= 25000 then -- Show when they have 1/10th the price
+			print("✅ Showing cave access: player has wheat field or sufficient progress")
+			return true
+		else
+			print("🔒 Hiding cave access: requires wheat field access or more coins")
+			return false
+		end
+	end
+
+	print("✅ Item will be shown: " .. itemId)
+	return true
+end
 -- ========== VALIDATION ==========
 
 function ShopSystem:ValidateShopData()

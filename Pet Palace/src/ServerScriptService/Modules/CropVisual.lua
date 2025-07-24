@@ -283,17 +283,22 @@ function CropVisual:HandleGardenCropClick(clickingPlayer, cropModel, gardenSpotM
 	end
 end
 
+-- REPLACE the ShowGardenCropStatus method in CropVisual.lua with this fixed version:
+
 function CropVisual:ShowGardenCropStatus(player, gardenSpotModel, cropType, growthStage, isMutation)
 	local stageNames = {"planted", "sprouting", "growing", "flowering", "ready"}
 	local currentStageName = stageNames[growthStage + 1] or "unknown"
 
 	local plantedTime = gardenSpotModel:GetAttribute("PlantedTime") or os.time()
+	local seedType = gardenSpotModel:GetAttribute("SeedType")
 	local timeElapsed = os.time() - plantedTime
 
-	-- Calculate remaining time
-	local totalGrowthTime = isMutation and 240 or 300 -- 4 min for mutations, 5 min for normal
+	-- Get the actual growth time from ItemConfig instead of hardcoded values
+	local totalGrowthTime = self:GetActualGrowthTime(seedType, isMutation)
+
 	local timeRemaining = math.max(0, totalGrowthTime - timeElapsed)
-	local minutesRemaining = math.ceil(timeRemaining / 60)
+	local minutesRemaining = math.floor(timeRemaining / 60)
+	local secondsRemaining = timeRemaining % 60
 
 	local cropDisplayName = cropType:gsub("^%l", string.upper):gsub("_", " ")
 	local statusEmoji = isMutation and "🧬" or "🌱"
@@ -303,8 +308,16 @@ function CropVisual:ShowGardenCropStatus(player, gardenSpotModel, cropType, grow
 		message = statusEmoji .. " " .. cropDisplayName .. " in your garden is ready to harvest!"
 	else
 		local progressBar = self:CreateProgressBar(timeElapsed, totalGrowthTime)
+
+		local timeText
+		if minutesRemaining > 0 then
+			timeText = minutesRemaining .. "m " .. secondsRemaining .. "s remaining"
+		else
+			timeText = secondsRemaining .. " seconds remaining"
+		end
+
 		message = statusEmoji .. " " .. cropDisplayName .. " in your garden is " .. currentStageName .. 
-			"\n⏰ " .. minutesRemaining .. " minutes remaining\n" .. progressBar
+			"\n⏰ " .. timeText .. "\n" .. progressBar
 	end
 
 	-- Send notification through GameCore
@@ -313,28 +326,498 @@ function CropVisual:ShowGardenCropStatus(player, gardenSpotModel, cropType, grow
 	end
 end
 
+-- ADD this method to get actual growth time from ItemConfig:
+function CropVisual:GetActualGrowthTime(seedType, isMutation)
+	-- Handle mutations with faster growth
+	if isMutation then
+		local speedMultiplier = _G.MUTATION_GROWTH_SPEED or 1.0
+		return 240 / speedMultiplier -- 4 minutes for mutations by default
+	end
+
+	-- Get growth time from ItemConfig
+	if seedType and ItemConfig and ItemConfig.ShopItems then
+		local seedData = ItemConfig.ShopItems[seedType]
+		if seedData and seedData.farmingData and seedData.farmingData.growTime then
+			local growTime = seedData.farmingData.growTime
+			print("📊 CropVisual: Using ItemConfig grow time for " .. seedType .. ": " .. growTime .. "s")
+			return growTime
+		end
+	end
+
+	-- Fallback to default
+	print("⚠️ CropVisual: No growth time found for " .. (seedType or "unknown") .. ", using default 300s")
+	return 300 -- 5 minutes default
+end
 -- ========== GARDEN GROWTH STAGE UPDATES ==========
+
+-- REPLACE the UpdateCropStage method in CropVisual.lua with this robust version:
 
 function CropVisual:UpdateCropStage(gardenSpotModel, cropType, rarity, stageName, stageIndex)
 	print("🎨 CropVisual: Updating garden crop " .. cropType .. " to stage " .. stageName)
 
-	local cropModel = gardenSpotModel:FindFirstChild("CropModel")
-	if not cropModel or not cropModel.PrimaryPart then
-		warn("Invalid crop model for garden stage update")
+	-- Validate inputs
+	if not gardenSpotModel or not gardenSpotModel.Parent then
+		warn("❌ CropVisual: Invalid garden spot model")
 		return false
+	end
+
+	if not cropType or not rarity or not stageName then
+		warn("❌ CropVisual: Missing required parameters")
+		return false
+	end
+
+	local cropModel = gardenSpotModel:FindFirstChild("CropModel")
+	if not cropModel then
+		warn("❌ CropVisual: No CropModel found in garden spot")
+		-- Try to recreate the crop model
+		return self:RecreateeCropModel(gardenSpotModel, cropType, rarity, stageName)
+	end
+
+	if not cropModel.PrimaryPart then
+		warn("❌ CropVisual: CropModel has no PrimaryPart")
+		-- Try to fix the model
+		self:RepairCropModel(cropModel)
+		if not cropModel.PrimaryPart then
+			return self:RecreateeCropModel(gardenSpotModel, cropType, rarity, stageName)
+		end
 	end
 
 	-- Update model attributes
 	cropModel:SetAttribute("GrowthStage", stageName)
+	cropModel:SetAttribute("CropType", cropType)
+	cropModel:SetAttribute("Rarity", rarity)
 
-	-- Method 1: If using pre-made model, create new model for this stage
+	-- Method 1: If using pre-made model, try to replace with new stage model
 	local modelType = cropModel:GetAttribute("ModelType")
 	if modelType == "PreMade" and self:HasPreMadeModel(cropType) then
-		return self:ReplaceGardenCropWithNewStage(cropModel, gardenSpotModel, cropType, rarity, stageName)
+		local success = pcall(function()
+			return self:ReplaceGardenCropWithNewStage(cropModel, gardenSpotModel, cropType, rarity, stageName)
+		end)
+
+		if success then
+			print("✅ Successfully replaced pre-made model for stage " .. stageName)
+			return true
+		else
+			print("⚠️ Failed to replace pre-made model, falling back to scaling")
+		end
 	end
 
-	-- Method 2: Scale and enhance existing model
-	return self:UpdateExistingGardenCrop(cropModel, gardenSpotModel, cropType, rarity, stageName, stageIndex)
+	-- Method 2: Scale and enhance existing model (ROBUST VERSION)
+	local success = pcall(function()
+		return self:ScaleExistingModelRobust(cropModel, gardenSpotModel, cropType, rarity, stageName)
+	end)
+
+	if success then
+		print("✅ Successfully scaled existing model for stage " .. stageName)
+		return true
+	else
+		warn("❌ Failed to scale existing model, trying fallback")
+		return self:FallbackStageUpdate(gardenSpotModel, cropModel, cropType, rarity, stageName)
+	end
+end
+
+-- ADD this robust scaling method:
+function CropVisual:ScaleExistingModelRobust(cropModel, gardenSpotModel, cropType, rarity, stageName)
+	print("📏 Robust scaling for stage: " .. stageName)
+
+	-- Calculate new scale
+	local rarityScale = self:GetRarityScale(rarity)
+	local growthScale = self:GetGrowthScale(stageName)
+	local targetScale = rarityScale * growthScale
+
+	-- Get current scale to calculate relative change
+	local currentScale = cropModel:GetAttribute("CurrentScale") or 1.0
+	local scaleChange = targetScale / currentScale
+
+	print("📏 Scale change: " .. currentScale .. " -> " .. targetScale .. " (factor: " .. scaleChange .. ")")
+
+	-- Apply scaling with error protection
+	local scaledParts = 0
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local success = pcall(function()
+				local targetSize = part.Size * scaleChange
+
+				-- Validate the target size is reasonable
+				if targetSize.X > 0.01 and targetSize.Y > 0.01 and targetSize.Z > 0.01 and
+					targetSize.X < 100 and targetSize.Y < 100 and targetSize.Z < 100 then
+
+					local tween = TweenService:Create(part,
+						TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+						{Size = targetSize}
+					)
+					tween:Play()
+					scaledParts = scaledParts + 1
+				end
+			end)
+
+			if not success then
+				print("⚠️ Failed to scale part: " .. part.Name)
+			end
+		end
+	end
+
+	print("📏 Scaled " .. scaledParts .. " parts")
+
+	-- Store new scale
+	cropModel:SetAttribute("CurrentScale", targetScale)
+
+	-- Update stage effects with error protection
+	pcall(function()
+		self:UpdateStageEffectsRobust(cropModel, cropType, rarity, stageName)
+	end)
+
+	-- Update positioning with error protection
+	pcall(function()
+		self:PositionCropOnGarden(cropModel, gardenSpotModel, stageName)
+	end)
+
+	-- Ensure click detection remains functional (delayed check)
+	spawn(function()
+		wait(2) -- Wait for tweens to complete
+		pcall(function()
+			self:ValidateAndFixClickDetection(cropModel, gardenSpotModel, cropType, rarity)
+		end)
+	end)
+
+	return true
+end
+
+-- ADD this fallback stage update method:
+function CropVisual:FallbackStageUpdate(gardenSpotModel, cropModel, cropType, rarity, stageName)
+	print("🔧 Using fallback stage update for " .. stageName)
+
+	-- At minimum, ensure the crop model exists and is positioned correctly
+	if cropModel and cropModel.PrimaryPart then
+		-- Basic positioning
+		pcall(function()
+			self:PositionCropOnGarden(cropModel, gardenSpotModel, stageName)
+		end)
+
+		-- Add basic ready indicator if it's the final stage
+		if stageName == "ready" then
+			pcall(function()
+				self:CreateBasicReadyIndicator(cropModel)
+			end)
+		end
+
+		-- Ensure click detection exists
+		pcall(function()
+			self:SetupGardenCropClickDetection(cropModel, gardenSpotModel, cropType, rarity)
+		end)
+
+		print("✅ Fallback update completed for " .. stageName)
+		return true
+	end
+
+	print("❌ Fallback update failed - crop model invalid")
+	return false
+end
+
+-- ADD this method to recreate missing crop models:
+function CropVisual:RecreateeCropModel(gardenSpotModel, cropType, rarity, stageName)
+	print("🔄 Recreating missing crop model for " .. cropType .. " at stage " .. stageName)
+
+	-- Remove any existing crop model remnants
+	for _, child in pairs(gardenSpotModel:GetChildren()) do
+		if child:IsA("Model") and child.Name == "CropModel" then
+			child:Destroy()
+		end
+	end
+
+	-- Create new crop model
+	local success, cropModel = pcall(function()
+		return self:CreateCropModel(cropType, rarity, stageName)
+	end)
+
+	if success and cropModel then
+		cropModel.Name = "CropModel"
+		cropModel.Parent = gardenSpotModel
+
+		-- Position the recreated model
+		local positionSuccess = pcall(function()
+			return self:PositionCropOnGarden(cropModel, gardenSpotModel, stageName)
+		end)
+
+		if positionSuccess then
+			-- Setup click detection
+			pcall(function()
+				self:SetupGardenCropClickDetection(cropModel, gardenSpotModel, cropType, rarity)
+			end)
+
+			print("✅ Successfully recreated crop model for " .. cropType)
+			return true
+		else
+			print("❌ Failed to position recreated crop model")
+			cropModel:Destroy()
+		end
+	else
+		print("❌ Failed to create replacement crop model")
+	end
+
+	return false
+end
+
+-- ADD this method to repair broken crop models:
+function CropVisual:RepairCropModel(cropModel)
+	print("🔧 Attempting to repair crop model: " .. cropModel.Name)
+
+	-- Try to set a primary part if missing
+	if not cropModel.PrimaryPart then
+		for _, child in pairs(cropModel:GetChildren()) do
+			if child:IsA("BasePart") then
+				cropModel.PrimaryPart = child
+				print("✅ Set PrimaryPart to: " .. child.Name)
+				break
+			end
+		end
+	end
+
+	-- Ensure all parts are properly anchored
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+			part.CanCollide = false
+		end
+	end
+
+	-- Ensure model has basic attributes
+	if not cropModel:GetAttribute("CropType") then
+		cropModel:SetAttribute("CropType", "unknown")
+	end
+	if not cropModel:GetAttribute("Rarity") then
+		cropModel:SetAttribute("Rarity", "common")
+	end
+	if not cropModel:GetAttribute("CurrentScale") then
+		cropModel:SetAttribute("CurrentScale", 1.0)
+	end
+
+	print("🔧 Crop model repair attempted")
+end
+
+-- ADD this robust click detection validator:
+function CropVisual:ValidateAndFixClickDetection(cropModel, gardenSpotModel, cropType, rarity)
+	if not cropModel or not cropModel.Parent then
+		return false
+	end
+
+	-- Check if click detectors exist and are functional
+	local hasWorkingClickDetector = false
+	for _, obj in pairs(cropModel:GetDescendants()) do
+		if obj:IsA("ClickDetector") and obj.Name == "GardenCropClickDetector" and obj.Parent then
+			hasWorkingClickDetector = true
+			break
+		end
+	end
+
+	if not hasWorkingClickDetector then
+		print("🖱️ Re-adding click detection after update")
+		self:SetupGardenCropClickDetection(cropModel, gardenSpotModel, cropType, rarity)
+		return true
+	end
+
+	return false
+end
+
+-- ADD this robust stage effects method:
+function CropVisual:UpdateStageEffectsRobust(cropModel, cropType, rarity, stageName)
+	if not cropModel or not cropModel.PrimaryPart then
+		return
+	end
+
+	-- Remove old stage-specific effects safely
+	for _, obj in pairs(cropModel:GetDescendants()) do
+		if obj.Name:find("StageEffect") or obj.Name:find("GrowthParticle") or obj.Name:find("FloweringStageEffect") then
+			pcall(function() obj:Destroy() end)
+		end
+	end
+
+	-- Add new stage-specific effects with error protection
+	if stageName == "flowering" then
+		pcall(function()
+			self:CreateFloweringEffect(cropModel)
+		end)
+	elseif stageName == "ready" then
+		pcall(function()
+			self:CreateReadyHarvestEffect(cropModel)
+			-- Re-apply rarity effects for fully grown crops
+			if rarity ~= "common" then
+				self:AddRarityEffects(cropModel, rarity)
+			end
+		end)
+	end
+end
+
+-- ADD this basic ready indicator for fallback:
+function CropVisual:CreateBasicReadyIndicator(cropModel)
+	if not cropModel or not cropModel.PrimaryPart then
+		return
+	end
+
+	-- Remove existing ready glow
+	local existingGlow = cropModel.PrimaryPart:FindFirstChild("BasicReadyGlow")
+	if existingGlow then
+		existingGlow:Destroy()
+	end
+
+	-- Add simple ready glow
+	local readyGlow = Instance.new("PointLight")
+	readyGlow.Name = "BasicReadyGlow"
+	readyGlow.Color = Color3.fromRGB(255, 215, 0)
+	readyGlow.Brightness = 1.2
+	readyGlow.Range = 6
+	readyGlow.Parent = cropModel.PrimaryPart
+
+	print("✅ Added basic ready indicator")
+end
+
+-- ADD this missing method to CropVisual.lua:
+function CropVisual:ScaleExistingModel(cropModel, rarity, stageName)
+	print("📏 Scaling existing model for stage: " .. stageName)
+
+	-- Calculate new scale
+	local rarityScale = self:GetRarityScale(rarity)
+	local growthScale = self:GetGrowthScale(stageName)
+	local targetScale = rarityScale * growthScale
+
+	-- Get current scale to calculate relative change
+	local currentScale = cropModel:GetAttribute("CurrentScale") or 1.0
+	local scaleChange = targetScale / currentScale
+
+	-- Apply scaling with smooth transition
+	for _, part in pairs(cropModel:GetDescendants()) do
+		if part:IsA("BasePart") then
+			local targetSize = part.Size * scaleChange
+
+			local tween = TweenService:Create(part,
+				TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{Size = targetSize}
+			)
+			tween:Play()
+		end
+	end
+
+	-- Store new scale
+	cropModel:SetAttribute("CurrentScale", targetScale)
+
+	-- Update visual effects for new stage
+	self:UpdateStageEffects(cropModel, cropModel:GetAttribute("CropType") or "unknown", rarity, stageName)
+
+	-- IMPORTANT: Ensure click detection is still present after scaling
+	spawn(function()
+		wait(2) -- Wait for tween to complete
+
+		-- Check if click detectors still exist and are functional
+		local hasWorkingClickDetector = false
+		for _, obj in pairs(cropModel:GetDescendants()) do
+			if obj:IsA("ClickDetector") and obj.Name == "GardenCropClickDetector" and obj.Parent then
+				hasWorkingClickDetector = true
+				break
+			end
+		end
+
+		if not hasWorkingClickDetector then
+			print("🖱️ Re-adding click detection after scaling")
+			local plotModel = cropModel.Parent
+			local cropType = cropModel:GetAttribute("CropType")
+
+			if plotModel and cropType and rarity then
+				self:SetupGardenCropClickDetection(cropModel, plotModel, cropType, rarity)
+			end
+		end
+	end)
+
+	print("📏 Scaled crop by factor of " .. scaleChange)
+	return true
+end
+
+-- ADD this missing method for stage effects:
+function CropVisual:UpdateStageEffects(cropModel, cropType, rarity, stageName)
+	-- Remove old stage-specific effects
+	for _, obj in pairs(cropModel:GetDescendants()) do
+		if obj.Name:find("StageEffect") or obj.Name:find("GrowthParticle") then
+			obj:Destroy()
+		end
+	end
+
+	-- Add new stage-specific effects
+	if stageName == "flowering" then
+		self:CreateFloweringEffect(cropModel)
+	elseif stageName == "ready" then
+		self:CreateReadyHarvestEffect(cropModel)
+		-- Re-apply rarity effects for fully grown crops
+		if rarity ~= "common" then
+			self:AddRarityEffects(cropModel, rarity)
+		end
+	end
+end
+
+-- ADD these effect methods:
+function CropVisual:CreateFloweringEffect(cropModel)
+	if not cropModel.PrimaryPart then return end
+
+	local flowerParticle = Instance.new("Part")
+	flowerParticle.Name = "FloweringStageEffect"
+	flowerParticle.Size = Vector3.new(0.2, 0.2, 0.2)
+	flowerParticle.Material = Enum.Material.Neon
+	flowerParticle.Color = Color3.fromRGB(255, 182, 193)
+	flowerParticle.CanCollide = false
+	flowerParticle.Anchored = true
+	flowerParticle.Shape = Enum.PartType.Ball
+	flowerParticle.CFrame = cropModel.PrimaryPart.CFrame + Vector3.new(0, 1, 0)
+	flowerParticle.Parent = cropModel
+
+	-- Gentle floating animation
+	spawn(function()
+		while flowerParticle and flowerParticle.Parent do
+			local tween = TweenService:Create(flowerParticle,
+				TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{CFrame = flowerParticle.CFrame + Vector3.new(0, 0.5, 0)}
+			)
+			tween:Play()
+			wait(2)
+			if flowerParticle and flowerParticle.Parent then
+				local tween2 = TweenService:Create(flowerParticle,
+					TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{CFrame = flowerParticle.CFrame - Vector3.new(0, 0.5, 0)}
+				)
+				tween2:Play()
+				wait(2)
+			end
+		end
+	end)
+end
+
+function CropVisual:CreateReadyHarvestEffect(cropModel)
+	if not cropModel.PrimaryPart then return end
+
+	-- Add a subtle ready-to-harvest glow
+	local readyGlow = Instance.new("PointLight")
+	readyGlow.Name = "ReadyHarvestGlow"
+	readyGlow.Color = Color3.fromRGB(255, 215, 0)
+	readyGlow.Brightness = 0.8
+	readyGlow.Range = 6
+	readyGlow.Parent = cropModel.PrimaryPart
+
+	-- Pulsing effect
+	spawn(function()
+		while readyGlow and readyGlow.Parent do
+			local tween = TweenService:Create(readyGlow,
+				TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+				{Brightness = 1.2}
+			)
+			tween:Play()
+			wait(1.5)
+			if readyGlow and readyGlow.Parent then
+				local tween2 = TweenService:Create(readyGlow,
+					TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+					{Brightness = 0.8}
+				)
+				tween2:Play()
+				wait(1.5)
+			end
+		end
+	end)
 end
 
 function CropVisual:ReplaceGardenCropWithNewStage(oldCropModel, gardenSpotModel, cropType, rarity, stageName)
@@ -917,19 +1400,6 @@ function CropVisual:AnimateModelScale(cropModel, scaleChange)
 			)
 			tween:Play()
 		end
-	end
-end
-
-function CropVisual:UpdateStageEffects(cropModel, cropType, rarity, stageName)
-	-- Remove old stage-specific effects
-	self:RemoveStageEffects(cropModel)
-
-	-- Add new stage-specific effects
-	if stageName == "flowering" then
-		self:CreateFloweringEffect(cropModel)
-	elseif stageName == "ready" then
-		self:CreateReadyHarvestEffect(cropModel)
-		self:UpdateRarityEffects(cropModel, rarity)
 	end
 end
 
