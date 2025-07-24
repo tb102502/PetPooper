@@ -1,22 +1,30 @@
 --[[
-    ScytheToolScript.client.lua - Improved Scythe Tool Client Script
-    Place in: ServerStorage/ScytheToolScript
+    ScytheToolScript.client.lua - Fixed Scythe Tool Client Script
+    Place in: ServerStorage/ScytheToolScript.client.lua
     
-    This script handles scythe tool functionality on the client side.
-    It will be cloned into scythe tools when players receive them.
+    This script will be cloned into scythe tools when players receive them.
     
-    IMPROVEMENTS:
-    ✅ Better tool positioning and grip
-    ✅ Improved swing animations
+    FIXES:
+    ✅ Proper wheat harvesting integration
+    ✅ Better swing detection and cooldown
     ✅ Enhanced visual effects
-    ✅ Better cooldown handling
+    ✅ Proper tool reference handling
+    ✅ Better error checking
 ]]
 
+-- Wait for script to be properly parented to a tool
 local tool = script.Parent
+while not tool:IsA("Tool") do
+	tool = tool.Parent
+	if not tool or tool == game then
+		error("ScytheToolScript must be inside a Tool!")
+	end
+end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local SoundService = game:GetService("SoundService")
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -27,120 +35,133 @@ local lastSwingTime = 0
 
 -- Get remote events
 local gameRemotes = ReplicatedStorage:WaitForChild("GameRemotes", 30)
-local swingScythe = gameRemotes:WaitForChild("SwingScythe", 10)
+local swingScythe = nil
+
+-- Wait for SwingScythe remote event
+spawn(function()
+	swingScythe = gameRemotes:WaitForChild("SwingScythe", 10)
+	if swingScythe then
+		print("ScytheTool: Connected to SwingScythe remote event")
+	else
+		warn("ScytheTool: Failed to find SwingScythe remote event")
+	end
+end)
 
 -- Animation
 local swingAnimation = nil
 local swingAnimationTrack = nil
 
--- Wait for character
+-- Character references
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local animator = humanoid:WaitForChild("Animator")
--- Create swing animation if not exists
+
+-- Create swing animation
 local function createSwingAnimation()
 	if not swingAnimation then
 		swingAnimation = Instance.new("Animation")
-		-- Use a different animation that looks more like scythe swinging
-		swingAnimation.AnimationId = "http://www.roblox.com/asset/?id=522635514"
+		-- Use a farming/tool swing animation
+		swingAnimation.AnimationId = "rbxasset://animations/toolslash.anim"
 		swingAnimationTrack = animator:LoadAnimation(swingAnimation)
 		swingAnimationTrack.Priority = Enum.AnimationPriority.Action
 	end
 end
 
--- Create enhanced swing effect
-local function createEnhancedSwingEffect()
+-- Create enhanced swing effect for wheat harvesting
+local function createWheatHarvestingEffect()
 	local handle = tool:FindFirstChild("Handle")
 	if not handle then return end
 
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then return end
 
-	-- Create multiple effect parts for a more dramatic swing
-	local effects = {}
+	-- Create scythe swing arc effect
+	local swingArc = Instance.new("Part")
+	swingArc.Name = "ScytheSwingArc"
+	swingArc.Size = Vector3.new(8, 0.2, 8)
+	swingArc.Material = Enum.Material.Neon
+	swingArc.BrickColor = BrickColor.new("Bright yellow")
+	swingArc.Anchored = true
+	swingArc.CanCollide = false
+	swingArc.Transparency = 0.5
+	swingArc.Parent = workspace
 
-	-- Main swing trail
-	local mainEffect = Instance.new("Part")
-	mainEffect.Name = "MainSwingEffect"
-	mainEffect.Size = Vector3.new(6, 0.1, 6)
-	mainEffect.Material = Enum.Material.Neon
-	mainEffect.BrickColor = BrickColor.new("Bright yellow")
-	mainEffect.Anchored = true
-	mainEffect.CanCollide = false
-	mainEffect.Transparency = 0.3
-	mainEffect.Parent = workspace
+	-- Position arc in front of player
+	swingArc.CFrame = rootPart.CFrame * CFrame.new(0, 0, -4) * CFrame.Angles(math.rad(90), 0, 0)
 
-	-- Position effect in front of player at scythe level
-	mainEffect.CFrame = rootPart.CFrame * CFrame.new(0, 0, -4) * CFrame.Angles(math.rad(90), 0, 0)
+	-- Create wheat debris particles
+	for i = 1, 6 do
+		local debris = Instance.new("Part")
+		debris.Name = "WheatDebris"
+		debris.Size = Vector3.new(0.15, 0.15, 0.15)
+		debris.Material = Enum.Material.Neon
+		debris.BrickColor = BrickColor.new("Bright yellow")
+		debris.Anchored = false
+		debris.CanCollide = false
+		debris.Parent = workspace
 
-	-- Wheat particles
-	for i = 1, 8 do
-		local particle = Instance.new("Part")
-		particle.Name = "WheatParticle"
-		particle.Size = Vector3.new(0.1, 0.1, 0.1)
-		particle.Material = Enum.Material.Neon
-		particle.BrickColor = BrickColor.new("Bright yellow")
-		particle.Anchored = false
-		particle.CanCollide = false
-		particle.Parent = workspace
-
-		-- Position around the swing area
-		particle.Position = mainEffect.Position + Vector3.new(
-			math.random(-3, 3),
-			math.random(-1, 1),
-			math.random(-3, 3)
+		-- Position around swing area
+		debris.Position = swingArc.Position + Vector3.new(
+			math.random(-4, 4),
+			math.random(-1, 2),
+			math.random(-4, 4)
 		)
 
-		-- Add velocity
+		-- Add realistic physics
 		local bodyVelocity = Instance.new("BodyVelocity")
-		bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+		bodyVelocity.MaxForce = Vector3.new(2000, 2000, 2000)
 		bodyVelocity.Velocity = Vector3.new(
-			math.random(-15, 15),
-			math.random(5, 20),
-			math.random(-15, 15)
+			math.random(-12, 12),
+			math.random(8, 18),
+			math.random(-12, 12)
 		)
-		bodyVelocity.Parent = particle
+		bodyVelocity.Parent = debris
 
-		table.insert(effects, particle)
+		-- Add slight rotation
+		local bodyAngularVelocity = Instance.new("BodyAngularVelocity")
+		bodyAngularVelocity.AngularVelocity = Vector3.new(
+			math.random(-10, 10),
+			math.random(-10, 10),
+			math.random(-10, 10)
+		)
+		bodyAngularVelocity.MaxTorque = Vector3.new(500, 500, 500)
+		bodyAngularVelocity.Parent = debris
 
-		-- Clean up particle after 2 seconds
-		game:GetService("Debris"):AddItem(particle, 2)
+		-- Clean up after 3 seconds
+		game:GetService("Debris"):AddItem(debris, 3)
 	end
 
-	-- Animate main effect
-	local tween = TweenService:Create(mainEffect,
-		TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+	-- Animate swing arc
+	local tween = TweenService:Create(swingArc,
+		TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 		{
-			Transparency = 1, 
-			Size = Vector3.new(8, 0.1, 8),
-			CFrame = mainEffect.CFrame * CFrame.new(0, 0, -2)
+			Transparency = 1,
+			Size = Vector3.new(12, 0.2, 12)
 		}
 	)
 	tween:Play()
 
 	tween.Completed:Connect(function()
-		mainEffect:Destroy()
+		swingArc:Destroy()
 	end)
 
 	-- Create blade trail effect
 	local blade = tool:FindFirstChild("Blade")
 	if blade then
-		local bladeTrail = Instance.new("Part")
-		bladeTrail.Name = "BladeTrail"
-		bladeTrail.Size = Vector3.new(0.1, 3, 0.1)
-		bladeTrail.Material = Enum.Material.Neon
-		bladeTrail.BrickColor = BrickColor.new("Institutional white")
-		bladeTrail.Anchored = true
-		bladeTrail.CanCollide = false
-		bladeTrail.Transparency = 0.5
-		bladeTrail.Parent = workspace
+		local trail = Instance.new("Part")
+		trail.Name = "BladeTrail"
+		trail.Size = Vector3.new(0.1, 3, 0.1)
+		trail.Material = Enum.Material.Neon
+		trail.BrickColor = BrickColor.new("Institutional white")
+		trail.Anchored = true
+		trail.CanCollide = false
+		trail.Transparency = 0.3
+		trail.Parent = workspace
 
-		-- Position trail where blade would be
-		bladeTrail.CFrame = blade.CFrame
+		trail.CFrame = blade.CFrame
 
-		-- Animate trail
-		local trailTween = TweenService:Create(bladeTrail,
-			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+		local trailTween = TweenService:Create(trail,
+			TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
 				Transparency = 1,
 				Size = Vector3.new(0.2, 4, 0.2)
@@ -149,20 +170,47 @@ local function createEnhancedSwingEffect()
 		trailTween:Play()
 
 		trailTween.Completed:Connect(function()
-			bladeTrail:Destroy()
+			trail:Destroy()
 		end)
 	end
 end
 
--- Handle tool activation
+-- Create swing sound effect
+local function createSwingSound()
+	local swingSound = Instance.new("Sound")
+	swingSound.Name = "ScytheSwingSound"
+	swingSound.SoundId = "rbxasset://sounds/impact_water.mp3"
+	swingSound.Volume = 0.5
+	--swingSound.Pitch = 1.2
+	swingSound.Parent = tool:FindFirstChild("Handle") or tool
+
+	swingSound:Play()
+
+	-- Clean up sound after playing
+	swingSound.Ended:Connect(function()
+		swingSound:Destroy()
+	end)
+end
+
+-- Handle tool activation (clicking)
 tool.Activated:Connect(function()
 	local currentTime = tick()
+
+	-- Check if we can swing (cooldown)
 	if isSwinging or (currentTime - lastSwingTime) < swingCooldown then
 		return
 	end
 
+	-- Check if we're in a wheat harvesting session
+	local isInWheatField = false
+	if _G.WheatHarvestingGUI and _G.WheatHarvestingGUI.State then
+		isInWheatField = _G.WheatHarvestingGUI.State.guiType == "harvesting"
+	end
+
 	isSwinging = true
 	lastSwingTime = currentTime
+
+	print("ScytheTool: Scythe swing activated by " .. player.Name)
 
 	-- Play swing animation
 	createSwingAnimation()
@@ -170,33 +218,39 @@ tool.Activated:Connect(function()
 		swingAnimationTrack:Play()
 	end
 
-	-- Create enhanced visual effect
-	createEnhancedSwingEffect()
+	-- Create visual and sound effects
+	createWheatHarvestingEffect()
+	createSwingSound()
 
-	-- Send swing to server
+	-- Send swing to server (this will handle wheat harvesting)
 	if swingScythe then
 		swingScythe:FireServer()
+	else
+		warn("ScytheTool: SwingScythe remote event not available")
 	end
 
-	-- Reset swing state
+	-- Reset swing state after cooldown
 	spawn(function()
-		wait(0.4)  -- Slightly longer for more realistic swing
+		wait(swingCooldown)
 		isSwinging = false
 	end)
 end)
 
 -- Handle tool equipped
 tool.Equipped:Connect(function()
-	print("Scythe equipped by " .. player.Name)
+	print("ScytheTool: Scythe equipped by " .. player.Name)
 
-	-- Update character reference in case it changed
+	-- Update character references
 	character = player.Character
 	if character then
-		humanoid = character:WaitForChild("Humanoid")
-		createSwingAnimation()
+		humanoid = character:FindFirstChild("Humanoid")
+		if humanoid then
+			animator = humanoid:FindFirstChild("Animator")
+			createSwingAnimation()
+		end
 	end
 
-	-- Add equipped effect
+	-- Create equip effect
 	local handle = tool:FindFirstChild("Handle")
 	if handle then
 		local equipEffect = Instance.new("Part")
@@ -213,10 +267,10 @@ tool.Equipped:Connect(function()
 
 		-- Animate equip effect
 		local equipTween = TweenService:Create(equipEffect,
-			TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
 			{
 				Transparency = 1,
-				Size = Vector3.new(3, 3, 3)
+				Size = Vector3.new(4, 4, 4)
 			}
 		)
 		equipTween:Play()
@@ -224,13 +278,31 @@ tool.Equipped:Connect(function()
 		equipTween.Completed:Connect(function()
 			equipEffect:Destroy()
 		end)
+
+		-- Play equip sound
+		local equipSound = Instance.new("Sound")
+		equipSound.SoundId = "rbxasset://sounds/metal_impact.ogg"
+		equipSound.Volume = 0.3
+		equipSound.Parent = handle
+		equipSound:Play()
+
+		equipSound.Ended:Connect(function()
+			equipSound:Destroy()
+		end)
+	end
+
+	-- Show usage hint
+	if _G.UIManager and _G.UIManager.ShowNotification then
+		_G.UIManager:ShowNotification("🌾 Scythe Equipped", 
+			"Approach the wheat field and click to harvest wheat!", "info")
 	end
 end)
 
 -- Handle tool unequipped
 tool.Unequipped:Connect(function()
-	print("Scythe unequipped by " .. player.Name)
+	print("ScytheTool: Scythe unequipped by " .. player.Name)
 
+	-- Stop any playing animation
 	if swingAnimationTrack then
 		swingAnimationTrack:Stop()
 	end
@@ -243,20 +315,39 @@ end)
 player.CharacterAdded:Connect(function(newCharacter)
 	character = newCharacter
 	humanoid = character:WaitForChild("Humanoid")
+	animator = humanoid:WaitForChild("Animator")
+
+	-- Reset animation references
 	swingAnimation = nil
 	swingAnimationTrack = nil
 	isSwinging = false
+
+	print("ScytheTool: Character respawned, references updated")
 end)
 
--- Additional input handling for better responsiveness
+-- Enhanced input handling
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 
 	-- Check if tool is equipped
 	if tool.Parent ~= character then return end
 
-	-- Handle space bar as alternative activation
-	if input.KeyCode == Enum.KeyCode.Space then
+	-- Handle alternative activation keys
+	if input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.E then
+		-- Activate the tool
 		tool:Activate()
 	end
 end)
+
+-- Handle mobile/touch input
+UserInputService.TouchTapInWorld:Connect(function(position, processedByUI)
+	if processedByUI then return end
+
+	-- Check if tool is equipped
+	if tool.Parent ~= character then return end
+
+	-- Activate tool on screen tap
+	tool:Activate()
+end)
+
+print("ScytheTool: ✅ Scythe tool script loaded and ready for " .. player.Name)

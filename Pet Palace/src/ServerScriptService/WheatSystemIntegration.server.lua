@@ -365,7 +365,7 @@ local function ValidateWheatFieldSetup()
 
 	-- Check for wheat sections
 	local sectionCount = 0
-	for i = 1, 6 do
+	for i = 1, 2 do
 		local section = wheatField:FindFirstChild("Cluster" .. i)
 		if section then
 			sectionCount = sectionCount + 1
@@ -381,9 +381,9 @@ local function ValidateWheatFieldSetup()
 		end
 	end
 
-	if sectionCount < 6 then
+	if sectionCount < 2 then
 		warn("⚠️ Found only " .. sectionCount .. " wheat sections, expected 6")
-		warn("   Please ensure WheatField has 6 sections (Cluster1-Cluster6)")
+		warn("   Please ensure WheatField has 2 sections (Cluster1-Cluster6)")
 	end
 
 	-- Check for ScytheGiver model

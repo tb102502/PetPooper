@@ -1,14 +1,12 @@
 --[[
-    ScytheGiver.lua - Server-side Scythe Tool Giver (FIXED)
+    ScytheGiver.lua - UPDATED to Use Existing Scythe Tool
     Place in: ServerScriptService/ScytheGiver.lua
     
-    FEATURES:
-    ✅ Gives players free scythe tool
-    ✅ One scythe per player
-    ✅ Touch detection on ScytheGiver model
-    ✅ Integration with existing framework
-    ✅ FIXED: Proper scythe appearance with blade and handle
-    ✅ FIXED: Correct positioning in player's hands
+    UPDATES:
+    ✅ Uses existing Scythe tool from ServerStorage
+    ✅ Immediately equips tool (no backpack delay)
+    ✅ Preserves existing tool's LocalScript
+    ✅ Enhanced visual feedback
 ]]
 
 local ScytheGiver = {}
@@ -22,28 +20,9 @@ local TweenService = game:GetService("TweenService")
 -- Configuration
 local SCYTHE_CONFIG = {
 	SCYTHE_NAME = "Scythe",
-	COOLDOWN_TIME = 2, -- Seconds between giving scythes
-	GLOW_DURATION = 0.5 -- Duration of glow effect
+	COOLDOWN_TIME = 2,
+	GLOW_DURATION = 0.5
 }
-
--- Load ItemConfig safely
-local ItemConfig = nil
-local function loadItemConfig()
-	local success, result = pcall(function()
-		return require(ReplicatedStorage:WaitForChild("ItemConfig", 10))
-	end)
-	if success then
-		ItemConfig = result
-		print("ScytheGiver: ItemConfig loaded successfully")
-	else
-		warn("ScytheGiver: Could not load ItemConfig: " .. tostring(result))
-		-- Create fallback ItemConfig
-		ItemConfig = {
-			ShopItems = {},
-			Crops = {}
-		}
-	end
-end
 
 -- State
 ScytheGiver.GameCore = nil
@@ -55,23 +34,20 @@ ScytheGiver.ScytheTool = nil
 -- ========== INITIALIZATION ==========
 
 function ScytheGiver:Initialize(gameCore)
-	print("ScytheGiver: Initializing scythe giver system...")
+	print("ScytheGiver: Initializing with EXISTING scythe tool...")
 
 	self.GameCore = gameCore
-
-	-- Load ItemConfig first
-	loadItemConfig()
 
 	-- Find the ScytheGiver model
 	self:FindScytheGiverModel()
 
-	-- Create/find the scythe tool
-	self:CreateScytheTool()
+	-- Find the existing scythe tool
+	self:FindExistingScytheTool()
 
 	-- Setup touch detection
 	self:SetupTouchDetection()
 
-	print("ScytheGiver: ✅ Scythe giver system initialized")
+	print("ScytheGiver: ✅ Initialized with existing scythe tool")
 	return true
 end
 
@@ -80,11 +56,9 @@ end
 function ScytheGiver:FindScytheGiverModel()
 	print("ScytheGiver: Looking for ScytheGiver model...")
 
-	-- First check workspace
 	self.ScytheGiverModel = workspace:FindFirstChild("ScytheGiver")
 
 	if not self.ScytheGiverModel then
-		-- Check if it's nested in another model
 		for _, child in pairs(workspace:GetChildren()) do
 			if child:IsA("Model") then
 				local found = child:FindFirstChild("ScytheGiver")
@@ -101,27 +75,20 @@ function ScytheGiver:FindScytheGiverModel()
 	end
 
 	print("ScytheGiver: Found ScytheGiver model: " .. self.ScytheGiverModel.Name)
-
-	-- Add visual enhancement to make it obvious
 	self:EnhanceScytheGiverVisuals()
 end
 
 function ScytheGiver:EnhanceScytheGiverVisuals()
-	print("ScytheGiver: Enhancing ScytheGiver visuals...")
-
-	-- Add a glowing effect
 	local function addGlow(part)
 		if part:IsA("BasePart") then
-			-- Add selection box for glow effect
 			local selectionBox = Instance.new("SelectionBox")
 			selectionBox.Name = "ScytheGiverGlow"
 			selectionBox.Adornee = part
-			selectionBox.Color3 = Color3.fromRGB(255, 255, 0) -- Yellow glow
+			selectionBox.Color3 = Color3.fromRGB(255, 255, 0)
 			selectionBox.Transparency = 0.5
 			selectionBox.LineThickness = 0.2
 			selectionBox.Parent = part
 
-			-- Animate the glow
 			local tween = TweenService:Create(selectionBox,
 				TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
 				{Transparency = 0.2}
@@ -130,169 +97,72 @@ function ScytheGiver:EnhanceScytheGiverVisuals()
 		end
 	end
 
-	-- Apply glow to all parts in the model
 	for _, child in pairs(self.ScytheGiverModel:GetChildren()) do
 		addGlow(child)
 	end
-
-	print("ScytheGiver: ✅ Enhanced ScytheGiver visuals")
 end
 
--- ========== SCYTHE TOOL CREATION ==========
+-- ========== EXISTING SCYTHE TOOL SETUP ==========
 
-function ScytheGiver:CreateScytheTool()
-	print("ScytheGiver: Creating realistic scythe tool...")
+function ScytheGiver:FindExistingScytheTool()
+	print("ScytheGiver: Looking for existing scythe tool...")
 
-	-- Check if scythe tool already exists in ServerStorage
+	-- First check ServerStorage
 	local serverStorage = ServerStorage
-	local existingTool = serverStorage:FindFirstChild(SCYTHE_CONFIG.SCYTHE_NAME)
+	self.ScytheTool = serverStorage:FindFirstChild(SCYTHE_CONFIG.SCYTHE_NAME)
 
-	if existingTool and existingTool:IsA("Tool") then
-		self.ScytheTool = existingTool
-		print("ScytheGiver: Found existing scythe tool")
+	if self.ScytheTool and self.ScytheTool:IsA("Tool") then
+		print("ScytheGiver: ✅ Found existing scythe tool in ServerStorage: " .. self.ScytheTool.Name)
+		self:ValidateScytheTool()
 		return
 	end
 
-	-- Create new scythe tool
-	local scytheTool = Instance.new("Tool")
-	scytheTool.Name = SCYTHE_CONFIG.SCYTHE_NAME
-	scytheTool.RequiresHandle = true
-	scytheTool.CanBeDropped = false
-	scytheTool.Parent = serverStorage
+	-- Check ReplicatedStorage as backup
+	self.ScytheTool = ReplicatedStorage:FindFirstChild(SCYTHE_CONFIG.SCYTHE_NAME)
 
-	-- Create the main handle (wooden shaft)
-	local handle = Instance.new("Part")
-	handle.Name = "Handle"
-	handle.Size = Vector3.new(0.15, 4, 0.15)  -- Longer, thinner handle
-	handle.Material = Enum.Material.Wood
-	handle.BrickColor = BrickColor.new("Reddish brown")
-	handle.Shape = Enum.PartType.Block  -- Changed from Cylinder to Block
-	handle.Parent = scytheTool
-
-	-- Make handle cylindrical with mesh
-	local handleMesh = Instance.new("CylinderMesh")
-	handleMesh.Parent = handle
-
-	-- IMPORTANT: Set the tool's grip properties for proper positioning
-	scytheTool.Grip = CFrame.new(0, -1.5, 0) * CFrame.Angles(math.rad(0), 0, math.rad(20))
-
-	-- Create the scythe blade (curved metal part)
-	local blade = Instance.new("Part")
-	blade.Name = "Blade"
-	blade.Size = Vector3.new(0.1, 2, 0.3)  -- Thin, long blade
-	blade.Material = Enum.Material.Metal
-	blade.BrickColor = BrickColor.new("Light stone grey")
-	blade.Shape = Enum.PartType.Block
-	blade.Parent = scytheTool
-
-	-- Position blade at the top of the handle, angled
-	local bladeWeld = Instance.new("WeldConstraint")
-	bladeWeld.Part0 = handle
-	bladeWeld.Part1 = blade
-	bladeWeld.Parent = handle
-
-	-- Position blade at top of handle, angled like a real scythe
-	blade.CFrame = handle.CFrame * CFrame.new(0.3, 1.8, 0) * CFrame.Angles(math.rad(0), math.rad(45), math.rad(30))
-
-	-- Create a second blade part for the curved shape
-	local bladeCurve = Instance.new("Part")
-	bladeCurve.Name = "BladeCurve"
-	bladeCurve.Size = Vector3.new(0.1, 1.5, 0.25)
-	bladeCurve.Material = Enum.Material.Metal
-	bladeCurve.BrickColor = BrickColor.new("Light stone grey")
-	bladeCurve.Shape = Enum.PartType.Block
-	bladeCurve.Parent = scytheTool
-
-	-- Position curved part of blade
-	local curveWeld = Instance.new("WeldConstraint")
-	curveWeld.Part0 = blade
-	curveWeld.Part1 = bladeCurve
-	curveWeld.Parent = blade
-
-	bladeCurve.CFrame = blade.CFrame * CFrame.new(0.1, -0.5, 0) * CFrame.Angles(math.rad(0), math.rad(0), math.rad(-20))
-
-	-- Add blade edge effect
-	local bladeEdge = Instance.new("Part")
-	bladeEdge.Name = "BladeEdge"
-	bladeEdge.Size = Vector3.new(0.05, 2, 0.05)
-	bladeEdge.Material = Enum.Material.Neon
-	bladeEdge.BrickColor = BrickColor.new("Institutional white")
-	bladeEdge.Shape = Enum.PartType.Block
-	bladeEdge.Parent = scytheTool
-
-	local edgeWeld = Instance.new("WeldConstraint")
-	edgeWeld.Part0 = blade
-	edgeWeld.Part1 = bladeEdge
-	edgeWeld.Parent = blade
-
-	bladeEdge.CFrame = blade.CFrame * CFrame.new(0, 0, 0.15)
-
-	-- Add handle grip wrap
-	local gripWrap = Instance.new("Part")
-	gripWrap.Name = "GripWrap"
-	gripWrap.Size = Vector3.new(0.2, 0.8, 0.2)
-	gripWrap.Material = Enum.Material.Fabric
-	gripWrap.BrickColor = BrickColor.new("Dark stone grey")
-	gripWrap.Shape = Enum.PartType.Block
-	gripWrap.Parent = scytheTool
-
-	local gripMesh = Instance.new("CylinderMesh")
-	gripMesh.Parent = gripWrap
-
-	local gripWeld = Instance.new("WeldConstraint")
-	gripWeld.Part0 = handle
-	gripWeld.Part1 = gripWrap
-	gripWeld.Parent = handle
-
-	gripWrap.CFrame = handle.CFrame * CFrame.new(0, -1.5, 0)
-
-	-- Create tool icon/display billboard
-	local toolGui = Instance.new("BillboardGui")
-	toolGui.Size = UDim2.new(0, 50, 0, 50)
-	toolGui.StudsOffset = Vector3.new(0, 3, 0)
-	toolGui.Parent = handle
-
-	local toolIcon = Instance.new("TextLabel")
-	toolIcon.Size = UDim2.new(1, 0, 1, 0)
-	toolIcon.BackgroundTransparency = 1
-	toolIcon.Text = "🌾"  -- Wheat emoji more appropriate for scythe
-	toolIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
-	toolIcon.TextScaled = true
-	toolIcon.Font = Enum.Font.SourceSans
-	toolIcon.Parent = toolGui
-
-	-- Create scythe tool script
-	self:CreateScytheToolScript(scytheTool)
-
-	self.ScytheTool = scytheTool
-	print("ScytheGiver: ✅ Created realistic scythe tool with proper positioning")
-end
-
-function ScytheGiver:CreateScytheToolScript(tool)
-	print("ScytheGiver: Creating scythe tool script...")
-
-	-- Look for the ScytheToolScript in ServerStorage
-	local serverStorage = game:GetService("ServerStorage")
-	local toolScriptTemplate = serverStorage:FindFirstChild("ScytheToolScript")
-
-	if toolScriptTemplate then
-		-- Clone the script template
-		local toolScript = toolScriptTemplate:Clone()
-		toolScript.Name = "ScytheScript"
-		toolScript.Parent = tool
-		print("ScytheGiver: ✅ Cloned scythe tool script from ServerStorage")
-	else
-		-- Create a minimal script that just handles RemoteEvent communication
-		local toolScript = Instance.new("LocalScript")
-		toolScript.Name = "ScytheScript"
-		toolScript.Parent = tool
-
-		-- Create minimal script content without setting Source
-		print("ScytheGiver: ⚠️ ScytheToolScript not found in ServerStorage, using minimal script")
-		print("ScytheGiver: Please add ScytheToolScript.client.lua to ServerStorage for full functionality")
+	if self.ScytheTool and self.ScytheTool:IsA("Tool") then
+		print("ScytheGiver: ✅ Found existing scythe tool in ReplicatedStorage: " .. self.ScytheTool.Name)
+		self:ValidateScytheTool()
+		return
 	end
 
-	print("ScytheGiver: ✅ Scythe tool script setup complete")
+	-- If not found, provide helpful error
+	error("ScytheGiver: Scythe tool not found! Please place your Scythe tool in ServerStorage with the name '" .. SCYTHE_CONFIG.SCYTHE_NAME .. "'")
+end
+
+function ScytheGiver:ValidateScytheTool()
+	print("ScytheGiver: Validating existing scythe tool...")
+
+	-- Check if tool has a Handle
+	local handle = self.ScytheTool:FindFirstChild("Handle")
+	if not handle then
+		warn("ScytheGiver: ⚠️ Scythe tool missing Handle - this may cause issues")
+	else
+		print("ScytheGiver: ✅ Handle found")
+	end
+
+	-- Check if tool has a LocalScript
+	local hasLocalScript = false
+	for _, child in pairs(self.ScytheTool:GetChildren()) do
+		if child:IsA("LocalScript") then
+			hasLocalScript = true
+			print("ScytheGiver: ✅ Found LocalScript: " .. child.Name)
+			break
+		end
+	end
+
+	if not hasLocalScript then
+		warn("ScytheGiver: ⚠️ No LocalScript found in scythe tool - swing functionality may not work")
+		print("ScytheGiver: Consider adding a LocalScript to handle tool activation")
+	end
+
+	-- Check tool properties
+	print("ScytheGiver: Tool Properties:")
+	print("  RequiresHandle: " .. tostring(self.ScytheTool.RequiresHandle))
+	print("  CanBeDropped: " .. tostring(self.ScytheTool.CanBeDropped))
+	print("  ManualActivationOnly: " .. tostring(self.ScytheTool.ManualActivationOnly))
+
+	print("ScytheGiver: ✅ Scythe tool validation complete")
 end
 
 -- ========== TOUCH DETECTION ==========
@@ -300,7 +170,6 @@ end
 function ScytheGiver:SetupTouchDetection()
 	print("ScytheGiver: Setting up touch detection...")
 
-	-- Connect touch detection to all parts of the ScytheGiver model
 	for _, child in pairs(self.ScytheGiverModel:GetChildren()) do
 		if child:IsA("BasePart") then
 			local connection = child.Touched:Connect(function(hit)
@@ -315,19 +184,13 @@ function ScytheGiver:SetupTouchDetection()
 end
 
 function ScytheGiver:HandleTouch(hit)
-	-- Get the character that touched the ScytheGiver
 	local character = hit.Parent
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
 
-	if not humanoid then
-		return
-	end
+	if not humanoid then return end
 
-	-- Get the player
 	local player = Players:GetPlayerFromCharacter(character)
-	if not player then
-		return
-	end
+	if not player then return end
 
 	-- Check cooldown
 	local currentTime = tick()
@@ -337,14 +200,13 @@ function ScytheGiver:HandleTouch(hit)
 		return
 	end
 
-	-- Give scythe to player
 	self:GiveScytheToPlayer(player)
 end
 
--- ========== SCYTHE GIVING ==========
+-- ========== SCYTHE GIVING (UPDATED FOR IMMEDIATE EQUIP) ==========
 
 function ScytheGiver:GiveScytheToPlayer(player)
-	print("ScytheGiver: Giving scythe to " .. player.Name)
+	print("ScytheGiver: Giving existing scythe tool to " .. player.Name)
 
 	-- Check if player already has a scythe
 	if self:PlayerHasScythe(player) then
@@ -357,34 +219,38 @@ function ScytheGiver:GiveScytheToPlayer(player)
 	-- Update cooldown
 	self.PlayerCooldowns[player.UserId] = tick()
 
-	-- Clone the scythe tool
+	-- Validate scythe tool exists
 	if not self.ScytheTool then
-		print("ScytheGiver: Scythe tool not available")
+		warn("ScytheGiver: Scythe tool not available")
+		if self.GameCore and self.GameCore.SendNotification then
+			self.GameCore:SendNotification(player, "Error", "Scythe tool not found!", "error")
+		end
 		return
 	end
 
+	-- Clone the existing scythe tool
 	local scytheClone = self.ScytheTool:Clone()
-	scytheClone.Parent = player.Backpack
 
-	-- Auto-equip the scythe so it appears in their hands immediately
-	spawn(function()
-		wait(0.1)  -- Small delay to ensure it's in backpack
-		if scytheClone.Parent == player.Backpack then
-			-- Move to character to equip
-			scytheClone.Parent = player.Character
-			print("ScytheGiver: Auto-equipped scythe for " .. player.Name)
-		end
-	end)
+	-- IMMEDIATELY EQUIP: Put directly in character instead of backpack
+	local character = player.Character
+	if character then
+		scytheClone.Parent = character
+		print("ScytheGiver: ✅ Immediately equipped scythe for " .. player.Name)
+	else
+		-- Fallback to backpack if no character
+		scytheClone.Parent = player.Backpack
+		print("ScytheGiver: ⚠️ No character found, added to backpack for " .. player.Name)
+	end
 
-	-- Visual feedback
+	-- Create visual effects
 	self:CreateGiveEffect(player)
 
 	-- Send notification
 	if self.GameCore and self.GameCore.SendNotification then
-		self.GameCore:SendNotification(player, "🌾 Scythe Acquired", "You received a scythe! Use it to harvest wheat.", "success")
+		self.GameCore:SendNotification(player, "🌾 Scythe Equipped", "Scythe ready! Approach the wheat field to start harvesting.", "success")
 	end
 
-	-- Update player data
+	-- Update player stats
 	if self.GameCore then
 		local playerData = self.GameCore:GetPlayerData(player)
 		if playerData then
@@ -394,58 +260,86 @@ function ScytheGiver:GiveScytheToPlayer(player)
 		end
 	end
 
-	print("ScytheGiver: ✅ Gave scythe to " .. player.Name)
+	print("ScytheGiver: ✅ Successfully gave and equipped scythe to " .. player.Name)
 end
 
 function ScytheGiver:CreateGiveEffect(player)
-	-- Create a visual effect when giving scythe
 	local character = player.Character
 	if not character then return end
 
 	local rootPart = character:FindFirstChild("HumanoidRootPart")
 	if not rootPart then return end
 
-	-- Create sparkle effect
-	local sparkle = Instance.new("Part")
-	sparkle.Name = "ScytheGiveEffect"
-	sparkle.Size = Vector3.new(2, 2, 2)
-	sparkle.Material = Enum.Material.Neon
-	sparkle.BrickColor = BrickColor.new("Bright yellow")
-	sparkle.Anchored = true
-	sparkle.CanCollide = false
-	sparkle.Transparency = 0.3
-	sparkle.Parent = workspace
+	-- Create multiple sparkle effects
+	for i = 1, 5 do
+		local sparkle = Instance.new("Part")
+		sparkle.Name = "ScytheGiveEffect"
+		sparkle.Size = Vector3.new(0.5, 0.5, 0.5)
+		sparkle.Material = Enum.Material.Neon
+		sparkle.BrickColor = BrickColor.new("Bright yellow")
+		sparkle.Anchored = true
+		sparkle.CanCollide = false
+		sparkle.Transparency = 0.3
+		sparkle.Shape = Enum.PartType.Ball
+		sparkle.Parent = workspace
 
-	-- Position above player
-	sparkle.CFrame = rootPart.CFrame * CFrame.new(0, 3, 0)
+		-- Random position around player
+		local offset = Vector3.new(
+			math.random(-3, 3),
+			math.random(1, 4),
+			math.random(-3, 3)
+		)
+		sparkle.Position = rootPart.Position + offset
 
-	-- Make it spin
-	local spin = Instance.new("BodyAngularVelocity")
-	spin.AngularVelocity = Vector3.new(0, 10, 0)
-	spin.MaxTorque = Vector3.new(0, math.huge, 0)
-	spin.Parent = sparkle
+		-- Animate sparkle
+		local tween = TweenService:Create(sparkle,
+			TweenInfo.new(1.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{
+				Position = sparkle.Position + Vector3.new(0, 5, 0),
+				Transparency = 1,
+				Size = Vector3.new(0.1, 0.1, 0.1)
+			}
+		)
+		tween:Play()
 
-	-- Animate effect
-	local tween = TweenService:Create(sparkle,
+		tween.Completed:Connect(function()
+			sparkle:Destroy()
+		end)
+	end
+
+	-- Create main glow effect
+	local mainGlow = Instance.new("Part")
+	mainGlow.Name = "ScytheMainGlow"
+	mainGlow.Size = Vector3.new(4, 4, 4)
+	mainGlow.Material = Enum.Material.Neon
+	mainGlow.BrickColor = BrickColor.new("Bright yellow")
+	mainGlow.Anchored = true
+	mainGlow.CanCollide = false
+	mainGlow.Transparency = 0.7
+	mainGlow.Shape = Enum.PartType.Ball
+	mainGlow.Position = rootPart.Position
+	mainGlow.Parent = workspace
+
+	local mainTween = TweenService:Create(mainGlow,
 		TweenInfo.new(SCYTHE_CONFIG.GLOW_DURATION, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{Transparency = 1, Size = Vector3.new(4, 4, 4)}
+		{Transparency = 1, Size = Vector3.new(8, 8, 8)}
 	)
-	tween:Play()
+	mainTween:Play()
 
-	tween.Completed:Connect(function()
-		sparkle:Destroy()
+	mainTween.Completed:Connect(function()
+		mainGlow:Destroy()
 	end)
 end
 
 -- ========== UTILITY FUNCTIONS ==========
 
 function ScytheGiver:PlayerHasScythe(player)
-	-- Check backpack
+	-- Check if player has scythe in backpack
 	if player.Backpack:FindFirstChild(SCYTHE_CONFIG.SCYTHE_NAME) then
 		return true
 	end
 
-	-- Check character (equipped)
+	-- Check if player has scythe equipped (in character)
 	if player.Character and player.Character:FindFirstChild(SCYTHE_CONFIG.SCYTHE_NAME) then
 		return true
 	end
@@ -453,11 +347,7 @@ function ScytheGiver:PlayerHasScythe(player)
 	return false
 end
 
--- ========== PLAYER CLEANUP ==========
-
 function ScytheGiver:PlayerRemoving(player)
-	print("ScytheGiver: Cleaning up data for " .. player.Name)
-
 	if self.PlayerCooldowns[player.UserId] then
 		self.PlayerCooldowns[player.UserId] = nil
 	end
@@ -469,14 +359,42 @@ function ScytheGiver:DebugStatus()
 	print("=== SCYTHE GIVER DEBUG STATUS ===")
 	print("ScytheGiver model: " .. (self.ScytheGiverModel and self.ScytheGiverModel.Name or "❌ Not found"))
 	print("Scythe tool: " .. (self.ScytheTool and self.ScytheTool.Name or "❌ Not found"))
+
+	if self.ScytheTool then
+		print("Scythe tool location: " .. self.ScytheTool.Parent.Name)
+		print("Scythe tool class: " .. self.ScytheTool.ClassName)
+
+		-- Check for Handle
+		local handle = self.ScytheTool:FindFirstChild("Handle")
+		print("Has Handle: " .. (handle and "✅" or "❌"))
+
+		-- Check for LocalScript
+		local hasScript = false
+		for _, child in pairs(self.ScytheTool:GetChildren()) do
+			if child:IsA("LocalScript") then
+				hasScript = true
+				break
+			end
+		end
+		print("Has LocalScript: " .. (hasScript and "✅" or "❌"))
+	end
+
 	print("Touch connections: " .. #self.TouchConnections)
 	print("Player cooldowns: " .. self:CountTable(self.PlayerCooldowns))
-	print("")
 
+	print("")
 	print("Players with scythes:")
 	for _, player in pairs(Players:GetPlayers()) do
 		local hasScythe = self:PlayerHasScythe(player)
-		print("  " .. player.Name .. ": " .. (hasScythe and "✅" or "❌"))
+		local location = ""
+		if hasScythe then
+			if player.Character and player.Character:FindFirstChild(SCYTHE_CONFIG.SCYTHE_NAME) then
+				location = " (equipped)"
+			else
+				location = " (in backpack)"
+			end
+		end
+		print("  " .. player.Name .. ": " .. (hasScythe and "✅" or "❌") .. location)
 	end
 	print("==================================")
 end
@@ -492,28 +410,19 @@ end
 -- ========== CLEANUP ==========
 
 function ScytheGiver:Cleanup()
-	print("ScytheGiver: Performing cleanup...")
-
-	-- Disconnect touch connections
 	for _, connection in pairs(self.TouchConnections) do
 		if connection then
 			connection:Disconnect()
 		end
 	end
-
-	-- Clear data
 	self.TouchConnections = {}
 	self.PlayerCooldowns = {}
-
-	print("ScytheGiver: Cleanup complete")
 end
 
--- Setup player cleanup
 Players.PlayerRemoving:Connect(function(player)
 	ScytheGiver:PlayerRemoving(player)
 end)
 
--- Global reference
 _G.ScytheGiver = ScytheGiver
 
 return ScytheGiver

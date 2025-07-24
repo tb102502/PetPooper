@@ -1,13 +1,12 @@
 --[[
-    WheatHarvesting.lua - Server-side Wheat Harvesting System
+    WheatHarvesting.lua - Fixed Wheat Harvesting System
     Place in: ServerScriptService/WheatHarvesting.lua
     
-    FEATURES:
-    ✅ Proximity detection for wheat field
-    ✅ Harvesting progress tracking (10 swings = 1 wheat)
-    ✅ 6 sections with 1 wheat each
-    ✅ Integration with existing inventory system
-    ✅ Similar to cow milking system
+    FIXES:
+    ✅ Corrected wheat field structure detection
+    ✅ Individual grain (Part) removal system
+    ✅ Proximity-based grain selection
+    ✅ Proper integration with existing systems
 ]]
 
 local WheatHarvesting = {}
@@ -20,33 +19,12 @@ local TweenService = game:GetService("TweenService")
 
 -- Configuration
 local HARVESTING_CONFIG = {
-	SWINGS_PER_WHEAT = 10,
-	TOTAL_SECTIONS = 6,
-	WHEAT_PER_SECTION = 1,
+	PARTS_PER_SECTION = 6, -- Number of individual grain Parts per GrainCluster
 	PROXIMITY_DISTANCE = 15,
-	HARVESTING_COOLDOWN = 0.5, -- Seconds between swings
-	RESPAWN_TIME = 300 -- 5 minutes in seconds
+	HARVESTING_COOLDOWN = 0.5,
+	RESPAWN_TIME = 300, -- 5 minutes
+	MAX_HARVEST_DISTANCE = 8 -- Maximum distance to harvest a grain
 }
-
--- Load ItemConfig safely
-local ItemConfig = nil
-local function loadItemConfig()
-	local success, result = pcall(function()
-		return require(ReplicatedStorage:WaitForChild("ItemConfig", 10))
-	end)
-	if success then
-		ItemConfig = result
-		print("WheatHarvesting: ItemConfig loaded successfully")
-	else
-		warn("WheatHarvesting: Could not load ItemConfig: " .. tostring(result))
-		-- Create fallback ItemConfig
-		ItemConfig = {
-			ShopItems = {},
-			Crops = {},
-			MiningSystem = {ores = {}}
-		}
-	end
-end
 
 -- State tracking
 WheatHarvesting.GameCore = nil
@@ -60,12 +38,9 @@ WheatHarvesting.SectionData = {}
 -- ========== INITIALIZATION ==========
 
 function WheatHarvesting:Initialize(gameCore)
-	print("WheatHarvesting: Initializing wheat harvesting system...")
+	print("WheatHarvesting: Initializing FIXED wheat harvesting system...")
 
 	self.GameCore = gameCore
-
-	-- Load ItemConfig first
-	loadItemConfig()
 
 	-- Setup wheat field reference
 	self:SetupWheatField()
@@ -82,17 +57,16 @@ function WheatHarvesting:Initialize(gameCore)
 	-- Setup respawn system
 	self:SetupRespawnSystem()
 
-	print("WheatHarvesting: ✅ Wheat harvesting system initialized")
+	print("WheatHarvesting: ✅ FIXED wheat harvesting system initialized")
 	print("  Wheat field sections: " .. #self.WheatSections)
-	print("  Configuration: " .. HARVESTING_CONFIG.SWINGS_PER_WHEAT .. " swings per wheat")
 
 	return true
 end
 
--- ========== WHEAT FIELD SETUP ==========
+-- ========== WHEAT FIELD SETUP (FIXED) ==========
 
 function WheatHarvesting:SetupWheatField()
-	print("WheatHarvesting: Setting up wheat field...")
+	print("WheatHarvesting: Setting up FIXED wheat field structure...")
 
 	-- Find the WheatField model
 	self.WheatField = workspace:FindFirstChild("WheatField")
@@ -100,33 +74,65 @@ function WheatHarvesting:SetupWheatField()
 		error("WheatHarvesting: WheatField model not found in workspace!")
 	end
 
-	-- Find wheat sections (should be models/parts within WheatField)
+	-- Find wheat sections with correct structure
 	self.WheatSections = {}
 
-	-- Look for numbered sections first (Cluster1, Cluster2, etc.)
-	for i = 1, HARVESTING_CONFIG.TOTAL_SECTIONS do
-		local section = self.WheatField:FindFirstChild("Cluster" .. i)
+	-- Look for Section1, Section2, etc.
+	for i = 1, 2 do
+		local section = self.WheatField:FindFirstChild("Section" .. i)
 		if section then
-			table.insert(self.WheatSections, section)
-			print("WheatHarvesting: Found wheat section: " .. section.Name)
+			-- Look for GrainCluster within the section
+			local grainCluster = section:FindFirstChild("GrainCluster" .. i)
+			if grainCluster then
+				table.insert(self.WheatSections, {
+					section = section,
+					grainCluster = grainCluster,
+					sectionNumber = i
+				})
+				print("WheatHarvesting: Found Section" .. i .. " with GrainCluster" .. i)
+			else
+				warn("WheatHarvesting: GrainCluster" .. i .. " not found in Section" .. i)
+			end
+		else
+			warn("WheatHarvesting: Section" .. i .. " not found")
 		end
 	end
 
-	-- If no numbered sections, look for any child models/parts
 	if #self.WheatSections == 0 then
-		for _, child in pairs(self.WheatField:GetChildren()) do
-			if child:IsA("Model") or child:IsA("BasePart") then
-				table.insert(self.WheatSections, child)
-				print("WheatHarvesting: Found wheat section: " .. child.Name)
+		error("WheatHarvesting: No valid wheat sections found!")
+	end
+
+	print("WheatHarvesting: Found " .. #self.WheatSections .. " valid wheat sections")
+end
+
+-- ========== SECTION DATA INITIALIZATION (FIXED) ==========
+
+function WheatHarvesting:InitializeSectionData()
+	print("WheatHarvesting: Initializing FIXED section data...")
+
+	for i, sectionInfo in ipairs(self.WheatSections) do
+		-- Count actual Parts in the GrainCluster
+		local grainParts = {}
+		for _, child in pairs(sectionInfo.grainCluster:GetChildren()) do
+			if child:IsA("Model") and child.Name == "Part" then
+				table.insert(grainParts, child)
 			end
 		end
+
+		self.SectionData[i] = {
+			section = sectionInfo.section,
+			grainCluster = sectionInfo.grainCluster,
+			grainParts = grainParts,
+			availableGrains = #grainParts,
+			totalGrains = #grainParts,
+			respawnTime = 0,
+			sectionNumber = sectionInfo.sectionNumber
+		}
+
+		print("WheatHarvesting: Section " .. i .. " has " .. #grainParts .. " grain parts")
 	end
 
-	if #self.WheatSections == 0 then
-		error("WheatHarvesting: No wheat sections found in WheatField!")
-	end
-
-	print("WheatHarvesting: Found " .. #self.WheatSections .. " wheat sections")
+	print("WheatHarvesting: ✅ FIXED section data initialized")
 end
 
 -- ========== REMOTE EVENTS SETUP ==========
@@ -139,82 +145,47 @@ function WheatHarvesting:SetupRemoteEvents()
 		error("WheatHarvesting: GameRemotes folder not found!")
 	end
 
-	-- Required remote events
 	local requiredEvents = {
-		"ShowWheatPrompt",
-		"HideWheatPrompt", 
-		"StartWheatHarvesting",
-		"StopWheatHarvesting",
-		"SwingScythe",
-		"WheatHarvestUpdate"
+		"ShowWheatPrompt", "HideWheatPrompt", 
+		"StartWheatHarvesting", "StopWheatHarvesting",
+		"SwingScythe", "WheatHarvestUpdate"
 	}
 
-	-- Create/connect remote events
 	for _, eventName in ipairs(requiredEvents) do
 		local event = remotes:FindFirstChild(eventName)
 		if not event then
 			event = Instance.new("RemoteEvent")
 			event.Name = eventName
 			event.Parent = remotes
-			print("WheatHarvesting: Created RemoteEvent: " .. eventName)
 		end
 		self.RemoteEvents[eventName] = event
 	end
 
-	-- Connect event handlers
 	self:ConnectEventHandlers()
 end
 
 function WheatHarvesting:ConnectEventHandlers()
-	print("WheatHarvesting: Connecting event handlers...")
-
-	-- Start harvesting session
 	self.RemoteEvents.StartWheatHarvesting.OnServerEvent:Connect(function(player)
 		self:StartHarvestingSession(player)
 	end)
 
-	-- Stop harvesting session
 	self.RemoteEvents.StopWheatHarvesting.OnServerEvent:Connect(function(player)
 		self:StopHarvestingSession(player)
 	end)
 
-	-- Handle scythe swings
 	self.RemoteEvents.SwingScythe.OnServerEvent:Connect(function(player)
 		self:HandleScytheSwing(player)
 	end)
-
-	print("WheatHarvesting: ✅ Event handlers connected")
-end
-
--- ========== SECTION DATA INITIALIZATION ==========
-
-function WheatHarvesting:InitializeSectionData()
-	print("WheatHarvesting: Initializing section data...")
-
-	for i, section in ipairs(self.WheatSections) do
-		self.SectionData[i] = {
-			section = section,
-			isHarvested = false,
-			harvestedTime = 0,
-			respawnTime = 0
-		}
-	end
-
-	print("WheatHarvesting: ✅ Section data initialized for " .. #self.WheatSections .. " sections")
 end
 
 -- ========== PROXIMITY DETECTION ==========
 
 function WheatHarvesting:SetupProximityDetection()
-	print("WheatHarvesting: Setting up proximity detection...")
-
-	-- Create proximity detection for wheat field
 	local connection = RunService.Heartbeat:Connect(function()
 		self:CheckPlayerProximity()
 	end)
 
 	table.insert(self.ProximityConnections, connection)
-	print("WheatHarvesting: ✅ Proximity detection active")
 end
 
 function WheatHarvesting:CheckPlayerProximity()
@@ -242,39 +213,31 @@ end
 function WheatHarvesting:PlayerEnteredWheatProximity(player)
 	print("WheatHarvesting: " .. player.Name .. " entered wheat field proximity")
 
-	-- Initialize session if needed
 	if not self.PlayerSessions[player.UserId] then
 		self.PlayerSessions[player.UserId] = {
 			nearWheat = false,
 			harvesting = false,
-			currentSection = 1,
-			swingProgress = 0,
 			lastSwingTime = 0
 		}
 	end
 
 	self.PlayerSessions[player.UserId].nearWheat = true
 
-	-- Check if player has scythe
 	local hasScythe = self:PlayerHasScythe(player)
+	local availableWheat = self:GetAvailableWheatCount()
 
-	-- Show wheat prompt
-	self.RemoteEvents.ShowWheatPrompt:FireClient(player, hasScythe, self:GetAvailableWheatCount())
+	self.RemoteEvents.ShowWheatPrompt:FireClient(player, hasScythe, availableWheat)
 end
 
 function WheatHarvesting:PlayerLeftWheatProximity(player)
-	print("WheatHarvesting: " .. player.Name .. " left wheat field proximity")
-
 	if self.PlayerSessions[player.UserId] then
 		self.PlayerSessions[player.UserId].nearWheat = false
 
-		-- Stop harvesting if active
 		if self.PlayerSessions[player.UserId].harvesting then
 			self:StopHarvestingSession(player)
 		end
 	end
 
-	-- Hide wheat prompt
 	self.RemoteEvents.HideWheatPrompt:FireClient(player)
 end
 
@@ -283,67 +246,48 @@ end
 function WheatHarvesting:StartHarvestingSession(player)
 	print("WheatHarvesting: Starting harvesting session for " .. player.Name)
 
-	-- Validate player state
 	if not self.PlayerSessions[player.UserId] or not self.PlayerSessions[player.UserId].nearWheat then
-		print("WheatHarvesting: Player not near wheat field")
 		return
 	end
 
-	-- Check if player has scythe
 	if not self:PlayerHasScythe(player) then
 		if self.GameCore and self.GameCore.SendNotification then
-			self.GameCore:SendNotification(player, "No Scythe", "You need a scythe to harvest wheat! Get one from the Scythe Giver.", "warning")
+			self.GameCore:SendNotification(player, "No Scythe", "You need a scythe to harvest wheat!", "warning")
 		end
 		return
 	end
 
-	-- Check if any wheat is available
 	local availableWheat = self:GetAvailableWheatCount()
 	if availableWheat <= 0 then
 		if self.GameCore and self.GameCore.SendNotification then
-			self.GameCore:SendNotification(player, "No Wheat", "All wheat has been harvested! Wait for it to respawn.", "info")
+			self.GameCore:SendNotification(player, "No Wheat", "All wheat has been harvested! Wait for respawn.", "info")
 		end
 		return
 	end
 
-	-- Start harvesting session
 	local session = self.PlayerSessions[player.UserId]
 	session.harvesting = true
-	session.currentSection = self:GetNextAvailableSection()
-	session.swingProgress = 0
 	session.lastSwingTime = tick()
 
-	-- Notify client
 	self.RemoteEvents.WheatHarvestUpdate:FireClient(player, {
 		harvesting = true,
-		currentSection = session.currentSection,
-		swingProgress = session.swingProgress,
-		maxSwings = HARVESTING_CONFIG.SWINGS_PER_WHEAT,
-		availableWheat = availableWheat
+		availableWheat = availableWheat,
+		message = "Click to swing your scythe and harvest wheat!"
 	})
-
-	print("WheatHarvesting: ✅ Harvesting session started for " .. player.Name)
 end
 
 function WheatHarvesting:StopHarvestingSession(player)
-	print("WheatHarvesting: Stopping harvesting session for " .. player.Name)
-
 	if self.PlayerSessions[player.UserId] then
 		self.PlayerSessions[player.UserId].harvesting = false
-		self.PlayerSessions[player.UserId].swingProgress = 0
 
-		-- Notify client
 		self.RemoteEvents.WheatHarvestUpdate:FireClient(player, {
 			harvesting = false,
-			currentSection = 0,
-			swingProgress = 0,
-			maxSwings = HARVESTING_CONFIG.SWINGS_PER_WHEAT,
 			availableWheat = self:GetAvailableWheatCount()
 		})
 	end
 end
 
--- ========== SCYTHE SWING HANDLING ==========
+-- ========== SCYTHE SWING HANDLING (FIXED) ==========
 
 function WheatHarvesting:HandleScytheSwing(player)
 	local session = self.PlayerSessions[player.UserId]
@@ -359,80 +303,150 @@ function WheatHarvesting:HandleScytheSwing(player)
 
 	session.lastSwingTime = currentTime
 
-	-- Check if player has scythe
 	if not self:PlayerHasScythe(player) then
 		self:StopHarvestingSession(player)
 		return
 	end
 
-	-- Increment swing progress
-	session.swingProgress = session.swingProgress + 1
+	-- Find closest grain to harvest
+	local harvestedGrain = self:HarvestClosestGrain(player)
 
-	print("WheatHarvesting: " .. player.Name .. " swung scythe (" .. session.swingProgress .. "/" .. HARVESTING_CONFIG.SWINGS_PER_WHEAT .. ")")
+	if harvestedGrain then
+		-- Give wheat to player
+		if self.GameCore and self.GameCore.AddItemToInventory then
+			local success = self.GameCore:AddItemToInventory(player, "farming", "wheat", 1)
 
-	-- Check if section is completed
-	if session.swingProgress >= HARVESTING_CONFIG.SWINGS_PER_WHEAT then
-		self:CompleteSection(player, session.currentSection)
+			if success then
+				if self.GameCore.SendNotification then
+					self.GameCore:SendNotification(player, "🌾 Wheat Harvested", 
+						"Harvested 1 wheat grain!", "success")
+				end
 
-		-- Move to next section or end harvesting
-		local nextSection = self:GetNextAvailableSection()
-		if nextSection then
-			session.currentSection = nextSection
-			session.swingProgress = 0
-			print("WheatHarvesting: Moving " .. player.Name .. " to section " .. nextSection)
-		else
-			-- All sections completed
+				-- Update player stats
+				local playerData = self.GameCore:GetPlayerData(player)
+				if playerData then
+					playerData.stats = playerData.stats or {}
+					playerData.stats.wheatHarvested = (playerData.stats.wheatHarvested or 0) + 1
+					self.GameCore:UpdatePlayerData(player, playerData)
+				end
+			end
+		end
+
+		-- Check if all wheat is harvested
+		local remainingWheat = self:GetAvailableWheatCount()
+		if remainingWheat <= 0 then
 			self:StopHarvestingSession(player)
 			if self.GameCore and self.GameCore.SendNotification then
-				self.GameCore:SendNotification(player, "🌾 Harvest Complete", "All wheat has been harvested! Great work!", "success")
-			end
-			return
-		end
-	end
-
-	-- Update client
-	self.RemoteEvents.WheatHarvestUpdate:FireClient(player, {
-		harvesting = true,
-		currentSection = session.currentSection,
-		swingProgress = session.swingProgress,
-		maxSwings = HARVESTING_CONFIG.SWINGS_PER_WHEAT,
-		availableWheat = self:GetAvailableWheatCount()
-	})
-end
-
-function WheatHarvesting:CompleteSection(player, sectionIndex)
-	print("WheatHarvesting: " .. player.Name .. " completed section " .. sectionIndex)
-
-	-- Mark section as harvested
-	if self.SectionData[sectionIndex] then
-		self.SectionData[sectionIndex].isHarvested = true
-		self.SectionData[sectionIndex].harvestedTime = tick()
-		self.SectionData[sectionIndex].respawnTime = tick() + HARVESTING_CONFIG.RESPAWN_TIME
-
-		-- Visual feedback - hide/fade the section
-		self:HideWheatSection(sectionIndex)
-	end
-
-	-- Give wheat to player
-	if self.GameCore and self.GameCore.AddItemToInventory then
-		local success = self.GameCore:AddItemToInventory(player, "farming", "wheat", HARVESTING_CONFIG.WHEAT_PER_SECTION)
-
-		if success then
-			if self.GameCore.SendNotification then
-				self.GameCore:SendNotification(player, "🌾 Wheat Harvested", 
-					"Harvested " .. HARVESTING_CONFIG.WHEAT_PER_SECTION .. " wheat from this section!", "success")
-			end
-
-			-- Update player stats
-			local playerData = self.GameCore:GetPlayerData(player)
-			if playerData then
-				playerData.stats = playerData.stats or {}
-				playerData.stats.wheatHarvested = (playerData.stats.wheatHarvested or 0) + HARVESTING_CONFIG.WHEAT_PER_SECTION
-				self.GameCore:UpdatePlayerData(player, playerData)
+				self.GameCore:SendNotification(player, "🌾 Field Cleared", "All wheat harvested! Great work!", "success")
 			end
 		else
-			print("WheatHarvesting: Failed to add wheat to " .. player.Name .. "'s inventory")
+			-- Update client
+			self.RemoteEvents.WheatHarvestUpdate:FireClient(player, {
+				harvesting = true,
+				availableWheat = remainingWheat,
+				message = "Keep harvesting! " .. remainingWheat .. " wheat remaining."
+			})
 		end
+	else
+		-- No wheat found nearby
+		if self.GameCore and self.GameCore.SendNotification then
+			self.GameCore:SendNotification(player, "No Wheat Nearby", "Move closer to wheat grains to harvest them!", "warning")
+		end
+	end
+end
+
+-- ========== GRAIN HARVESTING (NEW) ==========
+
+function WheatHarvesting:HarvestClosestGrain(player)
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		return nil
+	end
+
+	local playerPos = character.HumanoidRootPart.Position
+	local closestGrain = nil
+	local closestDistance = HARVESTING_CONFIG.MAX_HARVEST_DISTANCE
+	local closestSectionIndex = nil
+
+	-- Find closest harvestable grain
+	for sectionIndex, sectionData in pairs(self.SectionData) do
+		if sectionData.availableGrains > 0 then
+			for i, grainPart in pairs(sectionData.grainParts) do
+				if grainPart and grainPart.Parent then -- Check if grain still exists
+					local distance = (grainPart.Position - playerPos).Magnitude
+					if distance < closestDistance then
+						closestGrain = grainPart
+						closestDistance = distance
+						closestSectionIndex = sectionIndex
+					end
+				end
+			end
+		end
+	end
+
+	-- Harvest the closest grain
+	if closestGrain and closestSectionIndex then
+		self:RemoveGrain(closestSectionIndex, closestGrain)
+		return closestGrain
+	end
+
+	return nil
+end
+
+function WheatHarvesting:RemoveGrain(sectionIndex, grainPart)
+	local sectionData = self.SectionData[sectionIndex]
+	if not sectionData then return end
+
+	-- Create harvest effect
+	self:CreateHarvestEffect(grainPart.Position)
+
+	-- Remove the grain part
+	grainPart:Destroy()
+
+	-- Update section data
+	for i, part in pairs(sectionData.grainParts) do
+		if part == grainPart then
+			table.remove(sectionData.grainParts, i)
+			break
+		end
+	end
+
+	sectionData.availableGrains = sectionData.availableGrains - 1
+
+	-- If section is empty, set respawn timer
+	if sectionData.availableGrains <= 0 then
+		sectionData.respawnTime = tick() + HARVESTING_CONFIG.RESPAWN_TIME
+		print("WheatHarvesting: Section " .. sectionIndex .. " is empty, will respawn in " .. HARVESTING_CONFIG.RESPAWN_TIME .. " seconds")
+	end
+end
+
+function WheatHarvesting:CreateHarvestEffect(position)
+	-- Create wheat particles
+	for i = 1, 3 do
+		local particle = Instance.new("Part")
+		particle.Name = "WheatParticle"
+		particle.Size = Vector3.new(0.1, 0.1, 0.1)
+		particle.Material = Enum.Material.Neon
+		particle.BrickColor = BrickColor.new("Bright yellow")
+		particle.Anchored = false
+		particle.CanCollide = false
+		particle.Position = position + Vector3.new(
+			math.random(-1, 1),
+			math.random(0, 2),
+			math.random(-1, 1)
+		)
+		particle.Parent = workspace
+
+		local bodyVelocity = Instance.new("BodyVelocity")
+		bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
+		bodyVelocity.Velocity = Vector3.new(
+			math.random(-5, 5),
+			math.random(5, 15),
+			math.random(-5, 5)
+		)
+		bodyVelocity.Parent = particle
+
+		game:GetService("Debris"):AddItem(particle, 2)
 	end
 end
 
@@ -446,102 +460,30 @@ end
 function WheatHarvesting:GetAvailableWheatCount()
 	local count = 0
 	for _, sectionData in pairs(self.SectionData) do
-		if not sectionData.isHarvested then
-			count = count + HARVESTING_CONFIG.WHEAT_PER_SECTION
-		end
+		count = count + sectionData.availableGrains
 	end
 	return count
-end
-
-function WheatHarvesting:GetNextAvailableSection()
-	for i, sectionData in pairs(self.SectionData) do
-		if not sectionData.isHarvested then
-			return i
-		end
-	end
-	return nil
-end
-
-function WheatHarvesting:HideWheatSection(sectionIndex)
-	local sectionData = self.SectionData[sectionIndex]
-	if not sectionData or not sectionData.section then return end
-
-	-- Fade out the section
-	local function fadeObject(obj)
-		if obj:IsA("BasePart") then
-			local tween = TweenService:Create(obj, 
-				TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{Transparency = 1}
-			)
-			tween:Play()
-		end
-	end
-
-	-- Apply fade to section and its descendants
-	fadeObject(sectionData.section)
-	for _, descendant in pairs(sectionData.section:GetDescendants()) do
-		fadeObject(descendant)
-	end
-
-	print("WheatHarvesting: Hid section " .. sectionIndex)
-end
-
-function WheatHarvesting:ShowWheatSection(sectionIndex)
-	local sectionData = self.SectionData[sectionIndex]
-	if not sectionData or not sectionData.section then return end
-
-	-- Fade in the section
-	local function showObject(obj)
-		if obj:IsA("BasePart") then
-			local tween = TweenService:Create(obj, 
-				TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-				{Transparency = 0}
-			)
-			tween:Play()
-		end
-	end
-
-	-- Apply fade to section and its descendants
-	showObject(sectionData.section)
-	for _, descendant in pairs(sectionData.section:GetDescendants()) do
-		showObject(descendant)
-	end
-
-	print("WheatHarvesting: Showed section " .. sectionIndex)
 end
 
 -- ========== RESPAWN SYSTEM ==========
 
 function WheatHarvesting:SetupRespawnSystem()
-	print("WheatHarvesting: Setting up respawn system...")
-
-	-- Check for respawns every 30 seconds
 	spawn(function()
 		while true do
 			wait(30)
 			self:CheckRespawns()
 		end
 	end)
-
-	print("WheatHarvesting: ✅ Respawn system active")
 end
 
 function WheatHarvesting:CheckRespawns()
 	local currentTime = tick()
 	local respawnedSections = 0
 
-	for i, sectionData in pairs(self.SectionData) do
-		if sectionData.isHarvested and currentTime >= sectionData.respawnTime then
-			-- Respawn this section
-			sectionData.isHarvested = false
-			sectionData.harvestedTime = 0
-			sectionData.respawnTime = 0
-
-			-- Show the section again
-			self:ShowWheatSection(i)
-
+	for sectionIndex, sectionData in pairs(self.SectionData) do
+		if sectionData.availableGrains <= 0 and currentTime >= sectionData.respawnTime and sectionData.respawnTime > 0 then
+			self:RespawnSection(sectionIndex)
 			respawnedSections = respawnedSections + 1
-			print("WheatHarvesting: Respawned section " .. i)
 		end
 	end
 
@@ -560,14 +502,27 @@ function WheatHarvesting:CheckRespawns()
 	end
 end
 
--- ========== PLAYER CLEANUP ==========
+function WheatHarvesting:RespawnSection(sectionIndex)
+	local sectionData = self.SectionData[sectionIndex]
+	if not sectionData then return end
 
-function WheatHarvesting:PlayerRemoving(player)
-	print("WheatHarvesting: Cleaning up data for " .. player.Name)
+	-- Clear old grain parts array
+	sectionData.grainParts = {}
 
-	if self.PlayerSessions[player.UserId] then
-		self.PlayerSessions[player.UserId] = nil
+	-- Find all Parts in the grain cluster and restore them
+	for _, child in pairs(sectionData.grainCluster:GetChildren()) do
+		if child:IsA("BasePart") and child.Name == "Part" then
+			child.Transparency = 0
+			child.CanCollide = true
+			table.insert(sectionData.grainParts, child)
+		end
 	end
+
+	-- Reset section data
+	sectionData.availableGrains = #sectionData.grainParts
+	sectionData.respawnTime = 0
+
+	print("WheatHarvesting: Respawned section " .. sectionIndex .. " with " .. sectionData.availableGrains .. " grains")
 end
 
 -- ========== DEBUG FUNCTIONS ==========
@@ -582,19 +537,9 @@ function WheatHarvesting:DebugStatus()
 
 	print("Section status:")
 	for i, sectionData in pairs(self.SectionData) do
-		local status = sectionData.isHarvested and "Harvested" or "Available"
-		print("  Section " .. i .. ": " .. status)
+		print("  Section " .. i .. ": " .. sectionData.availableGrains .. "/" .. sectionData.totalGrains .. " grains")
 	end
-	print("")
 
-	print("Player sessions:")
-	for userId, session in pairs(self.PlayerSessions) do
-		local player = Players:GetPlayerByUserId(userId)
-		local playerName = player and player.Name or "Unknown"
-		print("  " .. playerName .. ": Near=" .. tostring(session.nearWheat) .. 
-			", Harvesting=" .. tostring(session.harvesting) .. 
-			", Progress=" .. session.swingProgress .. "/" .. HARVESTING_CONFIG.SWINGS_PER_WHEAT)
-	end
 	print("=====================================")
 end
 
@@ -609,29 +554,22 @@ end
 -- ========== CLEANUP ==========
 
 function WheatHarvesting:Cleanup()
-	print("WheatHarvesting: Performing cleanup...")
-
-	-- Disconnect proximity connections
 	for _, connection in pairs(self.ProximityConnections) do
 		if connection then
 			connection:Disconnect()
 		end
 	end
 
-	-- Clear all data
 	self.PlayerSessions = {}
 	self.ProximityConnections = {}
-	self.SectionData = {}
-
-	print("WheatHarvesting: Cleanup complete")
 end
 
--- Setup player cleanup
 Players.PlayerRemoving:Connect(function(player)
-	WheatHarvesting:PlayerRemoving(player)
+	if WheatHarvesting.PlayerSessions[player.UserId] then
+		WheatHarvesting.PlayerSessions[player.UserId] = nil
+	end
 end)
 
--- Global reference
 _G.WheatHarvesting = WheatHarvesting
 
 return WheatHarvesting

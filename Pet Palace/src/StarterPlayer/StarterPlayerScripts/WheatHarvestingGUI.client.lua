@@ -1,12 +1,12 @@
 --[[
-    WheatHarvestingGUI.client.lua - Client-side Wheat Harvesting GUI
+    WheatHarvestingGUI.client.lua - Fixed Client-side Wheat Harvesting GUI
     Place in: StarterPlayer/StarterPlayerScripts/WheatHarvestingGUI.client.lua
     
-    FEATURES:
-    ✅ Proximity prompt GUI like cow milking
-    ✅ Harvesting progress display
-    ✅ Instructions and feedback
-    ✅ Integration with existing framework
+    FIXES:
+    ✅ Simplified UI for individual grain harvesting
+    ✅ Better integration with scythe tool
+    ✅ Real-time wheat count updates
+    ✅ Improved user feedback
 ]]
 
 local WheatHarvestingGUI = {}
@@ -29,10 +29,8 @@ WheatHarvestingGUI.State = {
 	remoteEvents = {},
 	harvestingData = {
 		harvesting = false,
-		currentSection = 0,
-		swingProgress = 0,
-		maxSwings = 10,
-		availableWheat = 0
+		availableWheat = 0,
+		message = ""
 	}
 }
 
@@ -45,7 +43,7 @@ WheatHarvestingGUI.UIElements = {
 -- ========== INITIALIZATION ==========
 
 function WheatHarvestingGUI:Initialize()
-	print("WheatHarvestingGUI: Initializing wheat harvesting GUI...")
+	print("WheatHarvestingGUI: Initializing FIXED wheat harvesting GUI...")
 
 	-- Setup remote events
 	self:SetupRemoteEvents()
@@ -53,7 +51,7 @@ function WheatHarvestingGUI:Initialize()
 	-- Setup input handling
 	self:SetupInputHandling()
 
-	print("WheatHarvestingGUI: ✅ Wheat harvesting GUI initialized")
+	print("WheatHarvestingGUI: ✅ FIXED wheat harvesting GUI initialized")
 	return true
 end
 
@@ -70,10 +68,9 @@ function WheatHarvestingGUI:SetupRemoteEvents()
 	-- Required remote events
 	local requiredEvents = {
 		"ShowWheatPrompt",
-		"HideWheatPrompt",
+		"HideWheatPrompt", 
 		"StartWheatHarvesting",
 		"StopWheatHarvesting",
-		"SwingScythe",
 		"WheatHarvestUpdate"
 	}
 
@@ -137,7 +134,7 @@ function WheatHarvestingGUI:ShowProximityPrompt(hasScythe, availableWheat)
 end
 
 function WheatHarvestingGUI:CreateProximityGUI(hasScythe, availableWheat)
-	print("WheatHarvestingGUI: Creating proximity GUI")
+	print("WheatHarvestingGUI: Creating FIXED proximity GUI")
 
 	-- Create main GUI
 	local proximityGUI = Instance.new("ScreenGui")
@@ -149,45 +146,53 @@ function WheatHarvestingGUI:CreateProximityGUI(hasScythe, availableWheat)
 	-- Main frame
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Name = "MainFrame"
-	mainFrame.Size = UDim2.new(0, 400, 0, 200)
-	mainFrame.Position = UDim2.new(0.5, -200, 0.7, -100)
-	mainFrame.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+	mainFrame.Size = UDim2.new(0, 420, 0, 180)
+	mainFrame.Position = UDim2.new(0.5, -210, 0.75, -90)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(45, 65, 45)
 	mainFrame.BorderSizePixel = 0
 	mainFrame.Parent = proximityGUI
 
 	-- Corner radius
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.05, 0)
+	corner.CornerRadius = UDim.new(0.04, 0)
 	corner.Parent = mainFrame
+
+	-- Add subtle border glow
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(100, 150, 100)
+	stroke.Thickness = 2
+	stroke.Transparency = 0.5
+	stroke.Parent = mainFrame
 
 	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(1, 0, 0, 40)
+	title.Size = UDim2.new(1, 0, 0, 35)
 	title.Position = UDim2.new(0, 0, 0, 10)
 	title.BackgroundTransparency = 1
 	title.Text = "🌾 WHEAT FIELD"
-	title.TextColor3 = Color3.new(1, 1, 1)
+	title.TextColor3 = Color3.fromRGB(255, 255, 120)
 	title.TextScaled = true
 	title.Font = Enum.Font.GothamBold
 	title.Parent = mainFrame
 
-	-- Status text
-	local statusText = Instance.new("TextLabel")
-	statusText.Name = "StatusText"
-	statusText.Size = UDim2.new(1, -20, 0, 30)
-	statusText.Position = UDim2.new(0, 10, 0, 60)
-	statusText.BackgroundTransparency = 1
-	statusText.TextColor3 = Color3.new(1, 1, 1)
-	statusText.TextScaled = true
-	statusText.Font = Enum.Font.Gotham
-	statusText.Parent = mainFrame
+	-- Wheat count
+	local wheatCount = Instance.new("TextLabel")
+	wheatCount.Name = "WheatCount"
+	wheatCount.Size = UDim2.new(1, -20, 0, 25)
+	wheatCount.Position = UDim2.new(0, 10, 0, 50)
+	wheatCount.BackgroundTransparency = 1
+	wheatCount.Text = availableWheat .. " wheat grains available"
+	wheatCount.TextColor3 = Color3.fromRGB(200, 255, 200)
+	wheatCount.TextScaled = true
+	wheatCount.Font = Enum.Font.Gotham
+	wheatCount.Parent = mainFrame
 
-	-- Instructions
+	-- Status and instructions
 	local instructions = Instance.new("TextLabel")
 	instructions.Name = "Instructions"
-	instructions.Size = UDim2.new(1, -20, 0, 60)
-	instructions.Position = UDim2.new(0, 10, 0, 100)
+	instructions.Size = UDim2.new(1, -20, 0, 50)
+	instructions.Position = UDim2.new(0, 10, 0, 85)
 	instructions.BackgroundTransparency = 1
 	instructions.TextColor3 = Color3.fromRGB(200, 200, 200)
 	instructions.TextScaled = true
@@ -197,44 +202,46 @@ function WheatHarvestingGUI:CreateProximityGUI(hasScythe, availableWheat)
 
 	-- Set content based on player state
 	if not hasScythe then
-		statusText.Text = "⚠️ No Scythe Found"
-		statusText.TextColor3 = Color3.fromRGB(255, 200, 100)
-		instructions.Text = "You need a scythe to harvest wheat! Find the Scythe Giver to get one."
+		wheatCount.TextColor3 = Color3.fromRGB(255, 200, 100)
+		instructions.Text = "⚠️ You need a scythe to harvest wheat!\nFind the Scythe Giver to get one."
+		instructions.TextColor3 = Color3.fromRGB(255, 200, 100)
 	elseif availableWheat <= 0 then
-		statusText.Text = "🌾 No Wheat Available"
-		statusText.TextColor3 = Color3.fromRGB(255, 200, 100)
-		instructions.Text = "All wheat has been harvested! Wait for it to respawn."
+		wheatCount.Text = "No wheat available"
+		wheatCount.TextColor3 = Color3.fromRGB(255, 200, 100)
+		instructions.Text = "🌾 All wheat has been harvested!\nWait for it to respawn in a few minutes."
+		instructions.TextColor3 = Color3.fromRGB(255, 200, 100)
 	else
-		statusText.Text = "🌾 " .. availableWheat .. " wheat available"
-		statusText.TextColor3 = Color3.fromRGB(100, 255, 100)
-		instructions.Text = "Click 'Start Harvesting' to begin! You'll need to swing your scythe 10 times per wheat."
+		instructions.Text = "Click 'Start Harvesting' to begin!\nEach scythe swing will harvest one grain of wheat."
 
 		-- Add start button
 		local startButton = Instance.new("TextButton")
 		startButton.Name = "StartButton"
-		startButton.Size = UDim2.new(0, 150, 0, 30)
-		startButton.Position = UDim2.new(0.5, -75, 1, -40)
-		startButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
+		startButton.Size = UDim2.new(0, 160, 0, 30)
+		startButton.Position = UDim2.new(0.5, -80, 1, -40)
+		startButton.BackgroundColor3 = Color3.fromRGB(80, 140, 80)
 		startButton.BorderSizePixel = 0
-		startButton.Text = "Start Harvesting"
+		startButton.Text = "🌾 Start Harvesting"
 		startButton.TextColor3 = Color3.new(1, 1, 1)
 		startButton.TextScaled = true
 		startButton.Font = Enum.Font.GothamBold
 		startButton.Parent = mainFrame
 
 		local buttonCorner = Instance.new("UICorner")
-		buttonCorner.CornerRadius = UDim.new(0.1, 0)
+		buttonCorner.CornerRadius = UDim.new(0.15, 0)
 		buttonCorner.Parent = startButton
 
 		startButton.MouseButton1Click:Connect(function()
 			self:StartHarvesting()
 		end)
 
-		-- Button hover effect
+		-- Button hover effects
 		startButton.MouseEnter:Connect(function()
 			local tween = TweenService:Create(startButton,
 				TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-				{BackgroundColor3 = Color3.fromRGB(120, 220, 120)}
+				{
+					BackgroundColor3 = Color3.fromRGB(100, 160, 100),
+					Size = UDim2.new(0, 170, 0, 32)
+				}
 			)
 			tween:Play()
 		end)
@@ -242,7 +249,10 @@ function WheatHarvestingGUI:CreateProximityGUI(hasScythe, availableWheat)
 		startButton.MouseLeave:Connect(function()
 			local tween = TweenService:Create(startButton,
 				TweenInfo.new(0.2, Enum.EasingStyle.Quad),
-				{BackgroundColor3 = Color3.fromRGB(100, 200, 100)}
+				{
+					BackgroundColor3 = Color3.fromRGB(80, 140, 80),
+					Size = UDim2.new(0, 160, 0, 30)
+				}
 			)
 			tween:Play()
 		end)
@@ -252,14 +262,14 @@ function WheatHarvestingGUI:CreateProximityGUI(hasScythe, availableWheat)
 	self.UIElements.ProximityGUI = proximityGUI
 
 	-- Animate in
-	mainFrame.Size = UDim2.new(0, 0, 0, 0)
+	mainFrame.Position = UDim2.new(0.5, -210, 1, 0)
 	local animTween = TweenService:Create(mainFrame,
-		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{Size = UDim2.new(0, 400, 0, 200)}
+		TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{Position = UDim2.new(0.5, -210, 0.75, -90)}
 	)
 	animTween:Play()
 
-	print("WheatHarvestingGUI: ✅ Proximity GUI created")
+	print("WheatHarvestingGUI: ✅ FIXED proximity GUI created")
 end
 
 -- ========== HARVESTING GUI ==========
@@ -287,7 +297,7 @@ function WheatHarvestingGUI:UpdateHarvestingGUI(harvestingData)
 end
 
 function WheatHarvestingGUI:ShowHarvestingGUI()
-	print("WheatHarvestingGUI: Showing harvesting GUI")
+	print("WheatHarvestingGUI: Showing FIXED harvesting GUI")
 
 	-- Hide proximity GUI
 	if self.UIElements.ProximityGUI then
@@ -309,7 +319,7 @@ function WheatHarvestingGUI:ShowHarvestingGUI()
 end
 
 function WheatHarvestingGUI:CreateHarvestingGUI()
-	print("WheatHarvestingGUI: Creating harvesting GUI")
+	print("WheatHarvestingGUI: Creating FIXED harvesting GUI")
 
 	-- Create main GUI
 	local harvestingGUI = Instance.new("ScreenGui")
@@ -321,86 +331,55 @@ function WheatHarvestingGUI:CreateHarvestingGUI()
 	-- Main frame
 	local mainFrame = Instance.new("Frame")
 	mainFrame.Name = "MainFrame"
-	mainFrame.Size = UDim2.new(0, 500, 0, 250)
-	mainFrame.Position = UDim2.new(0.5, -250, 0.7, -125)
-	mainFrame.BackgroundColor3 = Color3.fromRGB(40, 60, 40)
+	mainFrame.Size = UDim2.new(0, 450, 0, 160)
+	mainFrame.Position = UDim2.new(0.5, -225, 0.8, -80)
+	mainFrame.BackgroundColor3 = Color3.fromRGB(45, 65, 45)
 	mainFrame.BorderSizePixel = 0
 	mainFrame.Parent = harvestingGUI
 
 	-- Corner radius
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.05, 0)
+	corner.CornerRadius = UDim.new(0.04, 0)
 	corner.Parent = mainFrame
+
+	-- Add border glow
+	local stroke = Instance.new("UIStroke")
+	stroke.Color = Color3.fromRGB(100, 150, 100)
+	stroke.Thickness = 2
+	stroke.Transparency = 0.3
+	stroke.Parent = mainFrame
 
 	-- Title
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(1, 0, 0, 40)
-	title.Position = UDim2.new(0, 0, 0, 10)
+	title.Size = UDim2.new(1, 0, 0, 35)
+	title.Position = UDim2.new(0, 0, 0, 5)
 	title.BackgroundTransparency = 1
 	title.Text = "🌾 HARVESTING WHEAT"
-	title.TextColor3 = Color3.new(1, 1, 1)
+	title.TextColor3 = Color3.fromRGB(255, 255, 120)
 	title.TextScaled = true
 	title.Font = Enum.Font.GothamBold
 	title.Parent = mainFrame
 
-	-- Section info
-	local sectionInfo = Instance.new("TextLabel")
-	sectionInfo.Name = "SectionInfo"
-	sectionInfo.Size = UDim2.new(1, -20, 0, 30)
-	sectionInfo.Position = UDim2.new(0, 10, 0, 60)
-	sectionInfo.BackgroundTransparency = 1
-	sectionInfo.Text = "Section 1 of 6"
-	sectionInfo.TextColor3 = Color3.fromRGB(200, 200, 200)
-	sectionInfo.TextScaled = true
-	sectionInfo.Font = Enum.Font.Gotham
-	sectionInfo.Parent = mainFrame
-
-	-- Progress bar background
-	local progressBG = Instance.new("Frame")
-	progressBG.Name = "ProgressBG"
-	progressBG.Size = UDim2.new(1, -40, 0, 20)
-	progressBG.Position = UDim2.new(0, 20, 0, 100)
-	progressBG.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-	progressBG.BorderSizePixel = 0
-	progressBG.Parent = mainFrame
-
-	local progressBGCorner = Instance.new("UICorner")
-	progressBGCorner.CornerRadius = UDim.new(0.5, 0)
-	progressBGCorner.Parent = progressBG
-
-	-- Progress bar
-	local progressBar = Instance.new("Frame")
-	progressBar.Name = "ProgressBar"
-	progressBar.Size = UDim2.new(0, 0, 1, 0)
-	progressBar.Position = UDim2.new(0, 0, 0, 0)
-	progressBar.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-	progressBar.BorderSizePixel = 0
-	progressBar.Parent = progressBG
-
-	local progressBarCorner = Instance.new("UICorner")
-	progressBarCorner.CornerRadius = UDim.new(0.5, 0)
-	progressBarCorner.Parent = progressBar
-
-	-- Progress text
-	local progressText = Instance.new("TextLabel")
-	progressText.Name = "ProgressText"
-	progressText.Size = UDim2.new(1, -20, 0, 25)
-	progressText.Position = UDim2.new(0, 10, 0, 130)
-	progressText.BackgroundTransparency = 1
-	progressText.Text = "0 / 10 swings"
-	progressText.TextColor3 = Color3.new(1, 1, 1)
-	progressText.TextScaled = true
-	progressText.Font = Enum.Font.GothamBold
-	progressText.Parent = mainFrame
+	-- Wheat count display
+	local wheatCount = Instance.new("TextLabel")
+	wheatCount.Name = "WheatCount"
+	wheatCount.Size = UDim2.new(1, -20, 0, 30)
+	wheatCount.Position = UDim2.new(0, 10, 0, 40)
+	wheatCount.BackgroundTransparency = 1
+	wheatCount.Text = "0 wheat remaining"
+	wheatCount.TextColor3 = Color3.fromRGB(200, 255, 200)
+	wheatCount.TextScaled = true
+	wheatCount.Font = Enum.Font.GothamBold
+	wheatCount.Parent = mainFrame
 
 	-- Instructions
 	local instructions = Instance.new("TextLabel")
 	instructions.Name = "Instructions"
-	instructions.Size = UDim2.new(1, -20, 0, 40)
-	instructions.Position = UDim2.new(0, 10, 0, 165)
+	instructions.Size = UDim2.new(1, -20, 0, 35)
+	instructions.Position = UDim2.new(0, 10, 0, 75)
 	instructions.BackgroundTransparency = 1
-	instructions.Text = "Click to swing your scythe! You need 10 swings to harvest this section."
+	instructions.Text = "Click to swing your scythe and harvest wheat!"
 	instructions.TextColor3 = Color3.fromRGB(200, 200, 200)
 	instructions.TextScaled = true
 	instructions.Font = Enum.Font.Gotham
@@ -412,7 +391,7 @@ function WheatHarvestingGUI:CreateHarvestingGUI()
 	stopButton.Name = "StopButton"
 	stopButton.Size = UDim2.new(0, 100, 0, 25)
 	stopButton.Position = UDim2.new(0.5, -50, 1, -35)
-	stopButton.BackgroundColor3 = Color3.fromRGB(200, 100, 100)
+	stopButton.BackgroundColor3 = Color3.fromRGB(180, 80, 80)
 	stopButton.BorderSizePixel = 0
 	stopButton.Text = "Stop"
 	stopButton.TextColor3 = Color3.new(1, 1, 1)
@@ -421,7 +400,7 @@ function WheatHarvestingGUI:CreateHarvestingGUI()
 	stopButton.Parent = mainFrame
 
 	local stopButtonCorner = Instance.new("UICorner")
-	stopButtonCorner.CornerRadius = UDim.new(0.1, 0)
+	stopButtonCorner.CornerRadius = UDim.new(0.15, 0)
 	stopButtonCorner.Parent = stopButton
 
 	stopButton.MouseButton1Click:Connect(function()
@@ -435,14 +414,14 @@ function WheatHarvestingGUI:CreateHarvestingGUI()
 	self:UpdateHarvestingDisplay()
 
 	-- Animate in
-	mainFrame.Size = UDim2.new(0, 0, 0, 0)
+	mainFrame.Position = UDim2.new(0.5, -225, 1, 0)
 	local animTween = TweenService:Create(mainFrame,
-		TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{Size = UDim2.new(0, 500, 0, 250)}
+		TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+		{Position = UDim2.new(0.5, -225, 0.8, -80)}
 	)
 	animTween:Play()
 
-	print("WheatHarvestingGUI: ✅ Harvesting GUI created")
+	print("WheatHarvestingGUI: ✅ FIXED harvesting GUI created")
 end
 
 function WheatHarvestingGUI:UpdateHarvestingDisplay()
@@ -452,38 +431,28 @@ function WheatHarvestingGUI:UpdateHarvestingDisplay()
 	local mainFrame = self.UIElements.HarvestingGUI:FindFirstChild("MainFrame")
 	if not mainFrame then return end
 
-	-- Update section info
-	local sectionInfo = mainFrame:FindFirstChild("SectionInfo")
-	if sectionInfo then
-		sectionInfo.Text = "Section " .. data.currentSection .. " of 6"
+	-- Update wheat count
+	local wheatCount = mainFrame:FindFirstChild("WheatCount")
+	if wheatCount then
+		wheatCount.Text = data.availableWheat .. " wheat grains remaining"
+
+		-- Change color based on amount
+		if data.availableWheat <= 0 then
+			wheatCount.TextColor3 = Color3.fromRGB(255, 200, 100)
+		elseif data.availableWheat < 10 then
+			wheatCount.TextColor3 = Color3.fromRGB(255, 255, 150)
+		else
+			wheatCount.TextColor3 = Color3.fromRGB(200, 255, 200)
+		end
 	end
 
-	-- Update progress bar
-	local progressBar = mainFrame:FindFirstChild("ProgressBG"):FindFirstChild("ProgressBar")
-	if progressBar then
-		local progress = data.swingProgress / data.maxSwings
-		local tween = TweenService:Create(progressBar,
-			TweenInfo.new(0.3, Enum.EasingStyle.Quad),
-			{Size = UDim2.new(progress, 0, 1, 0)}
-		)
-		tween:Play()
-	end
-
-	-- Update progress text
-	local progressText = mainFrame:FindFirstChild("ProgressText")
-	if progressText then
-		progressText.Text = data.swingProgress .. " / " .. data.maxSwings .. " swings"
-	end
-
-	-- Update instructions based on progress
+	-- Update instructions
 	local instructions = mainFrame:FindFirstChild("Instructions")
 	if instructions then
-		if data.swingProgress >= data.maxSwings then
-			instructions.Text = "Section completed! Moving to next section..."
-			instructions.TextColor3 = Color3.fromRGB(100, 255, 100)
+		if data.message and data.message ~= "" then
+			instructions.Text = data.message
 		else
-			instructions.Text = "Click to swing your scythe! " .. (data.maxSwings - data.swingProgress) .. " swings remaining."
-			instructions.TextColor3 = Color3.fromRGB(200, 200, 200)
+			instructions.Text = "Click to swing your scythe and harvest wheat!"
 		end
 	end
 end
@@ -501,8 +470,23 @@ function WheatHarvestingGUI:HideHarvestingGUI()
 	print("WheatHarvestingGUI: Hiding harvesting GUI")
 
 	if self.UIElements.HarvestingGUI then
-		self.UIElements.HarvestingGUI:Destroy()
-		self.UIElements.HarvestingGUI = nil
+		local mainFrame = self.UIElements.HarvestingGUI:FindFirstChild("MainFrame")
+		if mainFrame then
+			-- Animate out
+			local animTween = TweenService:Create(mainFrame,
+				TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{Position = UDim2.new(0.5, -225, 1, 0)}
+			)
+			animTween:Play()
+
+			animTween.Completed:Connect(function()
+				self.UIElements.HarvestingGUI:Destroy()
+				self.UIElements.HarvestingGUI = nil
+			end)
+		else
+			self.UIElements.HarvestingGUI:Destroy()
+			self.UIElements.HarvestingGUI = nil
+		end
 	end
 
 	-- Reset state
@@ -514,34 +498,12 @@ end
 -- ========== INPUT HANDLING ==========
 
 function WheatHarvestingGUI:SetupInputHandling()
-	print("WheatHarvestingGUI: Setting up input handling...")
+	print("WheatHarvestingGUI: Setting up FIXED input handling...")
 
-	-- Handle clicks during harvesting
-	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if gameProcessed then return end
+	-- The scythe tool will handle the actual swinging and server communication
+	-- This GUI just provides visual feedback
 
-		-- Check if we're in harvesting mode
-		if self.State.guiType == "harvesting" and self.State.isVisible then
-			local isClick = (input.UserInputType == Enum.UserInputType.MouseButton1) or
-				(input.UserInputType == Enum.UserInputType.Touch) or
-				(input.KeyCode == Enum.KeyCode.Space)
-
-			if isClick then
-				-- Check if player has scythe equipped
-				local character = LocalPlayer.Character
-				if character and character:FindFirstChild("Scythe") then
-					-- Let the scythe tool handle the swing
-					local scythe = character:FindFirstChild("Scythe")
-					if scythe then
-						-- The scythe tool will handle the swing and send to server
-						print("WheatHarvestingGUI: Scythe swing handled by tool")
-					end
-				end
-			end
-		end
-	end)
-
-	print("WheatHarvestingGUI: ✅ Input handling setup")
+	print("WheatHarvestingGUI: ✅ FIXED input handling setup")
 end
 
 -- ========== UTILITY FUNCTIONS ==========
@@ -556,15 +518,7 @@ function WheatHarvestingGUI:HideAllGUIs()
 	end
 
 	-- Hide harvesting GUI
-	if self.UIElements.HarvestingGUI then
-		self.UIElements.HarvestingGUI:Destroy()
-		self.UIElements.HarvestingGUI = nil
-	end
-
-	-- Reset state
-	self.State.guiType = "none"
-	self.State.isVisible = false
-	self.State.currentGUI = nil
+	self:HideHarvestingGUI()
 end
 
 -- ========== DEBUG FUNCTIONS ==========
@@ -578,9 +532,8 @@ function WheatHarvestingGUI:DebugStatus()
 	print("")
 	print("Harvesting Data:")
 	print("  Harvesting: " .. tostring(self.State.harvestingData.harvesting))
-	print("  Section: " .. self.State.harvestingData.currentSection)
-	print("  Progress: " .. self.State.harvestingData.swingProgress .. "/" .. self.State.harvestingData.maxSwings)
 	print("  Available Wheat: " .. self.State.harvestingData.availableWheat)
+	print("  Message: " .. (self.State.harvestingData.message or "None"))
 	print("==========================================")
 end
 
@@ -598,8 +551,6 @@ function WheatHarvestingGUI:Cleanup()
 	print("WheatHarvestingGUI: Performing cleanup...")
 
 	self:HideAllGUIs()
-
-	-- Clear state
 	self.State.guiType = "none"
 	self.State.isVisible = false
 	self.State.currentGUI = nil
@@ -615,8 +566,6 @@ spawn(function()
 	wait(3) -- Wait for ReplicatedStorage to populate
 	WheatHarvestingGUI:Initialize()
 end)
-
--- Note: LocalScripts automatically cleanup when player leaves, so no manual cleanup needed
 
 -- Global reference
 _G.WheatHarvestingGUI = WheatHarvestingGUI

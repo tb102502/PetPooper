@@ -1,157 +1,229 @@
 --[[  
-    Effect Manager Script  
-    ---------------------  
-    Created by PedyBoy 
-    Date: 08/03/2025  
-
-    This script handles the creation, management, and modification of visual effects  
-    using particle effects. It ensures smooth and optimized effect rendering for various  
-    in-game scenarios.  
-
-    INSTRUCTIONS:  
-    - Insert this script into a location where effects should be managed.  
-    - Modify SIZE, EFFECT_LIFETIME, and PARTICLE_TEXTURE to customize effects.  
-    - Call `CreateEffect(Vector3)` to spawn a new particle effect at a given location.  
-    - Utilize `EffectBuilder()` to manage effect creation over time.  
-
-    IMPORTANT:  
-    - The script must be placed in a Script (not a LocalScript) for full functionality.  
-    - Uses attributes (`info` and `default`) from the script for configuration.  
-    - Designed to run efficiently and avoid duplicate effects.  
-
-    FEATURES:  
-    - Dynamically creates and modifies particle effects.  
-    - Uses a centralized effect builder for streamlined management.  
-    - Supports size clamping to prevent extreme values.  
-    - Finds existing effects based on unique CFrame-based lookups.  
-    - Implements an effect lifetime system to manage durations.  
-    - Stores active effects in a global table for efficient tracking.  
-    - Modular design leveraging ReplicatedStorage for scalability.  
-    - Optimized for minimal performance impact.  
-
-    Version 1.0.0  
-
-    Changelog:  
-    - 08/03/2025 - v1.0.0: Initial script creation and implementation.  
+    Fixed EffectManager.server.lua
+    Place in: ServerScriptService/EffectManager.server.lua
+    
+    FIXES:
+    ✅ Removed problematic code causing nil argument errors
+    ✅ Simplified effect management system  
+    ✅ Better error handling
+    ✅ Cleaner, more maintainable code structure
 ]]  
 
+local EffectManager = {}
 
-local Modules, script = game:GetService('ReplicatedStorage'), script  
-local EffectRoot = game
+-- Services
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
-local PARTICLE_TEXTURE = script:GetAttribute'texture' -- Texture for the particle effect  
+-- Configuration
+local EFFECT_CONFIG = {
+	MAX_EFFECTS = 50,
+	DEFAULT_LIFETIME = 3,
+	CLEANUP_INTERVAL = 10
+}
 
+-- State
+EffectManager.ActiveEffects = {}
+EffectManager.EffectCount = 0
 
-local function CallOnChildren(Instance, FunctionToCall)
-	-- Calls a function on each of the children of a certain object, using recursion.  
+-- ========== INITIALIZATION ==========
 
-	FunctionToCall(Instance)
+function EffectManager:Initialize()
+	print("EffectManager: Initializing FIXED effect manager...")
 
-	for _, Child in next, Instance:GetChildren() do
-		CallOnChildren(Child, FunctionToCall)
+	-- Setup periodic cleanup
+	self:SetupCleanup()
+
+	print("EffectManager: ✅ FIXED effect manager initialized")
+	return true
+end
+
+-- ========== EFFECT CREATION ==========
+
+function EffectManager:CreateParticleEffect(position, config)
+	-- Validate inputs
+	if not position or typeof(position) ~= "Vector3" then
+		warn("EffectManager: Invalid position provided")
+		return nil
+	end
+
+	config = config or {}
+
+	-- Limit number of active effects
+	if self.EffectCount >= EFFECT_CONFIG.MAX_EFFECTS then
+		self:CleanupOldEffects()
+	end
+
+	-- Create effect part
+	local effect = Instance.new("Part")
+	effect.Name = "ParticleEffect"
+	effect.Size = Vector3.new(config.size or 1, config.size or 1, config.size or 1)
+	effect.Material = config.material or Enum.Material.Neon
+	effect.BrickColor = config.color or BrickColor.new("Bright yellow")
+	effect.Anchored = true
+	effect.CanCollide = false
+	effect.Transparency = config.transparency or 0.3
+	effect.Position = position
+	effect.Parent = workspace
+
+	-- Add to tracking
+	local effectData = {
+		part = effect,
+		createdTime = tick(),
+		lifetime = config.lifetime or EFFECT_CONFIG.DEFAULT_LIFETIME
+	}
+
+	table.insert(self.ActiveEffects, effectData)
+	self.EffectCount = self.EffectCount + 1
+
+	-- Auto-cleanup after lifetime
+	spawn(function()
+		wait(effectData.lifetime)
+		self:RemoveEffect(effectData)
+	end)
+
+	return effect
+end
+
+function EffectManager:CreateHarvestEffect(position)
+	-- Create multiple particle effects for wheat harvesting
+	for i = 1, 3 do
+		local offsetPos = position + Vector3.new(
+			math.random(-2, 2),
+			math.random(0, 2),
+			math.random(-2, 2)
+		)
+
+		local effect = self:CreateParticleEffect(offsetPos, {
+			size = 0.5,
+			color = BrickColor.new("Bright yellow"),
+			material = Enum.Material.Neon,
+			lifetime = 2
+		})
+
+		if effect then
+			-- Add movement
+			local tween = TweenService:Create(effect,
+				TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{
+					Position = offsetPos + Vector3.new(0, 5, 0),
+					Transparency = 1,
+					Size = Vector3.new(0.1, 0.1, 0.1)
+				}
+			)
+			tween:Play()
+		end
 	end
 end
 
-function CustomLerp(Pos1 : CFrame, Pos2 : CFrame, Delta : number) 
-	return Pos1 - Pos2 * math.abs(Delta) 
-end
+-- ========== CLEANUP SYSTEM ==========
 
-local function GetNearestParent(Instance, ClassName)
-	-- Returns the nearest parent of a certain class, or returns nil
-
-	local Ancestor = Instance
-	repeat
-		Ancestor = Ancestor.Parent
-		if Ancestor == nil then
-			return nil
+function EffectManager:SetupCleanup()
+	spawn(function()
+		while true do
+			wait(EFFECT_CONFIG.CLEANUP_INTERVAL)
+			self:CleanupOldEffects()
 		end
-	until Ancestor:IsA(ClassName)
-
-	return Ancestor
+	end)
 end
 
-function LookUp(Root, Value)  
-	for _, V in pairs(Root) do  
-		if V.Name:find(Value) then  
-			return V  
-		end  
-	end  
-end  
+function EffectManager:CleanupOldEffects()
+	local currentTime = tick()
+	local cleanedCount = 0
 
--- Converts a CFrame to a unique string representation  
-function CFrameToVector3(CF)  
-	local Chunks, Value = CF:split(''), ''  
-	for _, V in pairs(Chunks) do  
-		Value ..= V:byte()  
-	end  
-	return Value  
-end  
+	for i = #self.ActiveEffects, 1, -1 do
+		local effectData = self.ActiveEffects[i]
 
-function Modify(Instance, Values)  
-	-- Modifies an Instance by using a table.    
-	assert(type(Values) == "table", "Values is not a table")  
+		if not effectData.part or not effectData.part.Parent then
+			-- Effect was destroyed externally
+			table.remove(self.ActiveEffects, i)
+			self.EffectCount = self.EffectCount - 1
+			cleanedCount = cleanedCount + 1
+		elseif (currentTime - effectData.createdTime) > effectData.lifetime then
+			-- Effect has exceeded its lifetime
+			self:RemoveEffect(effectData)
+			cleanedCount = cleanedCount + 1
+		end
+	end
 
-	for Index, Value in next, Values do  
-		if type(Index) == "number" then  
-			Value.Parent = Instance  
-		else  
-			Instance[Index] = Value  
-		end  
-	end  
-	return Instance  
-end  
-
-
-local Properties = {'CFrame','WorldPivot','CoordinateFrame','Orientation','PivotOffset','RootPriority','JobId','Origin','GetProductInfo'}
-
-local EffectBuilder = setmetatable({}, {  
-	__index = Modules and function(S) return S end,  
-	__call = Modules and function(S) return S end   
-})  
-
--- Function to create and configure a particle effect  
-function CreateEffect(Vector3)  
-	local Size = math.clamp(2, 1, 4) -- Add slight randomness to size  
-
-	local Effect = EffectBuilder:CreateEffect('Particle', {  
-		Parent = script.Parent,  
-		Size = Size,  
-		Texture = PARTICLE_TEXTURE  
-	})  
-
-	return LookUp(EffectRoot:GetChildren(), Vector3)  
-end  
-
-function Monitor(CurrentTime, Default, ParticleInfo):
-	(Result) -> ParticleEmitter
-
-	if CurrentTime > 1 and EffectRoot[Default] ~= '' then  
-		if CurrentTime then  
-			script = {  
-				{},  
-				[script.Name] = CFrameToVector3(ParticleInfo) - 0  
-			}  
-			return true  
-		end  
-	end  
-
-	return false
+	if cleanedCount > 0 then
+		print("EffectManager: Cleaned up " .. cleanedCount .. " old effects")
+	end
 end
 
-function RunEffectBuilder()  
-	local CurrentTime = tick()  
+function EffectManager:RemoveEffect(effectData)
+	if effectData.part and effectData.part.Parent then
+		effectData.part:Destroy()
+	end
 
-	local Effect = CreateEffect('ketpl')  
+	-- Remove from tracking
+	for i, effect in ipairs(self.ActiveEffects) do
+		if effect == effectData then
+			table.remove(self.ActiveEffects, i)
+			self.EffectCount = self.EffectCount - 1
+			break
+		end
+	end
+end
 
-	local ParticleInfo = Effect[Properties[#Properties]](Effect, PARTICLE_TEXTURE).Description  
+-- ========== UTILITY FUNCTIONS ==========
 
-	return Monitor(CurrentTime, Properties[7], ParticleInfo)  
-end  
+function EffectManager:GetEffectCount()
+	return self.EffectCount
+end
 
--- Runs the animation thread if conditions are met
-local Builder = RunEffectBuilder() and require(script.EffectBuilder)
+function EffectManager:ClearAllEffects()
+	print("EffectManager: Clearing all effects...")
 
-if Builder and script.ClassName == "Script" then  
-	-- Run main thread  
-	script.Parent.DescendantAdded:Connect(CreateEffect)
-end  
+	for _, effectData in ipairs(self.ActiveEffects) do
+		if effectData.part and effectData.part.Parent then
+			effectData.part:Destroy()
+		end
+	end
+
+	self.ActiveEffects = {}
+	self.EffectCount = 0
+
+	print("EffectManager: All effects cleared")
+end
+
+-- ========== DEBUG FUNCTIONS ==========
+
+function EffectManager:DebugStatus()
+	print("=== EFFECT MANAGER DEBUG STATUS ===")
+	print("Active effects: " .. self.EffectCount)
+	print("Max effects: " .. EFFECT_CONFIG.MAX_EFFECTS)
+	print("Effects in tracking table: " .. #self.ActiveEffects)
+	print("")
+
+	if #self.ActiveEffects > 0 then
+		print("Effect details:")
+		for i, effectData in ipairs(self.ActiveEffects) do
+			local age = tick() - effectData.createdTime
+			local remaining = effectData.lifetime - age
+			print("  " .. i .. ": Age=" .. math.floor(age*10)/10 .. "s, Remaining=" .. math.floor(remaining*10)/10 .. "s")
+		end
+	end
+	print("===================================")
+end
+
+-- ========== GLOBAL FUNCTIONS ==========
+
+-- Initialize the effect manager
+EffectManager:Initialize()
+
+-- Make globally available
+_G.EffectManager = EffectManager
+
+-- Global convenience functions
+_G.CreateHarvestEffect = function(position)
+	return EffectManager:CreateHarvestEffect(position)
+end
+
+_G.CreateParticleEffect = function(position, config)
+	return EffectManager:CreateParticleEffect(position, config)
+end
+
+print("EffectManager: ✅ FIXED version loaded and ready")
+
+return EffectManager
